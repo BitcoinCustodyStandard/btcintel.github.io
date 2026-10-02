@@ -4,9 +4,9 @@
 // data/latest.json (agent snapshot) and data/pi_cycle.json. Values that cannot be
 // obtained free are shown as such, never estimated.
 
-import { startNetwork, seedNetwork, refreshNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js?v=20261003a';
-import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js?v=20261003a';
-import { priceCardHtml, envelopeNow } from './pricechart.js?v=20261003a';
+import { startNetwork, seedNetwork, refreshNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js?v=20261003b';
+import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js?v=20261003b';
+import { priceCardHtml, envelopeNow } from './pricechart.js?v=20261003b';
 
 // ---------- formatting ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -376,10 +376,7 @@ function heroHtml() {
       <section class="tread" id="d-read" aria-label="Today’s read"></section>
     </div>
     <div class="dh-side">
-      <div class="bclock"><div class="bc-h"><span class="k">Latest block</span>${S.info('d_height')}</div><div class="bc-n num" id="bc-n">—</div><div class="bc-s" id="bc-s">Connecting to mempool.space…</div><div class="bc-blocks" id="bc-blocks" aria-hidden="true"></div></div>
-      <div class="conv"><div class="bc-h"><span class="k">Sats converter</span>${S.info('d_converter')}</div>
-        <div class="conv-row"><label><span>USD</span><input type="text" inputmode="decimal" id="cv-usd" value="100" autocomplete="off"></label><span class="conv-eq">=</span><label><span>sats</span><input type="text" inputmode="numeric" id="cv-sats" autocomplete="off"></label></div>
-        <div class="conv-s dim" id="cv-note"></div></div>
+      <section class="dcard posture" id="d-posture" aria-label="Market posture"></section>
     </div>
   </section>`;
 }
@@ -400,12 +397,27 @@ export function paintHero() {
   }
   paintConverter(false);
 }
+let clockKey = '';
 function paintClock() {
   const n = document.getElementById('bc-n'); if (!n || !N.height) return;
-  n.textContent = '#' + num(N.height);
-  const tip = N.tipTime, mins = (Date.now() - tip) / 60e3;
-  document.getElementById('bc-s').innerHTML = `found <b>${ago(tip)}</b>${N.blocks[0]?.tx ? ` · ${num(N.blocks[0].tx)} tx` : ''}${N.blocks[0]?.pool ? ` · ${esc(N.blocks[0].pool)}` : ''}<span class="bc-bar"><i style="width:${Math.min(100, (mins / 10) * 100).toFixed(0)}%" class="${mins > 20 ? 'long' : ''}"></i></span><span class="dim small">${!N.live ? 'server snapshot · live feed unreachable' : N.ws === 'live' ? 'live' : 'polling'} · 10-min target</span>`;
-  document.getElementById('bc-blocks').innerHTML = N.blocks.slice(0, 8).map((b, i) => `<span title="#${b.height} · ${num(b.tx)} tx · ${hhmm.format(new Date(b.t))}" style="opacity:${1 - i * 0.1}">${String(b.height).slice(-3)}</span>`).join('');
+  const b0 = N.blocks[0], tip = N.tipTime, mins = (Date.now() - tip) / 60e3;
+  const blockUrl = (b) => `https://mempool.space/block/${b.id || b.height}`;
+  // links are rebuilt only when the block data changes, so they stay clickable between ticks
+  const key = `${N.height}|${b0?.id}|${b0?.pool}|${b0?.tx}|${N.blocks.length}`;
+  if (key !== clockKey) {
+    clockKey = key;
+    n.textContent = '#' + num(N.height); n.href = blockUrl(b0 || { height: N.height }); n.title = 'Open this block on mempool.space';
+    const pool = b0?.pool ? (b0.poolSlug ? ` · mined by <a href="https://mempool.space/mining/pool/${encodeURIComponent(b0.poolSlug)}" target="_blank" rel="noopener">${esc(b0.pool)}</a>` : ` · mined by ${esc(b0.pool)}`) : '';
+    document.getElementById('bc-s').innerHTML = `found <b data-tick="tip"></b>${b0?.tx ? ` · ${num(b0.tx)} transactions` : ''}${pool}<span class="bc-bar"><i id="bc-bar"></i></span><span class="dim small" id="bc-gap"></span>`;
+    document.getElementById('bc-blocks').innerHTML = N.blocks.slice(0, 10).map((b, i) => `<a href="${blockUrl(b)}" target="_blank" rel="noopener" title="Block #${num(b.height)}${b.tx ? ` · ${num(b.tx)} tx` : ''}${b.pool ? ` · ${esc(b.pool)}` : ''} · ${hhmm.format(new Date(b.t))} — open on mempool.space" style="opacity:${1 - i * 0.07}"><b>${num(b.height)}</b><small>${hhmm.format(new Date(b.t))}</small></a>`).join('');
+  }
+  const bar = document.getElementById('bc-bar'); if (bar) { bar.style.width = `${Math.min(100, (mins / 10) * 100).toFixed(0)}%`; bar.className = mins > 20 ? 'long' : ''; }
+  const gap = document.getElementById('bc-gap'); if (gap) gap.textContent = mins > 20 ? 'a longer gap than the 10-minute average — normal from time to time' : 'blocks arrive every 10 minutes on average';
+  const src = document.getElementById('bc-src');
+  if (src) {
+    const live = N.live && N.lastLive && Date.now() - N.lastLive < 90e3;
+    src.innerHTML = live ? `<i class="fd ok"></i>Live · ${esc(N.tipSource || 'mempool.space')} · checked ${ago(N.lastLive)}` : `<i class="fd stale"></i>Snapshot · ${N.lastLive ? `last live success ${ago(N.lastLive)}` : 'no live connection yet'}${N.seeded ? ` · server snapshot from ${ago(N.seeded)}` : ''} · retrying every 20 s`;
+  }
   document.querySelectorAll('[data-tick="tip"]').forEach((e) => { e.textContent = ago(tip); });
 }
 let cvSource = 'usd';
@@ -416,6 +428,85 @@ function paintConverter(fromInput) {
   if (cvSource === 'usd') { const v = parse(u.value); if (document.activeElement !== s) s.value = ok(v) ? Math.round((v / p) * 1e8).toLocaleString('en-US') : ''; }
   else { const v = parse(s.value); if (document.activeElement !== u) u.value = ok(v) ? ((v / 1e8) * p).toLocaleString('en-US', { maximumFractionDigits: 2 }) : ''; }
   note.textContent = `$1 = ${num(1e8 / p)} sats · 1 BTC = 100,000,000 sats · at ${usd(p)}`;
+}
+
+// ---------- market posture ----------
+// Fixed, published rules over data already on this page. Each signal scores +1, 0 or −1;
+// the total picks the label: ≥ +3 Constructive, ≤ −2 Cautious, otherwise Neutral.
+export const POSTURE_RULES = [
+  'Long-term trend: price above its 200-day average +1, below −1.',
+  'Trend structure: 50-day average above the 200-day +1, below −1.',
+  'Short-term: price above the 20-day envelope midline +1, below −1.',
+  'ETF flows (5 trading days): net inflow above $250M +1, net outflow beyond $250M −1, otherwise 0.',
+  'Leverage: perpetual funding above 20% a year −1 (crowded longs), otherwise 0.',
+  'Sentiment: Fear & Greed at an extreme (≤ 20 or ≥ 80) −1, otherwise 0.',
+  'Exchange flows (30 days): net outflow beyond 20,000 BTC +1, net inflow beyond 20,000 BTC −1, otherwise 0.',
+];
+function postureSignals() {
+  const p = price(), E = envelopeNow(S.pi, p), a = S.a?.metrics, out = [];
+  const add = (key, label, score, text) => out.push({ key, label, score, text });
+  if (E?.sma200) add('trend', 'Long-term trend', p >= E.sma200 ? 1 : -1, `Price is ${pct(Math.abs((p / E.sma200 - 1) * 100), 0, false)} ${p >= E.sma200 ? 'above' : 'below'} its 200-day average (${usd(E.sma200)}).`);
+  if (E?.sma50 && E?.sma200) add('struct', 'Trend structure', E.sma50 >= E.sma200 ? 1 : -1, `The 50-day average is ${E.sma50 >= E.sma200 ? 'above' : 'below'} the 200-day.`);
+  if (E?.mid) add('short', 'Short-term', p >= E.mid ? 1 : -1, `Price is ${esc(E.label)} of its 20-day volatility envelope.`);
+  const e5 = a?.etf?.s5; if (ok(e5)) add('etf', 'ETF flows', e5 > 250 ? 1 : e5 < -250 ? -1 : 0, `Spot ETFs saw ${e5 >= 0 ? 'net inflows' : 'net outflows'} of $${num(Math.abs(e5))}M over five trading days.`);
+  const f = a?.derivs?.fundingAnn; if (ok(f)) add('lev', 'Leverage', f > 20 ? -1 : 0, `Perpetual funding is ${pct(f)} a year${f > 20 ? ' — long positions are crowded' : ''}.`);
+  const F = S.dash?.fng?.value; if (ok(F)) add('fng', 'Sentiment', F <= 20 || F >= 80 ? -1 : 0, `Fear & Greed reads ${F} (${esc(S.dash.fng.label)})${F <= 20 || F >= 80 ? ', an extreme' : ''}.`);
+  const fl = S.dash?.flows?.rows; if (fl?.length >= 30) { const n30 = fl.slice(-30).reduce((s, r) => s + (r[1] - r[2]), 0); add('flows', 'Exchange flows', n30 < -20000 ? 1 : n30 > 20000 ? -1 : 0, `${num(Math.abs(n30))} BTC net ${n30 < 0 ? 'left' : 'went into'} exchanges over 30 days.`); }
+  return out;
+}
+function paintPosture() {
+  const el = document.getElementById('d-posture'); if (!el) return;
+  const sig = postureSignals();
+  if (sig.length < 3) { el.innerHTML = `<div class="dc-h"><h2>Market posture${S.info('d_posture')}</h2></div><p class="muted small">Waiting for enough data.</p>`; return; }
+  const total = sig.reduce((a, x) => a + x.score, 0), key = total >= 3 ? 'constructive' : total <= -2 ? 'cautious' : 'neutral';
+  const label = { constructive: 'Constructive', neutral: 'Neutral', cautious: 'Cautious' }[key];
+  // the three bullets: the strongest signals in the direction of the result, then the rest
+  const dir = Math.sign(total);
+  const why = [...sig].sort((x, y) => (dir ? (y.score * dir) - (x.score * dir) : Math.abs(y.score) - Math.abs(x.score))).slice(0, 3);
+  el.innerHTML = `<div class="dc-h"><h2>Market posture${S.info('d_posture')}</h2><span class="ps-score num" title="Sum of ${sig.length} signal scores">${total > 0 ? '+' : ''}${total} / ${sig.length}</span></div>
+    <div class="ps-label ${key}">${label}</div>
+    <ul class="ps-why">${why.map((x) => `<li><span class="sg s${x.score > 0 ? 'p' : x.score < 0 ? 'n' : 'z'}">${x.score > 0 ? '+' : x.score < 0 ? '−' : '0'}</span>${x.text}</li>`).join('')}</ul>
+    <div class="ps-chips">${sig.map((x) => `<span class="sg-chip s${x.score > 0 ? 'p' : x.score < 0 ? 'n' : 'z'}" title="${esc(x.text.replace(/<[^>]+>/g, ''))}">${esc(x.label)} ${x.score > 0 ? '+1' : x.score < 0 ? '−1' : '0'}</span>`).join('')}</div>
+    <details class="ps-rules"><summary>How this is decided</summary><ul>${POSTURE_RULES.map((r) => `<li>${esc(r)}</li>`).join('')}</ul><p>Total ≥ +3 → Constructive · ≤ −2 → Cautious · otherwise Neutral. Signals without current data are left out.</p></details>
+    <p class="tr-n">Rules-based summary of data on this page — not investment advice.</p>`;
+}
+
+// ---------- DCA planner ----------
+function dcaHtml() {
+  return `<section class="dcard dca" id="d-dca" aria-label="DCA planner">
+        <div class="dc-h"><h2>DCA planner${S.info('d_dca')}</h2></div>
+        <div class="dca-in">
+          <label><span>Amount (USD)</span><input type="text" inputmode="decimal" id="dca-amt" value="100" autocomplete="off"></label>
+          <label><span>Every</span><select id="dca-freq"><option value="365">day</option><option value="52" selected>week</option><option value="26">2 weeks</option><option value="12">month</option></select></label>
+        </div>
+        <div class="dca-out" id="dca-out"></div>
+        <div class="conv"><div class="bc-h"><span class="k">Quick convert</span>${S.info('d_converter')}</div>
+          <div class="conv-row"><label><span>USD</span><input type="text" inputmode="decimal" id="cv-usd" value="100" autocomplete="off"></label><span class="conv-eq">=</span><label><span>sats</span><input type="text" inputmode="numeric" id="cv-sats" autocomplete="off"></label></div>
+          <div class="conv-s dim" id="cv-note"></div></div>
+        <p class="tr-n">Illustration only — not a recommendation to buy or sell.</p>
+      </section>`;
+}
+function paintDca() {
+  const out = document.getElementById('dca-out'), p = price(); if (!out || !p) return;
+  const amt = +String(document.getElementById('dca-amt')?.value || '').replace(/[^0-9.]/g, ''), per = +document.getElementById('dca-freq')?.value || 52;
+  if (!(amt > 0)) { out.innerHTML = '<p class="muted small">Enter an amount.</p>'; return; }
+  const sats = (amt / p) * 1e8, yr = amt * per;
+  // what the same plan would have bought over the past year at each day's close (historical, factual)
+  let past = '';
+  const rows = S.pi?.rows;
+  if (rows?.length > 370) {
+    const step = Math.round(365 / per), last = rows.length - 1;
+    let btc = 0, spent = 0;
+    for (let i = last - 364; i <= last; i += step) { btc += amt / rows[i][1]; spent += amt; }
+    const val = btc * p, ch = (val / spent - 1) * 100;
+    past = `<div class="dca-past"><span class="k">Same plan over the past year</span><span>${num(spent)} USD → <b class="num">${btc.toFixed(5)} BTC</b> (average price ${usd(spent / btc)}), worth <b class="num">${usd(val)}</b> today <span class="${cls(ch)}">(${pct(ch)})</span></span><span class="dim small">Past results; they say nothing about the future.</span></div>`;
+  }
+  out.innerHTML = `<div class="dca-row"><span>Each purchase at today’s price</span><b class="num">${num(sats)} sats</b></div><div class="dca-row"><span>Per year (${num(per)} purchases)</span><b class="num">${usd(yr)} → ${((yr / p)).toFixed(4)} BTC</b></div><p class="dim small">At a constant ${usd(p)}; real purchases happen at whatever the price is each time.</p>${past}`;
+}
+
+// ---------- latest block strip ----------
+function blockStripHtml() {
+  return `<div class="dcard bstrip" id="d-block"><div class="bs-main"><div class="bc-h"><span class="k">Latest block</span>${S.info('d_height')}</div><a class="bc-n num" id="bc-n" target="_blank" rel="noopener">—</a><div class="bc-s" id="bc-s">Connecting to mempool.space…</div></div><div class="bs-chips"><span class="k">Recent blocks</span><div class="bc-blocks" id="bc-blocks"></div></div><p class="bs-src" id="bc-src"></p></div>`;
 }
 
 // ---------- since your last visit ----------
@@ -457,10 +548,10 @@ export function dashTab({ a, pi, dash, info }) {
   return `${heroHtml()}
   <div class="dgrid">
     <div class="dmain">${priceCardHtml(S.info)}${movesHtml()}</div>
-    <aside class="dside">${fngHtml()}${newsHtml()}</aside>
+    <aside class="dside">${dcaHtml()}${fngHtml()}${newsHtml()}</aside>
   </div>
   ${pmHtml()}
-  ${GROUPS.map((g) => `<section class="mgroup" id="g-${g.id}"><h2>${g.title}</h2>${g.note ? `<p class="gintro">${g.note}</p>` : ''}<div class="dkcards">${g.cards.map(cardShell).join('')}</div><p class="gnote" hidden></p></section>${g.id === 'onchain' ? distHtml() : ''}`).join('')}
+  ${GROUPS.map((g) => `<section class="mgroup" id="g-${g.id}"><h2>${g.title}</h2>${g.note ? `<p class="gintro">${g.note}</p>` : ''}${g.id === 'network' ? blockStripHtml() : ''}<div class="dkcards">${g.cards.map(cardShell).join('')}</div><p class="gnote" hidden></p></section>${g.id === 'onchain' ? distHtml() : ''}`).join('')}
   <section class="deeper"><h2>Go deeper</h2><div class="dlinks">${DEEPER.map(([u, t, d]) => `<a href="${u}"${u.startsWith('http') ? ' target="_blank" rel="noopener"' : ''}><b>${t}</b><span>${d}</span></a>`).join('')}</div></section>
   <details class="about"><summary>About this dashboard</summary>
     <p><b>All data on this page comes from free public sources. We do not paywall any of these metrics. Some advanced on-chain or entity-adjusted metrics require paid providers and are therefore not shown here.</b></p>
@@ -507,7 +598,9 @@ export function mountDash({ dash, getLive }) {
   u?.addEventListener('input', () => { cvSource = 'usd'; paintConverter(true); });
   s?.addEventListener('input', () => { cvSource = 'sats'; paintConverter(true); });
   seedNetwork(dash?.network);
-  paintNews(); paintMoves(); paintMoveStatus(); paintHero(); paintCards(); paintClock(); paintSince(); paintRead(); paintPm(); paintDist();
+  paintNews(); paintMoves(); paintMoveStatus(); paintHero(); paintCards(); paintClock(); paintSince(); paintRead(); paintPm(); paintDist(); paintPosture(); paintDca();
+  document.getElementById('dca-amt')?.addEventListener('input', paintDca);
+  document.getElementById('dca-freq')?.addEventListener('change', paintDca);
   if (started) return;
   started = true;
   startNetwork({ onUpdate: () => { paintCards(); paintClock(); paintHero(); paintSince(); }, onBlock: toastBlock });
@@ -523,12 +616,12 @@ export function mountDash({ dash, getLive }) {
 let visitRead = false;
 function readVisitOnce() { if (!visitRead) { visitRead = true; readVisit(); } }
 function refreshSide() {
-  paintRead(); paintPm(); paintDist();
+  paintRead(); paintPm(); paintDist(); paintPosture();
   const f = document.querySelector('.dcard.fng'); if (f) f.outerHTML = fngHtml();
   const n = document.getElementById('d-news'); if (n) { n.outerHTML = newsHtml(); document.querySelectorAll('[data-nf]').forEach((b) => b.addEventListener('click', () => { S.newsFilter = b.dataset.nf; document.querySelectorAll('[data-nf]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.nf === S.newsFilter))); paintNews(); })); paintNews(); }
 }
 let readT = 0;
-export function dashLive(live) { S.live = live; paintHero(); paintCards(); paintSince(); if (Date.now() - readT > 60e3) { readT = Date.now(); paintRead(); } }
+export function dashLive(live) { S.live = live; paintHero(); paintCards(); paintSince(); if (Date.now() - readT > 60e3) { readT = Date.now(); paintRead(); paintPosture(); paintDca(); } }
 // Refresh button: network data, CoinGecko market stats and the 15-minute feed file, now
 export async function refreshDash() {
   const feed = fetch('data/dash.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { S.dash = j; refreshSide(); paintCards(); } }).catch(() => {});

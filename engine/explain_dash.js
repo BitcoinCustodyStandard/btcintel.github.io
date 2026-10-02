@@ -56,10 +56,10 @@ export const DASH_EXPLAIN = {
     caveat: () => 'Backward-looking: it measures past movement, not expected movement.',
   },
   d_height: {
-    title: 'Block height',
-    what: 'The number of blocks added to the Bitcoin blockchain since it started in 2009. Each block confirms a batch of transactions.',
+    title: 'Latest block',
+    what: 'The newest block added to the Bitcoin blockchain, and how long ago it was found (from the block’s own timestamp). Each block confirms a batch of transactions; click the height or any recent block to open it on mempool.space.',
     why: 'It is Bitcoin’s clock: rewards, halvings and difficulty changes are all scheduled by block height, not by date.',
-    caveat: () => 'Updated live from mempool.space as each new block is found.',
+    caveat: () => 'Checked every 20 seconds from mempool.space, with blockstream.info and blockchain.info as fallbacks. Block timestamps are set by miners and can be off by a few minutes.',
   },
   d_blocktime: {
     title: 'Time since last block',
@@ -330,6 +330,18 @@ export const DASH_EXPLAIN = {
     what: 'Up to three short observations picked automatically from the figures on this page by fixed rules — for example where price sits in its volatility envelope, or an unusual reading in sentiment or ETF flows.',
     why: 'A quick orientation before reading the details.',
     caveat: () => 'Context, not a forecast or advice. The rules only pick and describe; they do not judge what will happen next.',
+  },
+  d_posture: {
+    title: 'Market posture',
+    what: 'A one-word summary — Constructive, Neutral or Cautious — from seven fixed rules applied to figures already on this page. Each rule scores +1, 0 or −1: price vs the 200-day average; 50-day vs 200-day average; price vs the 20-day envelope midline; 5-day ETF flows beyond ±$250M; funding above 20% a year (−1); Fear & Greed at an extreme, ≤ 20 or ≥ 80 (−1); and 30-day exchange net flow beyond ±20,000 BTC.',
+    why: 'A total of +3 or more reads Constructive, −2 or less Cautious, anything between Neutral. It condenses trend, flows, leverage and sentiment into one glance, and every input is shown on the card.',
+    caveat: () => 'Rules-based summary of data on this page — not investment advice and not a forecast. The rules describe current conditions; they have no view on what price will do next.',
+  },
+  d_dca: {
+    title: 'DCA planner',
+    what: 'Dollar-cost averaging means buying a fixed dollar amount on a schedule, whatever the price. Enter an amount and how often to see how many sats each purchase buys at today’s price, and what the same plan would have bought over the past year using actual daily closing prices.',
+    why: 'It makes regular amounts concrete in bitcoin terms and shows how buying at many prices averages out the cost.',
+    caveat: () => 'Illustration only — not a recommendation to buy or sell. Past results ignore fees and say nothing about future prices.',
   },
   d_lightning: {
     title: 'Lightning Network',

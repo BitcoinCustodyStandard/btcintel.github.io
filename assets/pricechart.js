@@ -7,6 +7,7 @@
 // (Binance BTC-USDT as fallback); on those views today's daily averages and bands are
 // drawn as flat reference levels, because they are defined on daily closes.
 import { computeDaily, envelopePosition } from '../engine/envelope.js';
+import { timeoutSignal } from './network.js?v=20261003b';
 
 export const RANGES = [['1H', 'h1'], ['1D', 'd1'], ['7D', 'd7'], ['1M', 30], ['3M', 91], ['6M', 182], ['YTD', 'ytd'], ['1Y', 365], ['2Y', 730], ['5Y', 1826], ['All', 0]];
 const INTRA = {
@@ -44,7 +45,7 @@ async function intraday(key) {
   const c = intraCache[key];
   if (c && Date.now() - c.at < 60e3) return c;
   const I = INTRA[key];
-  const tryFetch = async (url, parse, source) => { const r = await fetch(url, { cache: 'no-store', signal: AbortSignal.timeout(8000) }); if (!r.ok) throw new Error(`HTTP ${r.status}`); return { rows: parse(await r.json()), source }; };
+  const tryFetch = async (url, parse, source) => { const r = await fetch(url, { cache: 'no-store', signal: timeoutSignal(8000) }); if (!r.ok) throw new Error(`HTTP ${r.status}`); return { rows: parse(await r.json()), source }; };
   let res;
   try {
     // Coinbase: [time, low, high, open, close, volume], newest first, max 300 per request

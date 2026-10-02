@@ -2,18 +2,25 @@
 // mempool, difficulty adjustment, hash rate and the last 144 blocks' rewards.
 // REST on load, then the mempool.space WebSocket pushes blocks and mempool stats;
 // if the socket drops, REST polling every 60 s takes over until it reconnects.
+// The chain tip is also polled every 20 s from mempool.space, falling back to
+// blockstream.info and blockchain.info, so the latest block stays live even when one
+// provider is blocked or down. The server snapshot is used only if all of them fail.
 
 const API = 'https://mempool.space/api';
-export const N = { height: null, tipTime: null, blocks: [], fees: null, mempool: null, da: null, hash: null, reward: null, at: null, ws: 'connecting', errors: {} };
+export const N = { height: null, tipTime: null, blocks: [], fees: null, mempool: null, da: null, hash: null, reward: null, at: null, ws: 'connecting', errors: {}, tipSource: null, lastLive: null };
 
-async function j(path) {
-  const r = await fetch(API + path, { cache: 'no-store', signal: AbortSignal.timeout(8000) });
+// AbortController-based timeout: AbortSignal.timeout() is missing in older Safari
+export function timeoutSignal(ms) { const c = new AbortController(); setTimeout(() => c.abort(), ms); return c.signal; }
+async function fetchAny(url, type = 'json', ms = 8000) {
+  const r = await fetch(url, { cache: 'no-store', signal: timeoutSignal(ms) });
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
-  return r.json();
+  return type === 'json' ? r.json() : r.text();
 }
+const j = (path) => fetchAny(API + path);
 const setBlocks = (bl) => {
   const m = new Map(N.blocks.map((b) => [b.height, b]));
-  for (const b of bl) m.set(b.height, { height: b.height, t: b.timestamp * 1000, tx: b.tx_count, size: b.size, reward: b.extras?.reward ?? null, fees: b.extras?.totalFees ?? null, pool: b.extras?.pool?.name ?? null });
+  // keep richer details (pool, fees) already known for a height when a simpler source reports it again
+  for (const b of bl) { const o = m.get(b.height) || {}; m.set(b.height, { height: b.height, t: b.timestamp * 1000, tx: b.tx_count ?? o.tx ?? null, size: b.size ?? o.size ?? null, reward: b.extras?.reward ?? o.reward ?? null, fees: b.extras?.totalFees ?? o.fees ?? null, pool: b.extras?.pool?.name ?? o.pool ?? null, poolSlug: b.extras?.pool?.slug ?? o.poolSlug ?? null, id: b.id ?? o.id ?? null }); }
   N.blocks = [...m.values()].sort((a, b) => b.height - a.height).slice(0, 15);
   N.height = N.blocks[0]?.height ?? N.height; N.tipTime = N.blocks[0]?.t ?? N.tipTime;
 };
@@ -34,11 +41,35 @@ export function seedNetwork(snap) {
 
 let api = null;
 // re-fetch everything now (used by the Refresh button); the WebSocket keeps running
-export const refreshNetwork = () => (api ? Promise.all([api.fast(), api.slow()]) : Promise.resolve());
+export const refreshNetwork = () => (api ? Promise.all([api.fast(), api.slow(), api.tip()]) : Promise.resolve());
+
+// chain-tip providers, tried in order; each returns blocks in mempool.space's shape (newest first)
+const TIP = [
+  { name: 'mempool.space', height: () => fetchAny('https://mempool.space/api/blocks/tip/height', 'text').then(Number), blocks: () => fetchAny('https://mempool.space/api/v1/blocks') },
+  { name: 'blockstream.info', height: () => fetchAny('https://blockstream.info/api/blocks/tip/height', 'text').then(Number), blocks: () => fetchAny('https://blockstream.info/api/blocks') },
+  { name: 'blockchain.info', height: () => fetchAny('https://blockchain.info/latestblock?cors=true').then((b) => b.height), blocks: () => fetchAny('https://blockchain.info/latestblock?cors=true').then((b) => [{ height: b.height, timestamp: b.time, id: b.hash, tx_count: b.txIndexes?.length ?? null }]) },
+];
+const tipHealth = TIP.map(() => ({ fails: 0, skipUntil: 0 }));
+async function pollTip(onNewBlock) {
+  for (let i = 0; i < TIP.length; i++) {
+    const s = TIP[i], h = tipHealth[i];
+    if (Date.now() < h.skipUntil) continue;
+    try {
+      const height = await s.height();
+      if (!(height > 0)) throw new Error('bad height');
+      const prev = N.height;
+      if (height !== prev || !N.blocks.length || !N.live) setBlocks(await s.blocks());
+      h.fails = 0; N.tipSource = s.name; N.lastLive = Date.now(); N.live = true;
+      if (prev && N.height > prev) onNewBlock(N.blocks[0]);
+      return true;
+    } catch { if (++h.fails >= 3) { h.skipUntil = Date.now() + 5 * 60e3; h.fails = 0; } }
+  }
+  return false;
+}
 
 export function startNetwork({ onUpdate, onBlock }) {
   let ws = null, poll = null, tries = 0, slowT = 0;
-  const done = (live = true) => { if (live) { N.at = Date.now(); N.live = true; } onUpdate(N); };
+  const done = (live = true) => { if (live) { N.at = Date.now(); N.live = true; N.lastLive = Date.now(); N.tipSource = N.tipSource || 'mempool.space'; } onUpdate(N); };
   const get = async (k, path, fn) => { try { fn(await j(path)); delete N.errors[k]; } catch (e) { N.errors[k] = e.message; } };
   const fast = () => Promise.all([
     get('blocks', '/v1/blocks', setBlocks),
@@ -58,18 +89,22 @@ export function startNetwork({ onUpdate, onBlock }) {
     ws.onmessage = (m) => {
       let d; try { d = JSON.parse(m.data); } catch { return; }
       if (d.blocks) setBlocks(d.blocks);
-      if (d.block) { const prev = N.height; setBlocks([d.block]); if (prev && d.block.height > prev) { onBlock(N.blocks[0]); slow(); get('da', '/v1/difficulty-adjustment', (v) => { N.da = v; }).then(done); } }
+      if (d.block) { const prev = N.height; setBlocks([d.block]); N.tipSource = 'mempool.space'; if (prev && d.block.height > prev) { onBlock(N.blocks[0]); slow(); get('da', '/v1/difficulty-adjustment', (v) => { N.da = v; }).then(done); } }
       if (d.mempoolInfo) N.mempool = { ...(N.mempool || {}), count: d.mempoolInfo.size, vsize: d.mempoolInfo.bytes };
       if (d.fees) N.fees = d.fees;
       if (d.da) N.da = d.da;
       if (d.blocks || d.block || d.mempoolInfo || d.fees || d.da) done();
     };
-    ws.onclose = () => { N.ws = 'reconnecting'; done(); startPoll(); if (tries < 10) setTimeout(connect, Math.min(60e3, 3000 * 2 ** tries++)); else N.ws = 'down'; };
+    ws.onclose = () => { N.ws = 'reconnecting'; done(false); startPoll(); if (tries < 10) setTimeout(connect, Math.min(60e3, 3000 * 2 ** tries++)); else N.ws = 'down'; };
     ws.onerror = () => { try { ws.close(); } catch {} };
     const ping = setInterval(() => { if (ws.readyState === 1) ws.send(JSON.stringify({ action: 'ping' })); else if (ws.readyState > 1) clearInterval(ping); }, 30e3);
   };
-  api = { fast, slow };
-  fast(); slow(); connect();
+  // chain tip every 20 s while the page is visible, whatever the WebSocket is doing
+  const tip = () => pollTip((b) => { onBlock(b); slow(); }).then((ok) => { if (ok) onUpdate(N); });
+  setInterval(() => { if (!document.hidden) tip(); }, 20e3);
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) tip(); });
+  api = { fast, slow, tip };
+  fast(); slow(); connect(); tip();
   return N;
 }
 

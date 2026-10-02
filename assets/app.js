@@ -6,9 +6,9 @@ import { briefReport } from '../engine/report.js';
 import { brief } from '../engine/brief.js';
 import { ZONES } from '../engine/cycle.js';
 import { explain, EXPLAIN, REMINDER } from '../engine/explain.js';
-import { startLivePrice } from './live.js?v=20261003a';
-import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003a';
-import { dashTab, mountDash, dashLive, refreshDash } from './dash.js?v=20261003a';
+import { startLivePrice } from './live.js?v=20261003b';
+import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003b';
+import { dashTab, mountDash, dashLive, refreshDash } from './dash.js?v=20261003b';
 import { fmtUsd, fmtUsdSigned, fmtPrice, fmtPct, fmtNum, fmtK, ordinal } from '../engine/util.js';
 
 const state = { a: null, rows: [], runs: [], index: null, snapshot: null, range: 90, pi: null, dash: null, live: null, liveState: 'init' };

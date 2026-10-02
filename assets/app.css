@@ -977,3 +977,54 @@ details.more[open] > summary { border-bottom: 1px solid var(--line); }
 #btn-refresh:disabled { opacity: 0.85; cursor: progress; }
 @keyframes spin { to { transform: rotate(360deg); } }
 @media (prefers-reduced-motion: reduce) { #btn-refresh .spin { animation-duration: 2.4s; } }
+
+/* ── Market posture ── */
+.dh-side .dcard { padding: 14px 16px 10px; }
+.posture .dc-h { margin-bottom: 4px; }
+.ps-score { font-size: 12px; color: var(--muted); }
+.ps-label { font: 600 30px/1.1 var(--sans); letter-spacing: -0.01em; margin: 2px 0 8px; }
+.ps-label.constructive { color: var(--up); } .ps-label.neutral { color: var(--text); } .ps-label.cautious { color: var(--warn); }
+.ps-why { list-style: none; margin: 0 0 8px; padding: 0; display: grid; gap: 5px; }
+.ps-why li { display: grid; grid-template-columns: 20px 1fr; gap: 6px; font-size: 13px; color: var(--text2); line-height: 1.45; }
+.sg { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; border-radius: 3px; font: 600 11px var(--mono); margin-top: 1px; }
+.sg.sp, .sg-chip.sp { background: var(--chip-up); color: var(--up); } .sg.sn, .sg-chip.sn { background: var(--chip-down); color: var(--down); } .sg.sz, .sg-chip.sz { background: var(--chip-neutral); color: var(--neutral); }
+.ps-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 6px; }
+.sg-chip { font: 500 10.5px var(--sans); padding: 2px 6px; border-radius: 3px; cursor: help; }
+.ps-rules { font-size: 12px; color: var(--muted); }
+.ps-rules summary { cursor: pointer; color: var(--orange-ink); font-size: 11.5px; }
+.ps-rules ul { margin: 6px 0; padding-left: 16px; } .ps-rules li { margin: 2px 0; } .ps-rules p { margin: 4px 0; }
+
+/* ── DCA planner ── */
+.dca-in { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin: 2px 0 8px; }
+.dca-in label { display: flex; flex-direction: column; gap: 3px; font-size: 10.5px; color: var(--dim); text-transform: uppercase; letter-spacing: 0.08em; }
+.dca-in input, .dca-in select { width: 100%; font: 14px var(--mono); padding: 7px 8px; min-height: 36px; background: var(--bg2); color: var(--text); border: 1px solid var(--line2); border-radius: 4px; }
+.dca-row { display: flex; justify-content: space-between; gap: 10px; font-size: 13px; color: var(--text2); padding: 3px 0; border-bottom: 1px solid var(--line); }
+.dca-row b { font-weight: 500; color: var(--text); text-align: right; }
+.dca-out p { margin: 4px 0; }
+.dca-past { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; padding: 8px 10px; background: var(--card2); border-radius: 4px; font-size: 12.5px; color: var(--text2); }
+.dca-past .k { font: 600 9.5px/1.3 var(--sans); letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
+.dca-past .up { color: var(--up); } .dca-past .down { color: var(--down); }
+.dca .conv { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+
+/* ── Latest block strip (Network section) ── */
+.bstrip { display: grid; grid-template-columns: minmax(260px, 0.9fr) minmax(0, 2fr); gap: 6px 24px; align-items: start; margin-bottom: 12px; padding: 12px 16px; }
+.bstrip .bc-n { display: inline-block; font: 500 28px/1.15 var(--mono); color: var(--text); margin-top: 2px; }
+.bstrip .bc-n:hover { color: var(--orange-ink); text-decoration: none; }
+.bstrip .bc-s a { color: var(--orange-ink); }
+.bs-chips .k { font: 600 10px/1.3 var(--sans); letter-spacing: 0.14em; text-transform: uppercase; color: var(--muted); }
+.bs-chips .bc-blocks { display: grid; grid-template-columns: repeat(10, minmax(0, 1fr)); gap: 5px; margin-top: 6px; }
+.bs-chips .bc-blocks a { display: flex; flex-direction: column; align-items: center; gap: 1px; padding: 7px 2px; border-radius: 4px; background: var(--orange-dim); border: 1px solid var(--orange-line); color: var(--orange-ink); font: 10.5px/1.2 var(--mono); min-height: 44px; justify-content: center; }
+.bs-chips .bc-blocks a:hover { background: var(--orange); color: var(--bg); text-decoration: none; }
+.bs-chips .bc-blocks small { font-size: 9.5px; opacity: 0.8; }
+.bs-src { grid-column: 1 / -1; margin: 0; font-size: 11px; color: var(--dim); display: flex; align-items: center; gap: 6px; }
+@media (max-width: 960px) {
+  .bstrip { grid-template-columns: 1fr; }
+  .bs-chips .bc-blocks { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+}
+.dh-side > section { flex: 1; min-width: 0; }
+/* top-right holds Market Posture only; both right-hand columns share one width so they line up */
+@media (min-width: 1200px) {
+  .dhero { grid-template-columns: minmax(0, 1fr) clamp(360px, 24vw, 500px); }
+  .dgrid { grid-template-columns: minmax(0, 1fr) clamp(360px, 24vw, 500px); }
+}
+.dside .dca { padding: 14px 16px 10px; }
