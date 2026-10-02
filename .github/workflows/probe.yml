@@ -14,7 +14,7 @@ jobs:
           cat > p.mjs <<'JS'
           import { chromium } from 'playwright';
           const b = await chromium.launch();
-setTimeout(() => { console.log('TIMEOUT'); process.exit(1); }, 120000);
+          setTimeout(() => { console.log('TIMEOUT'); process.exit(1); }, 120000);
           const page = await b.newPage({ viewport: { width: 1440, height: 900 } });
           const log = [];
           page.on('console', (m) => log.push(`console.${m.type()}: ${m.text()}`));
