@@ -815,3 +815,31 @@ details.more[open] > summary { border-bottom: 1px solid var(--line); }
   .mtable th:nth-child(3), .mtable td:nth-child(3) { display: none; }
 }
 @media (prefers-reduced-motion: reduce) { .mtable tbody tr:first-child { animation: none; } .bc-bar i { transition: none; } }
+
+/* ── BTC Dashboard: density additions ── */
+.dkcard.full { grid-column: 1 / -1; }
+.mc-sp:empty { display: none; }
+.mc-sp { margin-top: 6px; }
+.spk { display: block; width: 100%; height: 34px; }
+.spk path { fill: none; stroke: var(--orange); stroke-width: 1.4; vector-effect: non-scaling-stroke; }
+.spk circle { fill: var(--orange); }
+.spk-l { display: flex; justify-content: space-between; font-size: 9.5px; color: var(--dim); margin-top: 1px; }
+.plist { list-style: none; margin: 6px 0 6px; padding: 0; display: grid; gap: 3px; }
+.plist li { display: grid; grid-template-columns: 110px 1fr 48px; align-items: center; gap: 8px; font-size: 11.5px; }
+.plist li span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.plist li i { display: block; height: 6px; background: var(--orange); opacity: 0.7; border-radius: 2px; max-width: 100%; }
+.plist li b { font-weight: 500; text-align: right; }
+.ttable { width: 100%; border-collapse: collapse; font-size: 12.5px; margin-top: 2px; }
+.ttable th { text-align: left; font: 600 9.5px/1.3 var(--sans); letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); padding: 4px 8px 6px 0; border-bottom: 1px solid var(--line2); }
+.ttable td { padding: 5px 8px 5px 0; border-bottom: 1px solid var(--line); color: var(--text2); }
+.ttable .r { text-align: right; }
+.dkcard.full .mc-v:empty { display: none; }
+.linkbtn { background: none; border: 0; padding: 8px 0 0; color: var(--orange-ink); font: 500 12px var(--sans); cursor: pointer; }
+.fhist { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.fav { display: flex; justify-content: space-between; font-size: 11.5px; color: var(--muted); margin-top: 4px; }
+.fav b { font-weight: 500; color: var(--text2); }
+.nmeta .via { color: var(--dim); font-style: italic; }
+@media (max-width: 520px) {
+  .ttable th:nth-child(3), .ttable td:nth-child(3), .ttable th:nth-child(4), .ttable td:nth-child(4), .ttable th:nth-child(6), .ttable td:nth-child(6) { display: none; }
+  .plist li { grid-template-columns: 84px 1fr 42px; }
+}

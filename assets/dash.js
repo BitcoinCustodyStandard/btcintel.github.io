@@ -45,7 +45,25 @@ const fresh = (at, maxAge) => (!at ? 'na' : Date.now() - (typeof at === 'number'
 // get() → { v, sub?, src, at?, max?, na? } or null (shown as "not available")
 const mpSrc = (extra = '') => (N.live ? `mempool.space${extra}` : `mempool.space snapshot${extra}`);
 const fee = (v) => (ok(v) ? (v >= 10 ? Math.round(v) : +(+v).toFixed(1)) : '—');
-const NA = (why) => ({ na: true, v: 'Not available from free sources', sub: why });
+const NA = (why, src = 'No free source') => ({ na: true, v: 'Not available from free sources', sub: why, src });
+// daily series helpers: rows are [date, value]
+const lastN = (rows, n) => (rows || []).filter((r) => ok(r[1])).slice(-n);
+const avgOf = (rows) => (rows.length ? rows.reduce((a, r) => a + r[1], 0) / rows.length : null);
+const col = (block, i) => (block?.rows || []).map((r) => [r[0], r[i]]).filter((r) => ok(r[1]));
+const vsAvg = (v, a) => (ok(v) && ok(a) && a ? `<span class="${cls(v - a)}">${pct((v / a - 1) * 100)}</span> vs 30-day average` : '');
+const actCard = (k, label, info, i, fmtV, unit) => ({ k, label, info, get: () => {
+  const rows = col(S.dash?.activity, i); if (!rows.length) return null;
+  const v = rows.at(-1)[1], a30 = avgOf(lastN(rows, 30));
+  return { v: `${fmtV(v)}${unit ? ` <small>${unit}</small>` : ''}`, sub: `${dShort(rows.at(-1)[0])} · 30-day average ${fmtV(a30)} · ${vsAvg(v, a30)}`, spark: lastN(rows, 90), sfmt: fmtV, src: 'Coin Metrics Community', at: rows.at(-1)[0], max: 3 * DAY };
+} });
+const kNum = (v) => (!ok(v) ? '—' : v >= 1e6 ? `${(v / 1e6).toFixed(2)}M` : v >= 1e4 ? `${Math.round(v / 1e3)}K` : num(v));
+const hasH = () => ok(S.dash?.hashpower?.hashpriceUsdPh) && !S.dash.hashpower.error;
+const ownHashprice = () => (N.reward && N.hash ? hashprice(N.reward.total / 1e8 / (N.reward.end - N.reward.start + 1), price(), N.hash.difficulty) : null);
+const cohortCard = (k, label, info, key, who) => ({ k, label, info, get: () => {
+  const C = S.dash?.cohorts, rows = lastN(C?.[key], 400); if (!rows.length) return C?.error ? NA('BGeometrics free tier could not be reached; retried every few hours.', 'BGeometrics') : null;
+  const v = rows.at(-1)[1], x = (price() / v - 1) * 100;
+  return { v: usd(v), sub: `price <span class="${cls(x)}">${pct(x)}</span> ${x >= 0 ? 'above' : 'below'} · ${who} · value for ${dShort(rows.at(-1)[0])} (free tier is delayed)`, spark: lastN(rows, 180), sfmt: (y) => usd(y), src: 'BGeometrics free API', at: rows.at(-1)[0], max: 12 * DAY };
+} });
 const GROUPS = [
   { id: 'market', title: 'Price & market', cards: [
     { k: 'price', label: 'Price', info: 'd_price', get: () => S.live ? { v: usd(S.live.price), sub: `<span class="${cls(S.live.ch24)}">${pct(S.live.ch24, 2)}</span> 24h`, src: `${S.live.source}${S.live.note ? ' (USDT)' : ''} · live`, at: S.live.at, max: 60e3 } : { v: usd(S.a?.metrics.price.spot), sub: 'server snapshot', src: 'CoinGecko', at: srcQ('coingecko')?.asOf, max: 2 * H } },
@@ -57,25 +75,48 @@ const GROUPS = [
     { k: 'range52', label: '52-week range', info: 'd_range52', get: () => { const p = S.a?.metrics.price; if (!ok(p?.low365)) return null; const pos = ((price() - p.low365) / (p.high365 - p.low365)) * 100; return { v: `${usd(p.low365)} – ${usd(p.high365)}`, sub: `<span class="rbar"><i style="left:${Math.max(0, Math.min(100, pos)).toFixed(0)}%"></i></span> price at ${Math.max(0, Math.min(100, pos)).toFixed(0)}% of range`, src: 'Daily closes (CoinGecko)', at: srcQ('coingecko_hist')?.asOf, max: 36 * H }; } },
     { k: 'rv', label: 'Realised volatility (30d)', info: 'd_rv', get: () => { const p = S.a?.metrics.price; return ok(p?.rv30) ? { v: `${p.rv30.toFixed(0)}%`, sub: `7-day ${p.rv7?.toFixed(0) ?? '—'}% · annualised`, src: 'Computed from daily closes', at: srcQ('coingecko_hist')?.asOf, max: 36 * H } : null; } },
   ] },
-  { id: 'network', title: 'Network', cards: [
+  { id: 'network', title: 'Network & activity', cards: [
     { k: 'height', label: 'Block height', info: 'd_height', get: () => N.height ? { v: num(N.height), sub: `last block <b data-tick="tip">${ago(N.tipTime)}</b>${N.blocks[0]?.pool ? ` · ${esc(N.blocks[0].pool)}` : ''}`, src: N.live ? `mempool.space · ${N.ws === 'live' ? 'live' : 'polling'}` : 'mempool.space snapshot', at: N.at, max: 5 * 60e3 } : null },
     { k: 'hash', label: 'Hash rate (3-day estimate)', info: 'd_hashrate', get: () => N.hash ? { v: `${num(N.hash.current / 1e18)} EH/s`, sub: ok(S.a?.metrics.onchain?.hashCh30d) ? `<span class="${cls(S.a.metrics.onchain.hashCh30d)}">${pct(S.a.metrics.onchain.hashCh30d)}</span> over 30 days` : '', src: mpSrc(), at: N.at, max: 30 * 60e3 } : null },
     { k: 'diff', label: 'Difficulty', info: 'd_difficulty', get: () => N.hash ? { v: `${(N.hash.difficulty / 1e12).toFixed(1)} T`, sub: N.da ? `last adjustment <span class="${cls(N.da.previousRetarget)}">${pct(N.da.previousRetarget, 2)}</span>` : '', src: mpSrc(), at: N.at, max: 30 * 60e3 } : null },
     { k: 'nextadj', label: 'Next difficulty adjustment', info: 'd_nextadj', get: () => N.da ? { v: `<span class="${cls(N.da.difficultyChange)}">${pct(N.da.difficultyChange, 2)}</span> <small>est.</small>`, sub: `in ${num(N.da.remainingBlocks)} blocks · ~${dShort(N.da.estimatedRetargetDate)}`, src: mpSrc(), at: N.at, max: 30 * 60e3 } : null },
     { k: 'blocktime', label: 'Average block time', info: 'd_blocktime', get: () => N.da ? { v: `${(N.da.timeAvg / 60e3).toFixed(1)} min`, sub: `this difficulty period · target 10 min · ${N.da.progressPercent.toFixed(0)}% through`, src: mpSrc(), at: N.at, max: 30 * 60e3 } : null },
+    actCard('active', 'Active addresses', 'd_active', 1, kNum, '/day'),
+    actCard('txs', 'Transactions', 'd_txcount', 2, kNum, '/day'),
+    actCard('transfers', 'Transfers', 'd_transfers', 3, kNum, '/day'),
+    actCard('addrbal', 'Addresses holding BTC', 'd_addrbal', 4, kNum, ''),
     { k: 'ln', label: 'Lightning capacity', info: 'd_lightning', get: () => { const L = S.dash?.lightning; if (!L?.asOf) return NA('Lightning statistics could not be retrieved.'); if (Date.now() - Date.parse(L.asOf) > 14 * DAY) return NA(`mempool.space’s free Lightning statistics stopped updating on ${dShort(L.asOf)}; older figures are not shown.`); return { v: btcF(L.capacityBtc), sub: `${num(L.channels)} channels · ${num(L.nodes)} nodes`, src: L.source, at: L.asOf, max: 3 * DAY }; } },
   ] },
   { id: 'fees', title: 'Fees & mempool', cards: [
     { k: 'fees', label: 'Fee to confirm in ~10 min', info: 'd_fees', get: () => N.fees ? { v: `${fee(N.fees.fastestFee)} sat/vB`, sub: `30 min ${fee(N.fees.halfHourFee)} · 1 h ${fee(N.fees.hourFee)} · economy ${fee(N.fees.economyFee)}`, src: mpSrc(), at: N.at, max: 10 * 60e3 } : null },
     { k: 'txcost', label: 'Simple transaction cost', info: 'd_txcost', get: () => N.fees && price() ? { v: usd((140 * N.fees.halfHourFee * price()) / 1e8, 2), sub: `≈140 vB at ${fee(N.fees.halfHourFee)} sat/vB (30-min rate)`, src: mpSrc(' · live price'), at: N.at, max: 10 * 60e3 } : null },
     { k: 'mempool', label: 'Mempool backlog', info: 'd_mempool', get: () => N.mempool ? { v: `${num(N.mempool.count)} tx`, sub: `${(N.mempool.vsize / 1e6).toFixed(1)} MvB ≈ ${Math.max(1, Math.ceil(N.mempool.vsize / 1e6))} blocks of transactions waiting`, src: mpSrc(), at: N.at, max: 10 * 60e3 } : null },
-    { k: 'feeshare', label: 'Fees share of miner revenue', info: 'd_feeshare', get: () => N.reward ? { v: pct((N.reward.fees / N.reward.total) * 100, 2, false), sub: `${btcF(N.reward.fees / 1e8, 2)} in fees over the last 144 blocks`, src: mpSrc(' reward stats'), at: N.at, max: 60 * 60e3 } : null },
+    { k: 'feesday', label: 'Fees paid per day', info: 'd_feesday', get: () => {
+      const rows = col(S.dash?.activity, 5); if (!rows.length) return null;
+      const v = rows.at(-1)[1], a30 = avgOf(lastN(rows, 30));
+      return { v: `${v.toFixed(2)} BTC`, sub: `≈${usd(v * price())} on ${dShort(rows.at(-1)[0])} · 30-day average ${a30.toFixed(2)} BTC`, spark: lastN(rows, 90), sfmt: (y) => `${y.toFixed(2)} BTC`, src: 'Coin Metrics Community', at: rows.at(-1)[0], max: 3 * DAY };
+    } },
   ] },
   { id: 'mining', title: 'Mining', cards: [
-    { k: 'hashprice', label: 'Hashprice', info: 'd_hashprice', get: () => { const hp = N.reward && N.hash ? hashprice(N.reward.total / 1e8 / (N.reward.end - N.reward.start + 1), price(), N.hash.difficulty) : null; return ok(hp) ? { v: `$${hp.toFixed(2)}`, sub: 'per PH/s per day · last 144 blocks’ rewards ÷ difficulty', src: 'Computed from mempool.space', at: N.at, max: 60 * 60e3 } : null; } },
+    { k: 'hashprice', label: 'Hashprice', info: 'd_hashprice', get: () => {
+      const H = S.dash?.hashpower, own = ownHashprice();
+      if (hasH()) return { v: `$${H.hashpriceUsdPh.toFixed(2)} <small>/PH/day</small>`, sub: `${(H.hashpriceBtcPh * 1e8).toFixed(0)} sats per PH/s per day${ok(own) ? ` · BTC Intel’s own estimate $${own.toFixed(2)}` : ''}`, spark: lastN(H.daily, 90), sfmt: (y) => `$${y.toFixed(2)}`, src: 'CloudMineCrypto', at: H.asOf, max: 3 * 3600e3 };
+      return ok(own) ? { v: `$${own.toFixed(2)} <small>/PH/day</small>`, sub: 'last 144 blocks’ rewards ÷ difficulty', src: 'Computed from mempool.space', at: N.at, max: 60 * 60e3 } : null;
+    } },
+    { k: 'feeshare', label: 'Fees share of miner revenue', info: 'd_feeshare', get: () => {
+      const H = S.dash?.hashpower;
+      if (hasH() && ok(H.feeSharePct)) return { v: pct(H.feeSharePct, 2, false), sub: `${N.reward ? `last 144 blocks ${pct((N.reward.fees / N.reward.total) * 100, 2, false)} (mempool.space) · ` : ''}90-day average ${pct(avgOf(H.daily.map((r) => [r[0], r[2]]).filter((r) => ok(r[1]))), 2, false)}`, spark: lastN(H.daily.map((r) => [r[0], r[2]]), 90), sfmt: (y) => `${y.toFixed(2)}%`, src: 'CloudMineCrypto', at: H.asOf, max: 3 * 3600e3 };
+      return N.reward ? { v: pct((N.reward.fees / N.reward.total) * 100, 2, false), sub: `${btcF(N.reward.fees / 1e8, 2)} in fees over the last 144 blocks`, src: mpSrc(' reward stats'), at: N.at, max: 60 * 60e3 } : null;
+    } },
+    { k: 'minerrev', label: 'Miner revenue (last 144 blocks)', info: 'd_minerrev', get: () => N.reward && price() ? { v: big((N.reward.total / 1e8) * price()), sub: `${btcF(N.reward.total / 1e8, 1)} · subsidy plus fees · ≈1 day of blocks`, src: mpSrc(' reward stats'), at: N.at, max: 60 * 60e3 } : null },
     { k: 'subsidy', label: 'Block reward', info: 'd_halving', get: () => N.height ? { v: `${subsidyBtc(N.height)} BTC`, sub: N.reward ? `+ ${(N.reward.fees / 1e8 / (N.reward.end - N.reward.start + 1)).toFixed(3)} BTC fees per block (last 144)` : 'new coins per block', src: 'Protocol schedule · mempool.space', at: N.at, max: 60 * 60e3 } : null },
     cycleCard('puell', 'Puell Multiple', 'puell'),
     cycleCard('hashribbons', 'Hash Ribbons', 'hashribbons'),
+    { k: 'pools', wide: true, label: 'Mining pool concentration (7 days)', info: 'd_pools', get: () => {
+      const P = S.dash?.pools; if (!P?.top?.length) return null;
+      const top3 = P.top.slice(0, 3).reduce((a, x) => a + x.share, 0);
+      return { v: `${pct(P.top[0].share, 1, false)} <small>largest pool</small> · ${pct(top3, 0, false)} <small>top 3</small>`, sub: `<ol class="plist">${P.top.slice(0, 6).map((x) => `<li><span>${esc(x.name)}</span><i style="width:${x.share.toFixed(1)}%"></i><b class="num">${x.share.toFixed(1)}%</b></li>`).join('')}</ol>${num(P.blocks)} blocks by ${P.count} pools`, src: P.source, at: P.fetchedAt, max: 3 * 3600e3 };
+    } },
   ] },
   { id: 'supply', title: 'Supply & halving', cards: [
     { k: 'supply', label: 'Issued supply', info: 'd_supply', get: () => supplyNow() ? { v: btcF(supplyNow()), sub: `${((supplyNow() / 21e6) * 100).toFixed(2)}% of 21,000,000 · ${btcF(21e6 - supplyNow())} left to issue`, src: 'Computed from block height', at: N.at, max: 60 * 60e3 } : null },
@@ -93,8 +134,10 @@ const GROUPS = [
     { k: 'rprice', label: 'Realised price', info: 'realized', get: () => { const r = S.a?.metrics.onchain?.realizedPrice; if (!ok(r)) return null; const x = (price() / r - 1) * 100; return { v: usd(r), sub: `price <span class="${cls(x)}">${pct(x)}</span> above · average cost basis of all coins`, src: 'Coin Metrics (price ÷ MVRV)', at: S.a.metrics.onchain.mvrvDate, max: 3 * DAY }; } },
     cycleCard('profit', 'Supply in profit', 'profit'),
     cycleCard('sopr', 'SOPR', 'sopr'),
+    cohortCard('sth', 'Short-term holder realised price', 'd_sthrp', 'sth', 'average cost of coins moved in the last ~155 days'),
+    cohortCard('lth', 'Long-term holder realised price', 'd_lthrp', 'lth', 'average cost of coins held longer'),
     { k: 'stables', label: 'Stablecoin supply', info: 'stables', get: () => { const o = S.a?.metrics.onchain; return ok(o?.stables) ? { v: big(o.stables), sub: `30d <span class="${cls(o.stables30d)}">${o.stables30d >= 0 ? '+' : '−'}${big(Math.abs(o.stables30d))}</span> · 7d ${o.stables7d >= 0 ? '+' : '−'}${big(Math.abs(o.stables7d))}`, src: 'DefiLlama', at: srcQ('defillama_stables')?.asOf, max: 3 * DAY } : null; } },
-    { k: 'exflow', wide: true, label: 'Exchange net flow', info: 'd_exflow', get: () => {
+    { k: 'exflow', full: true, label: 'Exchange net flow', info: 'd_exflow', get: () => {
       const rows = S.dash?.flows?.rows; if (!rows?.length) return null;
       const net = rows.map((r) => [r[0], r[1] - r[2]]), n7 = net.slice(-7).reduce((s, r) => s + r[1], 0), n30 = net.slice(-30).reduce((s, r) => s + r[1], 0);
       return { v: `<span>${n7 > 0 ? '+' : '−'}${btcF(Math.abs(n7))}</span> <small>7d</small>`, sub: `${n7 > 0 ? 'net into' : 'net out of'} exchanges · 30d ${n30 > 0 ? '+' : '−'}${btcF(Math.abs(n30))} · latest day ${net.at(-1)[1] > 0 ? '+' : '−'}${btcF(Math.abs(net.at(-1)[1]))}${flowBars(net.slice(-90))}`, src: 'Coin Metrics FlowInExNtv − FlowOutExNtv (recent days are early estimates)', at: S.dash.flows.asOf, max: 3 * DAY };
@@ -105,13 +148,40 @@ const GROUPS = [
     { k: 'funding', label: 'Funding rate (annualised)', info: 'd_funding', get: () => { const d = S.a?.metrics.derivs; return ok(d?.fundingAnn) ? { v: `<span class="${cls(d.fundingAnn)}">${pct(d.fundingAnn)}</span>`, sub: `average across venues · ${(d.funding8h * 100).toFixed(4)}% per 8h`, src: 'Exchange APIs', at: srcQ('okx_deriv')?.asOf, max: 26 * H } : null; } },
     { k: 'opts', label: 'Options open interest', info: 'd_options', get: () => { const o = S.a?.metrics.options; return ok(o?.notionalUsd) ? { v: big(o.notionalUsd), sub: `DVOL ${num(o.dvol, 1)} · put/call ${num(o.pcRatio, 2)}`, src: 'Deribit', at: srcQ('deribit_opt')?.asOf, max: 26 * H } : null; } },
     { k: 'liqs', label: 'Liquidations (OKX sample)', info: 'd_liqsample', get: () => { const l = S.a?.metrics.liq; return ok(l?.longUsd) ? { v: `${big(l.longUsd)} <small>longs</small> · ${big(l.shortUsd)} <small>shorts</small>`, sub: `last ${l.count} orders, ${hhmm.format(new Date(l.from))}–${hhmm.format(new Date(l.to))} · market-wide totals need paid data`, src: l.venue, at: l.to, max: 26 * H } : null; } },
+    { k: 'basis', label: 'Futures basis (annualised)', info: 'd_basis', get: () => { const b = S.a?.metrics.derivs?.basis; return ok(b?.annPct) ? { v: `<span class="${cls(b.annPct)}">${pct(b.annPct)}</span>`, sub: `${esc(b.instrument)}, ${Math.round(b.days)} days to expiry · premium of futures over spot`, src: 'Deribit', at: srcQ('deribit_fut')?.asOf, max: 26 * H } : null; } },
+    { k: 'dvol', label: 'Implied volatility (DVOL)', info: 'd_dvol', get: () => { const o = S.a?.metrics.options; return ok(o?.dvol) ? { v: num(o.dvol, 1), sub: `${ok(o.dvolPctile) ? `${Math.round(o.dvolPctile)}th percentile of the past year · ` : ''}week ago ${num(o.dvol7dAgo, 1)}`, spark: lastN(o.dvolSeries, 120), sfmt: (y) => num(y, 1), src: 'Deribit DVOL', at: srcQ('deribit_dvol')?.asOf, max: 26 * H } : null; } },
+    { k: 'ivrv', label: 'Implied minus realised volatility', info: 'd_ivrv', get: () => { const o = S.a?.metrics.options, p = S.a?.metrics.price; return ok(o?.ivRvSpread) ? { v: `<span class="${cls(o.ivRvSpread)}">${o.ivRvSpread > 0 ? '+' : '−'}${Math.abs(o.ivRvSpread).toFixed(1)}</span> <small>vol pts</small>`, sub: `30-day implied ${num(o.atmIv30, 1)}% vs realised ${num(p?.rv30, 1)}%`, src: 'Deribit · daily closes', at: srcQ('deribit_opt')?.asOf, max: 26 * H } : null; } },
+    { k: 'dvs', label: 'Derivatives vs spot volume', info: 'd_dvs', get: () => { const st = S.a?.metrics.structure; return ok(st?.derivToSpot) ? { v: `${st.derivToSpot.toFixed(2)}×`, sub: `perpetual/futures ${big(st.derivVolume24h)} vs spot ${big(st.spotVolume24h)} (24h, covered venues)`, src: 'Exchange APIs · CoinGecko', at: srcQ('coingecko_markets')?.asOf, max: 26 * H } : null; } },
   ] },
   { id: 'holders', title: 'ETFs & treasuries', cards: [
     { k: 'etf', label: 'Spot ETF net flow', info: 'd_etf', get: () => { const e = S.a?.metrics.etf; return ok(e?.last) ? { v: `<span class="${cls(e.last)}">${e.last >= 0 ? '+' : '−'}$${num(Math.abs(e.last), 1)}M</span>`, sub: `${dShort(e.lastDate)} · 5 days ${e.s5 >= 0 ? '+' : '−'}$${num(Math.abs(e.s5))}M · 20 days ${e.s20 >= 0 ? '+' : '−'}$${num(Math.abs(e.s20))}M`, src: 'Farside Investors', at: e.lastDate, max: 4 * DAY } : null; } },
     { k: 'etfhold', label: 'Total ETF holdings', info: 'd_etf', get: () => NA('No free source publishes reliable daily holdings for all US spot ETFs; flows are shown instead.') },
-    { k: 'treas', wide: true, label: 'Public company treasuries', info: 'd_treasury', get: () => {
+    { k: 'treas', label: 'Public companies: total BTC', info: 'd_treasury', get: () => {
       const T = S.dash?.treasuries; if (!ok(T?.totalBtc)) return null;
-      return { v: btcF(T.totalBtc), sub: `${T.companies} companies${supplyNow() ? ` · ${((T.totalBtc / supplyNow()) * 100).toFixed(2)}% of supply` : ''} · ${big(T.totalBtc * price())}<ol class="tlist">${T.top.map((c) => `<li><span>${esc(c.name)} <span class="dim">${esc(c.symbol)}</span></span><b class="num">${num(c.btc)}</b></li>`).join('')}</ol>`, src: T.source, at: T.fetchedAt, max: 2 * DAY };
+      return { v: btcF(T.totalBtc), sub: `${T.companies} listed companies${supplyNow() ? ` · ${((T.totalBtc / supplyNow()) * 100).toFixed(2)}% of issued supply` : ''} · worth ${big(T.totalBtc * price())}`, src: 'CoinGecko treasuries', at: T.fetchedAt, max: 2 * DAY };
+    } },
+    { k: 'treasconc', label: 'Treasury concentration', info: 'd_treasconc', get: () => {
+      const T = S.dash?.treasuries; if (!T?.top?.length) return null;
+      const t1 = T.top[0], s1 = (t1.btc / T.totalBtc) * 100, s5 = (T.top.slice(0, 5).reduce((a, c) => a + c.btc, 0) / T.totalBtc) * 100;
+      return { v: pct(s1, 1, false), sub: `held by ${esc(t1.name)} alone · top 5 hold ${pct(s5, 0, false)} of all company BTC`, src: 'CoinGecko treasuries', at: T.fetchedAt, max: 2 * DAY };
+    } },
+    { k: 'treaslist', full: true, label: 'Largest public company holders', info: 'd_treasury', get: () => {
+      const T = S.dash?.treasuries; if (!T?.top?.length) return null;
+      const n = S.treasAll ? T.top.length : 12, sup = supplyNow();
+      return { v: '', sub: `<table class="ttable"><thead><tr><th>#</th><th>Company</th><th>Ticker</th><th>Country</th><th class="r">BTC</th><th class="r">Value</th><th class="r">% of supply</th></tr></thead><tbody>${T.top.slice(0, n).map((c, i) => `<tr><td class="dim">${i + 1}</td><td>${esc(c.name)}</td><td class="dim">${esc(c.symbol)}</td><td class="dim">${esc(c.country || '')}</td><td class="r num">${num(c.btc)}</td><td class="r num">${big(c.btc * price())}</td><td class="r num">${sup ? ((c.btc / sup) * 100).toFixed(3) + '%' : '—'}</td></tr>`).join('')}</tbody></table>${T.top.length > 12 ? `<button type="button" class="linkbtn" data-treas-more>${S.treasAll ? 'Show top 12' : `Show top ${T.top.length}`}</button>` : ''}`, src: `${T.source} · holdings as last disclosed by each company`, at: T.fetchedAt, max: 2 * DAY };
+    } },
+  ] },
+  { id: 'sentiment', title: 'Sentiment & positioning', cards: [
+    { k: 'fngc', label: 'Fear & Greed (90 days)', info: 'd_fng', get: () => { const F = S.dash?.fng; return ok(F?.value) ? { v: `${F.value} <small>${esc(F.label)}</small>`, sub: `7-day average ${F.avg7 ?? '—'} · 30-day average ${F.avg30 ?? '—'} · 30 days ago ${F.d30 ?? '—'}`, spark: lastN(F.series, 90), sfmt: (y) => String(y), src: 'alternative.me (third-party)', at: F.asOf, max: 2 * DAY } : null; } },
+    { k: 'ls', label: 'Long/short account ratio', info: 'd_ls', get: () => { const L = S.a?.metrics.derivs?.longShort; return ok(L?.okx) ? { v: num(L.okx, 2), sub: `${L.okx >= 1 ? 'more' : 'fewer'} accounts long than short · a week ago ${num(L.okx7dAgo, 2)}${ok(L.binance) ? ` · Binance ${num(L.binance, 2)}` : ''}`, src: 'OKX trading data', at: srcQ('okx_rubik')?.asOf, max: 26 * H } : null; } },
+    { k: 'cbprem', label: 'Coinbase premium', info: 'd_cbprem', get: () => { const v = S.a?.metrics.depth?.coinbasePremiumPct; return ok(v) ? { v: `<span class="${cls(v)}">${v > 0 ? '+' : v < 0 ? '−' : ''}${Math.abs(v).toFixed(3)}%</span>`, sub: 'Coinbase BTC-USD vs the average of USDT-quoted venues', src: 'Exchange order books', at: srcQ('book_coinbase')?.asOf, max: 26 * H } : null; } },
+    { k: 'pcr', label: 'Options put/call ratio', info: 'd_pcr', get: () => { const o = S.a?.metrics.options; return ok(o?.pcRatio) ? { v: num(o.pcRatio, 2), sub: `open puts per open call · ${o.pcRatio < 0.7 ? 'calls dominate' : o.pcRatio > 1 ? 'puts dominate' : 'balanced'}`, src: 'Deribit', at: srcQ('deribit_opt')?.asOf, max: 26 * H } : null; } },
+    { k: 'skew', label: '25-delta options skew', info: 'd_skew', get: () => { const o = S.a?.metrics.options; return ok(o?.skew25) ? { v: `${o.skew25 > 0 ? '+' : o.skew25 < 0 ? '−' : ''}${Math.abs(o.skew25).toFixed(1)} <small>vol pts</small>`, sub: `${o.skew25 < 0 ? 'puts priced richer than calls' : 'calls priced richer than puts'} · ~30-day expiry (${esc(o.refExpiry || '')})`, src: 'Deribit', at: srcQ('deribit_opt')?.asOf, max: 26 * H } : null; } },
+    { k: 'breadth', label: 'Altcoin breadth vs BTC (7d)', info: 'd_breadth', get: () => { const st = S.a?.metrics.structure; return ok(st?.breadth7) ? { v: pct(st.breadth7, 0, false), sub: `of top coins beat Bitcoin over 7 days · ${pct(st.altsUp7, 0, false)} rose in dollar terms`, src: 'CoinGecko top 50 (stablecoins excluded)', at: srcQ('coingecko_markets')?.asOf, max: 26 * H } : null; } },
+    { k: 'newstone', label: 'News tone (24 hours)', info: 'd_news', get: () => {
+      const day = (S.dash?.news?.items || []).filter((i) => !i.macro && Date.now() - Date.parse(i.t) < DAY); if (!day.length) return null;
+      const c = { bullish: 0, bearish: 0, neutral: 0 }; day.forEach((i) => c[i.tag]++);
+      return { v: `<span class="up">${c.bullish}▲</span> <span class="down">${c.bearish}▼</span> <small>${c.neutral} neutral</small>`, sub: `of ${day.length} headlines · keyword tags, not a judgement of the stories`, src: 'News feed (keyword rules)', at: S.dash.updated, max: 45 * 60e3 };
     } },
   ] },
 ];
@@ -123,7 +193,16 @@ function flowBars(net) {
   const W = 300, Hh = 46, m = Math.max(...net.map((r) => Math.abs(r[1]))) || 1, bw = W / net.length;
   return `<svg class="fbars" viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" role="img" aria-label="Daily exchange net flow, last ${net.length} days">${net.map(([d, v], i) => { const hh = (Math.abs(v) / m) * (Hh / 2 - 1); return `<rect class="${v > 0 ? 'in' : 'out'}" x="${(i * bw + 0.5).toFixed(1)}" width="${Math.max(0.8, bw - 1).toFixed(1)}" y="${(v > 0 ? Hh / 2 - hh : Hh / 2).toFixed(1)}" height="${Math.max(0.5, hh).toFixed(1)}"><title>${d}: ${v > 0 ? '+' : '−'}${num(Math.abs(v))} BTC</title></rect>`; }).join('')}<line x1="0" x2="${W}" y1="${Hh / 2}" y2="${Hh / 2}"/></svg><span class="fleg"><i class="in"></i>into exchanges <i class="out"></i>out of exchanges · ${net.length} days</span>`;
 }
-const cardShell = (c) => `<div class="dkcard${c.wide ? ' wide' : ''}" data-k="${c.k}"><div class="mc-h"><span class="mc-l">${esc(c.label)}</span>${S.info(c.info)}</div><div class="mc-v num"></div><div class="mc-s"></div><div class="mc-m"><i class="fd"></i><span></span></div></div>`;
+// small trend line under a card value; hover shows first and latest points
+function sparkSvg(rows, f = (v) => num(v)) {
+  if (!rows || rows.length < 5) return '';
+  const W = 240, Hh = 34, vs = rows.map((r) => r[1]), lo = Math.min(...vs), hi = Math.max(...vs), sp = hi - lo || 1;
+  const X = (i) => (i / (rows.length - 1)) * (W - 4) + 2, Y = (v) => Hh - 3 - ((v - lo) / sp) * (Hh - 6);
+  const d = rows.map((r, i) => `${i ? 'L' : 'M'}${X(i).toFixed(1)},${Y(r[1]).toFixed(1)}`).join('');
+  return `<svg class="spk" viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" role="img" aria-label="Trend from ${rows[0][0]} to ${rows.at(-1)[0]}"><title>${rows[0][0]}: ${f(rows[0][1])} → ${rows.at(-1)[0]}: ${f(rows.at(-1)[1])} (range ${f(lo)}–${f(hi)})</title><path d="${d}"/><circle cx="${X(rows.length - 1).toFixed(1)}" cy="${Y(rows.at(-1)[1]).toFixed(1)}" r="2.2"/></svg><span class="spk-l"><span>${shortD(rows[0][0])}</span><span>${rows.length} days</span><span>${shortD(rows.at(-1)[0])}</span></span>`;
+}
+const shortD = (d) => { const x = new Date(d + 'T00:00:00Z'); return isNaN(x) ? '' : `${MON[x.getUTCMonth()]} ${x.getUTCDate()}`; };
+const cardShell = (c) => `<div class="dkcard${c.wide ? ' wide' : ''}${c.full ? ' full' : ''}" data-k="${c.k}"><div class="mc-h"><span class="mc-l">${esc(c.label)}</span>${S.info(c.info)}</div><div class="mc-v num"></div><div class="mc-s"></div><div class="mc-sp"></div><div class="mc-m"><i class="fd"></i><span></span></div></div>`;
 const freshLabel = { ok: 'up to date', stale: 'older than its usual update interval', na: 'not available' };
 export function paintCards(root = document) {
   for (const g of GROUPS) for (const c of g.cards) {
@@ -135,6 +214,7 @@ export function paintCards(root = document) {
     el.classList.toggle('na', !!r.na);
     el.querySelector('.mc-v').innerHTML = r.v;
     el.querySelector('.mc-s').innerHTML = r.sub || '';
+    el.querySelector('.mc-sp').innerHTML = r.spark ? sparkSvg(r.spark, r.sfmt) : '';
     const m = el.querySelector('.mc-m');
     m.querySelector('.fd').className = 'fd ' + f;
     m.title = `Freshness: ${freshLabel[f]}`;
@@ -153,6 +233,7 @@ function fngHtml() {
     <div class="fng-row"><svg viewBox="0 0 120 66" class="fgauge" aria-hidden="true"><path class="tr" d="M14 58 A46 46 0 0 1 106 58"/><path class="fl ${tone}" d="M14 58 A46 46 0 0 1 ${x.toFixed(1)} ${y.toFixed(1)}"/><circle cx="${x.toFixed(1)}" cy="${y.toFixed(1)}" r="4"/></svg>
     <div><div class="fv num ${tone}">${F.value}</div><div class="fl2">${esc(F.label)}</div></div>
     <div class="fcmp">${cmp('d1', 'Yesterday')}${cmp('d7', 'Week ago')}${cmp('d30', 'Month ago')}</div></div>
+    ${F.series?.length > 5 ? `<div class="fhist">${sparkSvg(lastN(F.series, 90), (y) => String(y))}<div class="fav"><span>7-day avg <b class="num">${F.avg7 ?? '—'}</b></span><span>30-day avg <b class="num">${F.avg30 ?? '—'}</b></span></div></div>` : ''}
     <p class="srcl"><i class="fd ${F.stale ? 'stale' : fresh(F.asOf, 2 * DAY)}"></i>${esc(F.source)} · ${dShort(F.asOf)} · <a href="${esc(F.url)}" target="_blank" rel="noopener">method</a></p></section>`;
 }
 function newsHtml() {
@@ -168,7 +249,7 @@ function paintNews() {
   const items = (S.dash?.news?.items || []).filter((i) => (S.newsFilter === 'all' ? true : S.newsFilter === 'macro' ? i.macro : !i.macro));
   const shown = S.newsAll ? items.slice(0, 60) : items.slice(0, 14);
   const icon = { bullish: '▲', bearish: '▼', neutral: '•' };
-  list.innerHTML = shown.length ? shown.map((i) => `<li><span class="ntag ${i.tag}" title="${i.macro ? 'Central-bank release — not tagged' : i.words.length ? `Keyword tag “${i.tag}” from: ${esc(i.words.join(', '))}` : 'No tag keywords found'}">${i.macro ? 'FED' : icon[i.tag]}</span><div><a href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.title)}</a><span class="nmeta">${esc(i.source)} · ${relShort(Date.parse(i.t))}</span></div></li>`).join('') + (items.length > 14 ? `<li class="nmore"><button type="button" id="d-nmore">${S.newsAll ? 'Show fewer' : `Show ${Math.min(60, items.length) - 14} more`}</button></li>` : '') : '<li class="muted small">No headlines in this filter.</li>';
+  list.innerHTML = shown.length ? shown.map((i) => `<li><span class="ntag ${i.tag}" title="${i.macro ? 'Central-bank release — not tagged' : i.words.length ? `Keyword tag “${i.tag}” from: ${esc(i.words.join(', '))}` : 'No tag keywords found'}">${i.macro ? 'FED' : icon[i.tag]}</span><div><a href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.title)}</a><span class="nmeta">${esc(i.source)}${i.via ? ` <span class="via">via ${esc(i.via)}</span>` : ''} · ${relShort(Date.parse(i.t))}</span></div></li>`).join('') + (items.length > 14 ? `<li class="nmore"><button type="button" id="d-nmore">${S.newsAll ? 'Show fewer' : `Show ${Math.min(60, items.length) - 14} more`}</button></li>` : '') : '<li class="muted small">No headlines in this filter.</li>';
   const day = (S.dash?.news?.items || []).filter((i) => !i.macro && Date.now() - Date.parse(i.t) < DAY), c = { bullish: 0, bearish: 0, neutral: 0 };
   day.forEach((i) => c[i.tag]++);
   const tal = document.getElementById('d-ntally');
@@ -306,13 +387,14 @@ export function dashTab({ a, pi, dash, info }) {
     <h3>Not shown, and why</h3>
     <ul>
       <li><b>Total spot ETF holdings</b> — no free source publishes reliable daily holdings for every fund. Daily flows (Farside) are shown instead.</li>
-      <li><b>Entity-adjusted and holder-cohort metrics</b> (long- vs short-term holder supply, entity-adjusted SOPR, realised cap by cohort) — available only from paid on-chain providers.</li>
+      <li><b>Most entity-adjusted and holder-cohort metrics</b> (long- vs short-term holder supply, entity-adjusted SOPR, cohort MVRV bands) — paid providers only. Short- and long-term holder realised prices are shown from BGeometrics’ free tier, which runs about a week behind.</li>
+      <li><b>NVT, supply active in the last year, USD fee averages</b> — not in Coin Metrics’ free tier.</li>
       <li><b>Market-wide liquidation totals</b> — paid aggregators only. We show a one-venue sample from the last server run and a live stream of large liquidations from OKX and Bybit.</li>
       <li><b>Exchange-specific whale tracking</b> — attributing on-chain transactions to named entities requires paid labelling. Large on-chain transactions are shown unlabelled.</li>
       <li><b>Lightning Network statistics</b> — shown only while mempool.space’s free statistics are current.</li>
     </ul>
     <h3>Sources</h3>
-    <p class="small muted">Live price: Coinbase, Binance (USDT, ≈USD), CoinGecko, Kraken · Network, fees, mining: mempool.space · Large trades: Coinbase, Binance, Kraken public WebSockets · Liquidations: OKX, Bybit public WebSockets · On-chain transactions: blockchain.info public WebSocket · Market cap, dominance, ATH, treasuries, volume: CoinGecko · On-chain valuation and exchange flows: Coin Metrics Community API, BGeometrics free tier · Stablecoins: DefiLlama · Derivatives: OKX, Deribit, Hyperliquid, CoinGecko · ETF flows: Farside Investors · Fear &amp; Greed: alternative.me · News: CoinDesk, Cointelegraph, Bitcoin Magazine, Decrypt, The Block, Federal Reserve (RSS) · Price history for the Pi Cycle chart: Coin Metrics.</p>
+    <p class="small muted">Live price: Coinbase, Binance (USDT, ≈USD), CoinGecko, Kraken · Network, fees, mining: mempool.space · Large trades: Coinbase, Binance, Kraken public WebSockets · Liquidations: OKX, Bybit public WebSockets · On-chain transactions: blockchain.info public WebSocket · Market cap, dominance, ATH, treasuries, volume: CoinGecko · On-chain valuation and exchange flows: Coin Metrics Community API, BGeometrics free tier · Stablecoins: DefiLlama · Derivatives: OKX, Deribit, Hyperliquid, CoinGecko · ETF flows: Farside Investors · Fear &amp; Greed: alternative.me · Hashprice and fee share: CloudMineCrypto · Pool shares: mempool.space · Network activity: Coin Metrics Community · Holder-cohort realised prices: BGeometrics free tier (fetched at most once a day) · News: CoinDesk, Cointelegraph, Bitcoin Magazine, Decrypt, The Block, Federal Reserve (RSS), cryptocurrency.cv (aggregator, Bitcoin category) · Price history for the Pi Cycle chart: Coin Metrics.</p>
     <p class="small muted">Market-structure research, not investment advice. No price targets or probabilities.</p>
   </details>
   <div class="toast" id="d-toast" role="status" aria-live="polite" hidden></div>`;
@@ -320,6 +402,7 @@ export function dashTab({ a, pi, dash, info }) {
 
 // wiring that must run after every render; live feeds start only once per page load
 let started = false, tickT = null, cgT = null;
+document.addEventListener('click', (e) => { if (e.target.closest?.('[data-treas-more]')) { S.treasAll = !S.treasAll; paintCards(); } });
 export function mountDash({ dash, getLive }) {
   S.dash = dash;
   S.live = getLive();

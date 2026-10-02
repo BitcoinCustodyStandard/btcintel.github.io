@@ -46,28 +46,40 @@ export function parseRss(xml, feed, now = Date.now()) {
   return out;
 }
 const norm = (s) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(' ').filter((w) => w.length > 3).slice(0, 8).join(' ');
+// cryptocurrency.cv aggregates many publishers; keep only its Bitcoin category, drop
+// automated readings (gas trackers), and credit the original publisher.
+async function aggregator(now = Date.now()) {
+  const j = await get('https://cryptocurrency.cv/api/news?category=bitcoin');
+  return (j.articles || []).filter((a) => a.category === 'bitcoin' && !/gas/i.test(a.sourceKey || '') && /^https:\/\//.test(a.link || '') && a.title)
+    .map((a) => { const t = Date.parse(a.pubDate); const title = decode(a.title).replace(/\s+/g, ' ').trim(); const s = tagHeadline(title); return Number.isFinite(t) && t <= now + 3600e3 ? { t: new Date(t).toISOString(), title, link: decode(a.link), source: a.source || 'cryptocurrency.cv', via: 'cryptocurrency.cv', tag: s.tag, words: s.words } : null; })
+    .filter(Boolean).slice(0, 30);
+}
 async function news() {
   const sources = [], all = [];
+  try { const items = await aggregator(); all.push(...items); sources.push({ name: 'cryptocurrency.cv (aggregator)', url: 'https://cryptocurrency.cv', ok: true, n: items.length }); }
+  catch (e) { sources.push({ name: 'cryptocurrency.cv (aggregator)', url: 'https://cryptocurrency.cv', ok: false, error: e.message }); }
   await Promise.all(FEEDS.map(async (f) => {
     try { const items = parseRss(await get(f.url, 'text'), f); all.push(...items); sources.push({ name: f.name, url: f.url, ok: true, n: items.length }); }
     catch (e) { sources.push({ name: f.name, url: f.url, ok: false, error: e.message }); }
   }));
   const cut = Date.now() - 72 * 3600e3, seen = new Set();
-  const items = all.filter((x) => Date.parse(x.t) >= cut).sort((a, b) => b.t.localeCompare(a.t)).filter((x) => { const k = norm(x.title); if (seen.has(k) || seen.has(x.link)) return false; seen.add(k); seen.add(x.link); return true; }).slice(0, 60);
-  sources.sort((a, b) => FEEDS.findIndex((f) => f.name === a.name) - FEEDS.findIndex((f) => f.name === b.name));
+  const items = all.filter((x) => Date.parse(x.t) >= cut).sort((a, b) => b.t.localeCompare(a.t)).filter((x) => { const k = norm(x.title); if (seen.has(k) || seen.has(x.link)) return false; seen.add(k); seen.add(x.link); return true; }).slice(0, 80);
+  const order = (n) => { const i = FEEDS.findIndex((f) => f.name === n); return i < 0 ? 99 : i; };
+  sources.sort((a, b) => order(a.name) - order(b.name));
   return { method: 'Headlines from public RSS feeds, last 72 hours. Tags are keyword rules (see engine/sentiment.js), not an assessment of the story.', sources, items };
 }
 
 // ---------- other blocks ----------
 async function fng() {
-  const j = await get('https://api.alternative.me/fng/?limit=31');
+  const j = await get('https://api.alternative.me/fng/?limit=90');
   const d = j.data.map((x) => ({ value: +x.value, label: x.value_classification, date: new Date(+x.timestamp * 1000).toISOString().slice(0, 10) }));
-  return { source: 'alternative.me Crypto Fear & Greed Index (third-party)', url: 'https://alternative.me/crypto/fear-and-greed-index/', asOf: d[0].date, value: d[0].value, label: d[0].label, d1: d[1]?.value ?? null, d7: d[7]?.value ?? null, d30: d[30]?.value ?? null };
+  const avg = (n) => (d.length >= n ? Math.round(d.slice(0, n).reduce((s, x) => s + x.value, 0) / n) : null);
+  return { source: 'alternative.me Crypto Fear & Greed Index (third-party)', url: 'https://alternative.me/crypto/fear-and-greed-index/', asOf: d[0].date, value: d[0].value, label: d[0].label, d1: d[1]?.value ?? null, d7: d[7]?.value ?? null, d30: d[30]?.value ?? null, avg7: avg(7), avg30: avg(30), series: d.map((x) => [x.date, x.value]).reverse() };
 }
 async function treasuries() {
   const j = await get('https://api.coingecko.com/api/v3/companies/public_treasury/bitcoin');
   const cos = (j.companies || []).filter((c) => c.total_holdings > 0).sort((a, b) => b.total_holdings - a.total_holdings);
-  return { source: 'CoinGecko public company treasuries', url: 'https://www.coingecko.com/en/treasuries/bitcoin', fetchedAt: new Date().toISOString(), totalBtc: Math.round(j.total_holdings), companies: cos.length, top: cos.slice(0, 5).map((c) => ({ name: c.name, symbol: c.symbol, country: c.country, btc: Math.round(c.total_holdings), pctSupply: c.percentage_of_total_supply })) };
+  return { source: 'CoinGecko public company treasuries', url: 'https://www.coingecko.com/en/treasuries/bitcoin', fetchedAt: new Date().toISOString(), totalBtc: Math.round(j.total_holdings), companies: cos.length, top: cos.slice(0, 30).map((c) => ({ name: c.name, symbol: c.symbol, country: c.country, btc: Math.round(c.total_holdings), pctSupply: c.percentage_of_total_supply })) };
 }
 async function volume() {
   const j = await get('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=365&interval=daily');
@@ -100,21 +112,62 @@ async function network() {
   };
 }
 
+// mining economics with 90 days of history (hashprice, fee share)
+async function hashpower() {
+  const j = await get('https://cloudminecrypto.com/api/hashpower-market');
+  const L = j.latest || {};
+  return { source: 'CloudMineCrypto hashpower market API', url: 'https://cloudminecrypto.com', fetchedAt: new Date().toISOString(), asOf: new Date(j.as_of * 1000).toISOString(),
+    hashpriceUsdPh: L.hashprice_usd_per_th_day * 1000, hashpriceBtcPh: L.hashprice_btc_per_ph_day, feeSharePct: L.fees_share_pct, hashrateEh: L.network_hashrate_eh,
+    daily: (j.daily || []).map((x) => [x.date, x.hashprice_usd_per_th_day * 1000, x.fees_share_pct]) };
+}
+// mining pools' share of blocks over the last week
+async function pools() {
+  const j = await get('https://mempool.space/api/v1/mining/pools/1w');
+  const total = j.pools.reduce((s, p) => s + p.blockCount, 0);
+  return { source: 'mempool.space mining pools (last 7 days)', fetchedAt: new Date().toISOString(), blocks: total, count: j.pools.length, top: j.pools.slice(0, 8).map((p) => ({ name: p.name, blocks: p.blockCount, share: (p.blockCount / total) * 100 })) };
+}
+// network activity, daily (Coin Metrics Community; all free-tier metrics)
+async function activity() {
+  const start = new Date(Date.now() - 120 * 864e5).toISOString().slice(0, 10);
+  const j = await get(`https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc&metrics=AdrActCnt,TxCnt,TxTfrCnt,AdrBalCnt,FeeTotNtv&frequency=1d&start_time=${start}&page_size=200`);
+  const rows = j.data.map((x) => [x.time.slice(0, 10), +x.AdrActCnt || null, +x.TxCnt || null, +x.TxTfrCnt || null, +x.AdrBalCnt || null, x.FeeTotNtv ? +(+x.FeeTotNtv).toFixed(4) : null]);
+  return { source: 'Coin Metrics Community API (AdrActCnt, TxCnt, TxTfrCnt, AdrBalCnt, FeeTotNtv)', fetchedAt: new Date().toISOString(), asOf: rows.at(-1)?.[0] ?? null, cols: ['date', 'active', 'tx', 'transfers', 'withBalance', 'feesBtc'], rows };
+}
+// short- and long-term holder realised prices. BGeometrics free tier is tightly limited
+// (and shared with the daily agent), so this is fetched at most once every 23 hours.
+async function cohorts() {
+  const start = new Date(Date.now() - 400 * 864e5).toISOString().slice(0, 10);
+  const [sth, lth] = await Promise.all([
+    get(`https://bitcoin-data.com/v1/sth-realized-price?startday=${start}`, 'json', 40000),
+    get(`https://bitcoin-data.com/v1/lth-realized-price?startday=${start}`, 'json', 40000),
+  ]);
+  const ser = (a, k) => a.filter((x) => x[k] !== null && x[k] !== undefined).map((x) => [x.d, +(+x[k]).toFixed(2)]);
+  const S = ser(sth, 'sthRealizedPrice'), L = ser(lth, 'lthRealizedPrice');
+  return { source: 'BGeometrics free API (sth/lth-realized-price; free tier is delayed about a week)', fetchedAt: new Date().toISOString(), asOf: S.at(-1)?.[0] ?? null, sth: S, lth: L };
+}
+
 async function main() {
   let prev = null;
   try { prev = JSON.parse(await readFile(OUT, 'utf8')); } catch {}
   const out = { updated: new Date().toISOString() };
-  const blocks = { news, fng, treasuries, volume, flows, lightning, network };
+  const blocks = { news, fng, treasuries, volume, flows, lightning, network, hashpower, pools, activity, cohorts };
+  // minimum age before a block is fetched again (default: every run)
+  const EVERY = { hashpower: 55 * 60e3, pools: 55 * 60e3, activity: 6 * 3600e3, treasuries: 55 * 60e3, cohorts: 23 * 3600e3 };
   await Promise.all(Object.entries(blocks).map(async ([k, fn]) => {
+    const p = prev?.[k];
+    if (EVERY[k] && p?.fetchedAt && !p.error && Date.now() - Date.parse(p.fetchedAt) < EVERY[k]) { out[k] = p; log(`${k}: cached`); return; }
+    // after a failure, wait before retrying (6 h for the rate-limited BGeometrics, else 1 h)
+    if (EVERY[k] && p?.failedAt && Date.now() - Date.parse(p.failedAt) < (k === 'cohorts' ? 6 * 3600e3 : 3600e3)) { out[k] = p; log(`${k}: backing off`); return; }
     try { out[k] = await fn(); log(`${k}: ok`); }
     catch (e) {
       log(`${k}: ${e.message}`);
       // carry the last good value forward, marked stale with its original timestamps
-      out[k] = prev?.[k] ? { ...prev[k], stale: true, lastError: e.message } : { error: e.message };
+      out[k] = prev?.[k] && !prev[k].error ? { ...prev[k], stale: true, lastError: e.message, failedAt: new Date().toISOString() } : { error: e.message, failedAt: new Date().toISOString() };
     }
   }));
   if (out.news?.sources) log(out.news.sources.map((s) => `${s.name}:${s.ok ? s.n : 'ERR ' + s.error}`).join(' · '));
-  const strip = (o) => JSON.stringify({ ...o, updated: 0, treasuries: o?.treasuries && { ...o.treasuries, fetchedAt: 0 }, network: o?.network && { ...o.network, at: 0 } });
+  // fetch times alone are not a content change
+  const strip = (o) => JSON.stringify({ ...o, updated: 0 }, (k, v) => (k === 'fetchedAt' || k === 'at' || k === 'failedAt' ? 0 : v));
   if (prev && strip(prev) === strip(out)) { log('No content change.'); return; }
   await writeFile(OUT, JSON.stringify(out) + '\n');
   log('Wrote data/dash.json');
