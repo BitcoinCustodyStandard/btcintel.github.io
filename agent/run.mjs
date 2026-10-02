@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import { collectAll, mergeWithPrevious } from '../engine/collect.js';
 import { analyze, backfillRows } from '../engine/analyze.js';
 import { morningReport, briefReport } from '../engine/report.js';
+import { computePiCycle } from '../engine/picycle.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DATA = process.env.INTEL_DATA_DIR ? path.resolve(process.env.INTEL_DATA_DIR) : path.resolve(here, '../data');
@@ -127,8 +128,17 @@ async function main() {
   const row = { ...a.row, date: a.row.date, kind: a.kind };
   rows = rows.filter((r) => r.date !== row.date).concat([row]).sort((x, y) => (x.date < y.date ? -1 : 1));
   writeJSON(path.join(DATA, 'timeseries.json'), { updated: a.generatedAt, fields: Object.keys(row), rows });
+  // Pi Cycle chart data: full daily closes (Coin Metrics) with 111DMA and 350DMA×2.
+  // Rewritten each run; if Coin Metrics failed, the previous file stays (its asOf shows the age).
+  const priceFull = snap.onchain?.coinmetrics?.priceFull;
+  if (priceFull?.length > 400) {
+    const pi = computePiCycle(priceFull);
+    writeJSON(path.join(DATA, 'pi_cycle.json'), { updated: a.generatedAt, source: 'Coin Metrics Community API (PriceUSD, daily close UTC)', asOf: priceFull.at(-1)[0], latest: pi.latest, crosses: pi.crosses, rows: pi.rows });
+    log(`Pi Cycle: ${pi.rows.length} days, crosses ${pi.crosses.map((c) => c.date).join(', ') || 'none'}, gap ${pi.latest ? (pi.latest.gap * 100).toFixed(1) + '%' : 'n/a'}`);
+  }
   // Raw book levels are only needed for today's analysis; keep the stored snapshot lean.
-  const lean = snap.books ? { ...snap, books: { ...snap.books, venues: snap.books.venues.map(({ levels, ...v }) => v) } } : snap;
+  const cmLean = snap.onchain?.coinmetrics ? { ...snap.onchain, coinmetrics: { ...snap.onchain.coinmetrics, priceFull: undefined } } : snap.onchain;
+  const lean = { ...(snap.books ? { ...snap, books: { ...snap.books, venues: snap.books.venues.map(({ levels, ...v }) => v) } } : snap), onchain: cmLean };
   writeJSON(path.join(DATA, 'snapshot.json'), lean);
 
   // Per-run log (every scheduled or manual run) — feeds charts for series that have no

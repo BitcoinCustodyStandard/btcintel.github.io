@@ -8,12 +8,14 @@ import { morningReport, briefReport } from '../engine/report.js';
 import { brief } from '../engine/brief.js';
 import { ZONES } from '../engine/cycle.js';
 import { explain, EXPLAIN, REMINDER } from '../engine/explain.js';
+import { startLivePrice } from './live.js';
+import { piCardHtml, drawPiChart, piState } from './pichart.js';
 import { fmtUsd, fmtUsdSigned, fmtPrice, fmtPct, fmtNum, fmtK, ordinal } from '../engine/util.js';
 
 const REPO = 'BitcoinCustodyStandard/btcintel.github.io';
 const WORKFLOW = 'market-intel.yml';
 const SERVER_ONLY = ['farside', 'fred', 'yahoo', 'cftc_cot', 'bgeometrics'];
-const state = { a: null, rows: [], runs: [], index: null, snapshot: null, range: 90 };
+const state = { a: null, rows: [], runs: [], index: null, snapshot: null, range: 90, pi: null, live: null, liveState: 'init' };
 const $ = (s, r = document) => r.querySelector(s);
 
 // ---------- safe templating ----------
@@ -219,7 +221,7 @@ function drawChart(el) {
 }
 function drawCharts(root = document) { root.querySelectorAll('[data-chart],[data-spark]').forEach(drawChart); }
 let resizeT;
-window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => drawCharts(document), 200); });
+window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { drawCharts(document); drawPiChart($('#pi-chart'), state.pi, state.live); }, 200); });
 document.addEventListener('toggle', (e) => { if (e.target.matches?.('details') && e.target.open) drawCharts(e.target); }, true);
 const chartEl = (key) => h`<div class="chart" data-chart="${key}"></div>`;
 const sparkEl = (key) => h`<div class="chart spark" data-spark="${key}"></div>`;
@@ -260,9 +262,9 @@ function execStrip(b) {
   const ch = (v, k) => h`<span class="chg"><span class="${cls(v)}">${fmtPct(v, 1)}</span> ${k}</span>`;
   return h`<section class="exec" aria-label="Summary">
     <div class="exec-row">
-      <div class="exec-px"><span class="px num">${fmtPrice(P.spot)}</span>${ch(P.ch24h, '24h')}${ch(P.ch7d, '7d')}${ch(P.ch30d, '30d')}${isStale(['coingecko']) ? raw(' ' + ser(chip('stale', 'stale'))) : ''}</div>
+      <div class="exec-px"><span class="px num" id="live-px">${fmtPrice(state.live?.price ?? P.spot)}</span><span id="live-ch">${ch(P.ch24h, '24h')}${ch(P.ch7d, '7d')}${ch(P.ch30d, '30d')}</span><span class="livebadge snap" id="live-badge"><i></i><span>Server snapshot · ${fmtTime(a.dataThrough)}</span></span></div>
       <div class="exec-regime"><span class="k">Regime</span><b>${b.regime.label}</b>${info('regime')}<span class="muted"> — ${b.regime.desc}</span>${b.regime.secondary ? h`<span class="muted"> Secondary: ${b.regime.secondary}.</span>` : ''}</div>
-      ${b.cycle ? h`<a class="cybadge t-${TONE_CHIP[b.cycle.tone] || 'neu'}" href="#cycle" title="On-chain cycle position — open the full On-chain cycle page"><span class="k">On-chain cycle</span>${b.cycle.phase ? h`<b>${b.cycle.phase}</b> · ` : ''}${b.cycle.zone}${b.cycle.momentum ? h` · momentum ${b.cycle.momentum.toLowerCase()}` : ''}${b.cycle.stretched ? ' · stretched' : ''} <span class="arr">→</span></a>${info('cyclebadge')}` : ''}
+      ${b.cycle ? h`<div class="cyrow"><a class="cybadge t-${TONE_CHIP[b.cycle.tone] || 'neu'}" href="#cycle" title="On-chain cycle position — open the full On-chain cycle page"><span class="k">On-chain cycle</span>${b.cycle.phase ? h`<b>${b.cycle.phase}</b> · ` : ''}${b.cycle.zone}${b.cycle.momentum ? h` · momentum ${b.cycle.momentum.toLowerCase()}` : ''}${b.cycle.stretched ? ' · stretched' : ''} <span class="arr">→</span></a>${info('cyclebadge')}</div>` : ''}
     </div>
     <div class="exec-moves"><span class="k">What changed${info('changes')}</span>${b.notable.length ? b.notable.map((n) => h`<span class="move" title="${n.horizon === '7d' ? 'vs the observation a week ago' : 'vs the previous daily observation'}; σ = size vs the typical ${n.horizon === '7d' ? '7-day' : 'daily'} change"><span class="hz">${n.horizon}</span>${n.label} ${n.from} → ${n.to} <span class="z">${fmtNum(n.z, 1)}σ</span></span>`) : h`<span class="dim small">No statistically meaningful moves (≥1.5σ) over 24h or 7d.</span>`}</div>
     <div class="statusbar"><span>Data through ${fmtTime(a.dataThrough)}</span><span>${a.kind === 'browser' ? 'Browser refresh' : a.kind === 'morning' ? '07:00 report' : 'Server refresh'}</span><span>${b.sources.text}</span></div>
@@ -387,7 +389,6 @@ function dashboard() {
       <div class="small muted">${P.drawdownPct !== null ? `${fmtPct(P.drawdownPct)} from ATH${P.ath ? ` (${fmtPrice(P.ath)}, ${P.athDate})` : ''}` : ''}${P.ma200 ? ` · 200-day avg ${fmtPrice(P.ma200)}` : ''}${P.rv30 !== null ? ` · 30d realised vol ${fmtNum(P.rv30, 0)}%` : ''}<div class="xs dim">${srcLine(['coingecko'])}</div></div>
       <div class="attr"><div class="label">How price is moving${info('attribution')}</div>${[a.attribution.d1, a.attribution.d7].map((x) => h`<div class="row"><div class="h">${x.horizon === '1d' ? 'Last 24 hours' : 'Last 7 days'} · ${x.confidence}</div><b>${x.label}</b><div class="small muted">${x.explanation}</div></div>`)}</div>
     </div>
-    <div class="pricechart">${rangeBar()}${chartEl('price')}</div>
     <div class="kpis">
       ${tile('Spot liquidity (±1% depth)', dep ? dep.venues.map((v) => 'book_' + v.venue.toLowerCase()) : ['book_binance'], dep ? fmtUsd(dep.d1) : 'n/a', dep ? h`${dep.ch7d !== null ? raw(`<span class="${cls(dep.ch7d)}">${esc(fmtPct(dep.ch7d))}</span> vs 7d · `) : 'no 7d history yet · '}top-2 venues ${Math.round(dep.top2Share * 100)}% · $100M sell ≈ ${sell100 ? (sell100.exhausted ? 'beyond captured depth' : fmtPct(-sell100.slippagePct, 2)) : 'n/a'}` : 'Order books unavailable', force('depth')?.direction, 'depth', 'force:depth')}
       ${tile('ETF flow trend', ['farside'], E ? fmtUsdSigned(E.s5 * 1e6) + ' 5d' : 'n/a', E ? h`20d ${fmtUsdSigned(E.s20 * 1e6)} · last day (${E.lastDate}) ${fmtUsdSigned(E.last * 1e6)} · ${E.streak > 0 ? `${E.streak}-day inflow streak` : E.streak < 0 ? `${-E.streak}-day outflow streak` : 'no streak'} · ${E.accel > 0 ? 'accelerating' : 'decelerating'}` : 'ETF flow data unavailable', force('etf')?.direction, 'etf', 'force:etf')}
@@ -406,7 +407,7 @@ function dashboard() {
 }
 
 function overviewTab(b) {
-  return h`${execStrip(b)}${top3(b)}${forcesBlock(b)}${ladderBlock(b)}${accelBlock(b)}${watchBlock(b)}${dashboard()}<p class="foot-note">${b.footer}</p>`;
+  return h`${execStrip(b)}${raw(piCardHtml(state.pi, info('picycle').s))}${top3(b)}${forcesBlock(b)}${ladderBlock(b)}${accelBlock(b)}${watchBlock(b)}${dashboard()}<p class="foot-note">${b.footer}</p>`;
 }
 
 // ---------- On-chain cycle tab ----------
@@ -648,6 +649,41 @@ function render() {
   showTab(false);
   const np = $('#nav-price');
   if (np) np.innerHTML = h`${fmtPrice(a.metrics.price.spot)} <span class="${cls(a.metrics.price.ch24h)}">${fmtPct(a.metrics.price.ch24h)}</span>`.s;
+  drawPiChart($('#pi-chart'), state.pi, state.live);
+  document.querySelectorAll('[data-pirange]').forEach((b) => b.addEventListener('click', () => { piState.range = +b.dataset.pirange; document.querySelectorAll('[data-pirange]').forEach((x) => x.setAttribute('aria-pressed', String(+x.dataset.pirange === piState.range))); drawPiChart($('#pi-chart'), state.pi, state.live); }));
+  $('#pi-log')?.addEventListener('click', (e) => { piState.log = !piState.log; e.currentTarget.setAttribute('aria-pressed', String(piState.log)); drawPiChart($('#pi-chart'), state.pi, state.live); });
+  if (state.live) paintLive(); else if (!liveFeed) liveFeed = startLivePrice({ onPrice: (v) => { state.live = v; paintLive(); }, onState: (s) => { state.liveState = s; paintLive(); } });
+}
+
+// ---------- live price (header) ----------
+// The large price and its changes follow the live ticker; 7d and 30d compare it with the
+// stored daily close 7 and 30 days earlier. If tickers fail, the last good value stays,
+// marked stale; before the first tick the server snapshot is shown and labelled.
+let liveFeed = null, lastPiDraw = 0;
+const timeFmt = new Intl.DateTimeFormat(undefined, { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+function closeDaysAgo(n) {
+  const target = new Date(Date.now() - n * 864e5).toISOString().slice(0, 10);
+  const src = state.pi?.rows?.length ? state.pi.rows.map((r) => [r[0], r[1]]) : state.rows.filter((r) => r.price).map((r) => [r.date, r.price]);
+  let best = null; for (const [d, c] of src) { if (d <= target) best = c; else break; }
+  return best;
+}
+function paintLive() {
+  const L = state.live, px = $('#live-px'), badge = $('#live-badge'), chEl = $('#live-ch');
+  if (!px || !badge) return;
+  if (L) {
+    px.textContent = fmtPrice(L.price);
+    const c7 = closeDaysAgo(7), c30 = closeDaysAgo(30), ch24 = L.ch24 ?? state.a.metrics.price.ch24h;
+    const piece = (v, k) => `<span class="chg"><span class="${cls(v)}">${esc(fmtPct(v, 1))}</span> ${k}</span>`;
+    chEl.innerHTML = piece(ch24, '24h') + piece(c7 ? (L.price / c7 - 1) * 100 : state.a.metrics.price.ch7d, '7d') + piece(c30 ? (L.price / c30 - 1) * 100 : state.a.metrics.price.ch30d, '30d');
+    const stale = state.liveState === 'stale';
+    badge.className = 'livebadge ' + (stale ? 'stale' : 'live');
+    badge.title = `${L.source}${L.note ? ' · ' + L.note : ''} · polled every 10–30 s`;
+    badge.querySelector('span').textContent = stale ? `Stale · last update ${timeFmt.format(L.at)}` : `Live · ${L.source} · ${timeFmt.format(L.at)}`;
+    const np = $('#nav-price'); if (np) np.innerHTML = h`${fmtPrice(L.price)} <span class="${cls(ch24)}">${fmtPct(ch24)}</span>`.s;
+    if (Date.now() - lastPiDraw > 60e3) { lastPiDraw = Date.now(); drawPiChart($('#pi-chart'), state.pi, L); }
+  } else if (state.liveState === 'stale') {
+    badge.className = 'livebadge stale'; badge.querySelector('span').textContent = `Live price unavailable · server snapshot ${fmtTime(state.a.dataThrough)}`;
+  }
 }
 
 function wireSections() {
@@ -672,7 +708,8 @@ const runPoint = (r) => ({ price: r.price, depth1: r.depth1, depthVenues: r.dept
 async function getJSON(u) { const r = await fetch(u, { cache: 'no-store' }); if (!r.ok) throw new Error(`${u}: HTTP ${r.status}`); return r.json(); }
 
 async function load() {
-  const [latest, ts, idx, runs] = await Promise.allSettled([getJSON('data/latest.json'), getJSON('data/timeseries.json'), getJSON('data/index.json'), getJSON('data/runs.json')]);
+  const [latest, ts, idx, runs, pi] = await Promise.allSettled([getJSON('data/latest.json'), getJSON('data/timeseries.json'), getJSON('data/index.json'), getJSON('data/runs.json'), getJSON('data/pi_cycle.json')]);
+  state.pi = pi.status === 'fulfilled' ? pi.value : null;
   state.runs = runs.status === 'fulfilled' ? runs.value.runs || [] : [];
   state.rows = ts.status === 'fulfilled' ? ts.value.rows || [] : [];
   state.index = idx.status === 'fulfilled' ? idx.value : null;

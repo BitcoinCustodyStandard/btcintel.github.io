@@ -42,6 +42,13 @@ const ZONE_MEANS = {
 };
 
 export const EXPLAIN = {
+  picycle: {
+    title: 'Pi Cycle Top Indicator',
+    what: 'Two moving averages of Bitcoin’s daily price: the 111-day average and twice the 350-day average.',
+    why: 'When the faster 111-day line crosses above the slower (×2) line, it has historically coincided with major cycle tops within a few days.',
+    history: 'The name comes from the ratio 350 ÷ 111 ≈ 3.15, which is close to π.',
+    caveat: () => 'This is a historical pattern, not a guaranteed signal.',
+  },
   mvrv: {
     title: 'MVRV ratio',
     what: 'MVRV compares Bitcoin’s price with the average price at which all coins last moved on-chain — the network’s average “cost basis”.',

@@ -630,14 +630,15 @@ const CM_KEEP_DAYS = 800;
 async function coinmetrics() {
   const start = isoDate(Date.now() - 400 * DAY);
   const series = {}, unavailable = [];
-  let mvrvWeekly = null;
+  let mvrvWeekly = null, priceFull = null;
   try {
-    const j = await fetchJSON(`https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc&metrics=${CM_LONG.join(',')}&frequency=1d&start_time=2011-01-01&page_size=10000`, {}, 60000);
+    const j = await fetchJSON(`https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc&metrics=${CM_LONG.join(',')}&frequency=1d&start_time=2010-07-01&page_size=10000`, {}, 60000);
     const rows = j.data || [];
     for (const m of CM_LONG) {
       const pts = rows.map((r) => [String(r.time).slice(0, 10), num(r[m])]).filter(([, v]) => v !== null);
       if (pts.length) series[m] = pts.slice(-CM_KEEP_DAYS);
       if (m === 'CapMVRVCur' && pts.length) mvrvWeekly = pts.filter((_, i) => i % 7 === (pts.length - 1) % 7);
+      if (m === 'PriceUSD' && pts.length) priceFull = pts; // full daily history for the Pi Cycle chart (not stored in the snapshot)
     }
   } catch { /* fall back to the 400-day requests below */ }
   await Promise.all(CM_METRICS.filter((m) => !series[m]).map(async (m) => {
@@ -648,7 +649,7 @@ async function coinmetrics() {
     } catch { unavailable.push(m); }
   }));
   if (!Object.keys(series).length) throw new Error('no metrics returned');
-  return { series, unavailable, mvrvWeekly };
+  return { series, unavailable, mvrvWeekly, priceFull };
 }
 // BGeometrics free tier: 15 requests/day, 10/hour. Two requests per refresh, at most once
 // every 20 hours; between refreshes the previous values are carried forward unchanged
