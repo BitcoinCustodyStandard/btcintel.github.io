@@ -227,9 +227,9 @@ const rangeBar = () => h`<div class="range" role="group" aria-label="Chart range
 
 // ---------- tabs ----------
 // Overview is the default 60–90 second read; full research depth lives in the other tabs
-// and in expandable rows. Old section anchors (#forces, #scenarios, #coverage) still resolve.
-const TABS = ['overview', 'cycle', 'report', 'liquidity', 'data', 'archive'];
-const LEGACY = { forces: 'overview', scenarios: 'overview', liqmap: 'overview', watch: 'overview', top3: 'overview', coverage: 'data' };
+// and in expandable rows. Old section anchors (#forces, #scenarios) still resolve.
+const TABS = ['overview', 'cycle', 'report', 'liquidity'];
+const LEGACY = { forces: 'overview', scenarios: 'overview', liqmap: 'overview', watch: 'overview', top3: 'overview' };
 const tabFromHash = () => { const k = location.hash.slice(1); return TABS.includes(k) ? k : LEGACY[k] || 'overview'; };
 function showTab(scroll) {
   const t = tabFromHash(), k = location.hash.slice(1);
@@ -265,7 +265,7 @@ function execStrip(b) {
       ${b.cycle ? h`<a class="cybadge t-${TONE_CHIP[b.cycle.tone] || 'neu'}" href="#cycle" title="On-chain cycle position — open the full On-chain cycle page"><span class="k">On-chain cycle</span>${b.cycle.phase ? h`<b>${b.cycle.phase}</b> · ` : ''}${b.cycle.zone}${b.cycle.momentum ? h` · momentum ${b.cycle.momentum.toLowerCase()}` : ''}${b.cycle.stretched ? ' · stretched' : ''} <span class="arr">→</span></a>${info('cyclebadge')}` : ''}
     </div>
     <div class="exec-moves"><span class="k">What changed${info('changes')}</span>${b.notable.length ? b.notable.map((n) => h`<span class="move" title="${n.horizon === '7d' ? 'vs the observation a week ago' : 'vs the previous daily observation'}; σ = size vs the typical ${n.horizon === '7d' ? '7-day' : 'daily'} change"><span class="hz">${n.horizon}</span>${n.label} ${n.from} → ${n.to} <span class="z">${fmtNum(n.z, 1)}σ</span></span>`) : h`<span class="dim small">No statistically meaningful moves (≥1.5σ) over 24h or 7d.</span>`}</div>
-    <div class="statusbar"><span>Data through ${fmtTime(a.dataThrough)}</span><span>${a.kind === 'browser' ? 'Browser refresh' : a.kind === 'morning' ? '07:00 report' : 'Server refresh'}</span><span>${b.sources.text}</span><a href="#data">Sources</a></div>
+    <div class="statusbar"><span>Data through ${fmtTime(a.dataThrough)}</span><span>${a.kind === 'browser' ? 'Browser refresh' : a.kind === 'morning' ? '07:00 report' : 'Server refresh'}</span><span>${b.sources.text}</span></div>
   </section>`;
 }
 
@@ -570,41 +570,6 @@ function reportTab() {
     ${reportBodies(a)}`);
 }
 
-// ---------- Archive tab ----------
-function archiveTab() {
-  const opts = (state.index?.reports || []).slice(0, 365);
-  return sec('archive-sec', 'Archive', 'Every 07:00 report and manual server refresh, stored permanently. Each shows the condensed brief with the full report on expand.', h`
-    <div class="report-bar">
-      <label class="small muted" for="rep-sel">Report</label>
-      <select id="rep-sel"><option value="">Select a report (${opts.length} stored)</option>${opts.map((r) => h`<option value="${r.id}">${r.id}${r.kind === 'morning' ? ' · 07:00 report' : ' · refresh'}${r.price ? ' · ' + fmtPrice(r.price) : ''}${r.regime ? ' · ' + r.regime : ''}</option>`)}</select>
-      <a class="btn ghost" id="arc-dl" href="#" download="btc-market-intelligence.md" hidden>Download .md</a>
-    </div>
-    <div id="arc-body"><p class="muted small">Choose a report above. Raw data: <a href="data/index.json">report index</a> · <a href="data/timeseries.json">daily timeseries</a>.</p></div>`);
-}
-
-function coverageSection() {
-  const a = state.a;
-  const st = (q) => chip(q.status === 'server-only' ? 'server value' : q.status, q.status === 'ok' ? 'ok' : q.status === 'error' ? 'err' : 'stale');
-  return h`<section id="coverage" class="block">
-    <div class="bh"><h2>Data coverage &amp; methodology</h2><p class="aside">Every number on this page traces to one of these sources. Failed sources keep their last value, marked stale with its original timestamp.</p></div>
-    <div class="tbl-wrap"><table><thead><tr><th>Source</th><th>Status</th><th>As of</th><th>Frequency</th><th>Method / notes</th></tr></thead><tbody>
-      ${a.quality.slice().sort((x, y) => (x.status === y.status ? 0 : x.status === 'ok' ? 1 : -1)).map((q) => h`<tr><td>${safeUrl(q.url) ? h`<a href="${safeUrl(q.url)}" target="_blank" rel="noopener">${q.name}</a>` : q.name}</td><td>${st(q)}</td><td class="small num">${fmtTime(q.asOf || q.fetchedAt)}</td><td class="small">${q.frequency || ''}</td><td class="small">${q.method || ''}${q.note ? raw(`<div class="xs" style="color:var(--warn)">${esc(q.note)}</div>`) : ''}${q.error ? raw(`<div class="xs" style="color:var(--down)">${esc(q.error)}</div>`) : ''}</td></tr>`)}
-    </tbody></table></div>
-    <div class="twocol" style="margin-top:12px">
-      <div class="panel"><h3>Not available (and why)</h3><ul class="clean">${a.unavailable.map((u) => h`<li><b>${u.metric}.</b> <span class="muted">${u.why}</span></li>`)}</ul></div>
-      <div class="panel"><h3>Methodology notes</h3><ul class="clean small">
-        <li><b>Open interest</b> is summed across reachable venues at each venue’s own mark (OKX swaps+futures, Binance, Bybit, Deribit, BitMEX, Hyperliquid). Venues differ in contract design (linear USDT vs inverse USD); figures are USD notional. CME is shown separately from weekly CFTC data. Changes are only computed against history with the same venue set; otherwise the consistent OKX daily series is used and labelled.</li>
-        <li><b>Funding</b> is normalised to an 8-hour rate (Hyperliquid pays hourly) and OI-weighted; annualised = 8h × 3 × 365.</li>
-        <li><b>Depth</b> = displayed USD liquidity within ±0.5/1/2% of each venue’s mid from a single snapshot. This differs from Kaiko’s methodology (time-averaged, different venue set); comparisons with published figures are approximate.</li>
-        <li><b>Correlations</b> use daily log returns on common trading days (yields and VIX in level changes). Correlation describes co-movement, not causation.</li>
-        <li><b>Gamma</b> uses Black-Scholes with Deribit mark IV; reported as $ hedge change per 1% move. Dealer sign is not observable.</li>
-        <li><b>ETF flow-weighted basis</b> = cumulative net USD flows ÷ cumulative BTC implied at each day’s close — an approximation of average entry price, not issuer cost basis.</li>
-        <li><b>Regime and move classification</b> use explicit thresholds listed in <a href="https://github.com/BitcoinCustodyStandard/btcintel.github.io/blob/main/README.md" target="_blank" rel="noopener">the methodology</a>; evidence strength falls when inputs are missing.</li>
-        <li><b>Overview copy</b> (short summaries, ladder, condition labels) is condensed mechanically from the same analysis; it adds no figures. Changes are called out on the overview only at 1.5σ or more versus the typical daily change.</li>
-      </ul></div>
-    </div>
-  </section>`;
-}
 
 // ---------- explanations (single floating tooltip) ----------
 const hasExplain = (key) => !!state.a && !!explain(key, state.a, null);
@@ -678,8 +643,7 @@ function render() {
     <div data-tab="cycle" hidden>${cycleTab()}</div>
     <div data-tab="report" hidden>${reportTab()}</div>
     <div data-tab="liquidity" hidden>${liquidityTab()}</div>
-    <div data-tab="data" hidden>${coverageSection()}</div>
-    <div data-tab="archive" hidden>${archiveTab()}</div>`.s;
+`.s;
   wireSections();
   showTab(false);
   const np = $('#nav-price');
@@ -701,16 +665,6 @@ function wireSections() {
   // deep links to a force open it (and reveal it if it is outside the top 5)
   const setDl = (el, text) => { el.href = URL.createObjectURL(new Blob([text], { type: 'text/markdown' })); };
   setDl($('#rep-dl'), reportText(state.a));
-  const sel = $('#rep-sel'), adl = $('#arc-dl');
-  sel.addEventListener('change', async () => {
-    const id = sel.value;
-    if (!id) { $('#arc-body').innerHTML = ''; adl.hidden = true; return; }
-    try {
-      const j = await getJSON(`data/history/${encodeURIComponent(id)}.json`);
-      $('#arc-body').innerHTML = h`<p class="small muted">${j.kind === 'morning' ? '07:00 report' : 'Server refresh'} · data through ${fmtTime(j.dataThrough)}</p>${reportBodies(j)}`.s;
-      adl.download = `btc-market-intelligence-${id}.md`; setDl(adl, reportText(j)); adl.hidden = false;
-    } catch { $('#arc-body').textContent = 'Could not load that report.'; }
-  });
 }
 
 // ---------- data ----------

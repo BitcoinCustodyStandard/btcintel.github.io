@@ -148,7 +148,7 @@ export const EXPLAIN = {
     what: 'A one-line summary of which family of forces is setting the price right now: spot buying, leverage, derivatives, macro, or thin liquidity.',
     why: 'Knowing what is in charge helps judge how durable a move is likely to be — spot-led moves have tended to last longer than leverage-led ones.',
     now: (a) => `Today: “${a.regime?.primary}”. ${/Balanced/.test(a.regime?.primary || '') ? 'No single force clearly dominates; several moderate ones are pulling against each other.' : ''}`,
-    caveat: () => 'The classification uses fixed rules shown in Data & method.',
+    caveat: () => 'The classification uses fixed, published rules, not judgement calls.',
   },
   cyclebadge: {
     title: 'On-chain cycle badge',
