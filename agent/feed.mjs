@@ -7,6 +7,7 @@
 
 import { readFile, writeFile } from 'node:fs/promises';
 import { tagHeadline } from '../engine/sentiment.js';
+import { pearson, alignedReturns } from '../engine/util.js';
 
 const OUT = new URL('../data/dash.json', import.meta.url);
 const UA = { 'User-Agent': 'Mozilla/5.0 (BTC Intel dashboard feed; +https://btcintel.org/)', Accept: '*/*' };
@@ -75,7 +76,8 @@ async function volume() {
   const j = await get('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=365&interval=daily');
   const today = new Date().toISOString().slice(0, 10);
   // keep completed UTC days only (the last point is a running value)
-  const rows = j.total_volumes.filter(([ts]) => ts % 864e5 === 0).map(([ts, v]) => [new Date(ts).toISOString().slice(0, 10), Math.round(v)]).filter(([d]) => d < today);
+  // a point stamped 00:00 UTC holds the previous day's 24h volume, so label it with that day
+  const rows = j.total_volumes.filter(([ts]) => ts % 864e5 === 0).map(([ts, v]) => [new Date(ts - 864e5).toISOString().slice(0, 10), Math.round(v)]).filter(([d]) => d < today);
   return { source: 'CoinGecko aggregate 24h spot volume (daily, 00:00 UTC)', asOf: rows.at(-1)?.[0] ?? null, rows };
 }
 async function flows() {
@@ -136,19 +138,77 @@ async function cohorts() {
   return { source: 'BGeometrics free API (sth/lth-realized-price; free tier is delayed about a week)', fetchedAt: new Date().toISOString(), asOf: S.at(-1)?.[0] ?? null, sth: S, lth: L };
 }
 
+// Polymarket prediction markets on Bitcoin's price (public Gamma API, no key).
+// Keeps the "What price will Bitcoin hit …" ladders (week, month, year) and the nearest
+// "Bitcoin above ___ on <date>" ladder at least a day away. Prices are market-implied odds.
+export function pickPolymarket(events, now = Date.now()) {
+  const ladder = (e) => /^what price will bitcoin hit/i.test(e.title) && !/eth\/btc/i.test(e.title);
+  const above = events.filter((e) => /^bitcoin above .* on /i.test(e.title) && Date.parse(e.endDate) - now > 20 * 3600e3).sort((a, b) => Date.parse(a.endDate) - Date.parse(b.endDate))[0];
+  const chosen = events.filter(ladder).sort((a, b) => Date.parse(a.endDate) - Date.parse(b.endDate)).concat(above ? [above] : []);
+  return chosen.map((e) => {
+    const markets = (e.markets || []).filter((m) => m.active && !m.closed).map((m) => {
+      let yes = null; try { yes = +JSON.parse(m.outcomePrices)[0]; } catch {}
+      const g = String(m.groupItemTitle || ''), dir = g.includes('↑') ? 'up' : g.includes('↓') ? 'down' : null;
+      const strike = +((g.match(/[\d,.]+/) || m.question.match(/\$([\d,]+)/) || [])[0] || '').replace(/[^\d.]/g, '') || null;
+      return { label: g || m.question, q: m.question, dir, strike, yes, ch: Number.isFinite(+m.oneDayPriceChange) ? +m.oneDayPriceChange : null, v24: Math.round(+m.volume24hr || 0), vol: Math.round(+m.volumeNum || +m.volume || 0) };
+    }).filter((m) => Number.isFinite(m.yes)).sort((a, b) => (b.strike || 0) - (a.strike || 0));
+    return { title: e.title, slug: e.slug, url: `https://polymarket.com/event/${e.slug}`, end: e.endDate, vol: Math.round(+e.volume || 0), v24: Math.round(+e.volume24hr || 0), markets };
+  }).filter((e) => e.markets.length);
+}
+async function polymarket() {
+  const j = await get('https://gamma-api.polymarket.com/events?tag_slug=bitcoin&active=true&closed=false&limit=100', 'json', 40000);
+  return { source: 'Polymarket public Gamma API', url: 'https://polymarket.com', fetchedAt: new Date().toISOString(), events: pickPolymarket(j) };
+}
+
+// Address and coin distribution by balance band, from bitinfocharts' public table
+// (one request a day). Changes are computed from our own stored daily snapshots.
+export const COHORTS = [['shrimp', 'Shrimp', '< 1 BTC', 0], ['crab', 'Crab', '1–10 BTC', 1], ['fish', 'Fish', '10–100 BTC', 10], ['shark', 'Shark', '100–1K BTC', 100], ['whale', 'Whale', '1K–10K BTC', 1000], ['humpback', 'Humpback', '> 10K BTC', 10000]];
+export function parseDistribution(html) {
+  const i = html.indexOf('Bitcoin distribution</caption>'); if (i < 0) throw new Error('distribution table not found');
+  const t = html.slice(i, html.indexOf('</table>', i));
+  const rows = [...t.matchAll(/<tr><td>([^<]+)<\/td><td data-val='([\d.]+)'>[\s\S]*?<\/td><td class='hidden-phone'[^>]*>[\s\S]*?<\/td><td data-val='([\d.]+)'>/g)].map((m) => ({ range: m[1].trim(), lo: +m[1].replace(/[[(]/, '').split('-')[0].replace(/,/g, '').trim(), addresses: +m[2], btc: +m[3] }));
+  if (rows.length < 10) throw new Error(`distribution table: only ${rows.length} rows`);
+  const c = {};
+  for (const [k, , , lo] of COHORTS) c[k] = [0, 0];
+  for (const r of rows) { const k = [...COHORTS].reverse().find((x) => r.lo >= x[3])[0]; c[k][0] += r.addresses; c[k][1] += r.btc; }
+  for (const k in c) c[k][1] = Math.round(c[k][1]);
+  return { rows, cohorts: c };
+}
+async function distribution(prev) {
+  const d = parseDistribution(await get('https://bitinfocharts.com/top-100-richest-bitcoin-addresses.html', 'text', 30000));
+  const date = new Date().toISOString().slice(0, 10);
+  const history = (prev?.history || []).filter((h) => h.date !== date).concat([{ date, c: d.cohorts }]).slice(-40);
+  return { source: 'bitinfocharts.com Bitcoin distribution table (address balances)', url: 'https://bitinfocharts.com/top-100-richest-bitcoin-addresses.html', fetchedAt: new Date().toISOString(), asOf: date, cohorts: d.cohorts, bands: d.rows, history };
+}
+
+// Rolling correlation of daily log returns, computed from series we already store:
+// BTC daily closes (data/pi_cycle.json) and the agent's Yahoo Finance closes (data/snapshot.json).
+export async function correlations() {
+  const [pi, snap] = await Promise.all([readFile(new URL('../data/pi_cycle.json', import.meta.url), 'utf8').then(JSON.parse), readFile(new URL('../data/snapshot.json', import.meta.url), 'utf8').then(JSON.parse)]);
+  const btc = pi.rows.slice(-520).map((r) => [r[0], r[1]]), M = snap.macro?.markets || {};
+  const pairs = {};
+  for (const [k, label] of [['SPX', 'S&P 500'], ['GOLD', 'Gold'], ['DXY', 'US dollar index (DXY)']]) {
+    const s = M[k]; if (!s?.length) continue;
+    const roll = (n) => { const out = []; for (const [d] of s.slice(-260)) { const a = alignedReturns(btc.filter((r) => r[0] <= d), s.filter((r) => r[0] <= d), n); if (a.ra.length >= n * 0.8) { const c = pearson(a.ra, a.rb); if (Number.isFinite(c)) out.push([d, +c.toFixed(3)]); } } return out; };
+    const s30 = roll(30), s90 = roll(90);
+    pairs[k] = { label, c30: s30.at(-1)?.[1] ?? null, c90: s90.at(-1)?.[1] ?? null, c30MonthAgo: s30.at(-22)?.[1] ?? null, s30, s90, asOf: s30.at(-1)?.[0] ?? null };
+  }
+  return { source: 'Computed by BTC Intel: BTC daily closes (Coin Metrics) vs Yahoo Finance daily closes; overlapping trading days, daily log returns', method: 'Pearson correlation of daily log returns over the last 30 and 90 overlapping trading days.', asOf: Object.values(pairs)[0]?.asOf ?? null, pairs };
+}
+
 async function main() {
   let prev = null;
   try { prev = JSON.parse(await readFile(OUT, 'utf8')); } catch {}
   const out = { updated: new Date().toISOString() };
-  const blocks = { news, fng, treasuries, volume, flows, lightning, network, hashpower, pools, activity, cohorts };
+  const blocks = { news, fng, treasuries, volume, flows, lightning, network, hashpower, pools, activity, cohorts, polymarket, distribution, correlations };
   // minimum age before a block is fetched again (default: every run)
-  const EVERY = { hashpower: 55 * 60e3, pools: 55 * 60e3, activity: 6 * 3600e3, treasuries: 55 * 60e3, cohorts: 23 * 3600e3 };
+  const EVERY = { hashpower: 55 * 60e3, pools: 55 * 60e3, activity: 6 * 3600e3, treasuries: 55 * 60e3, cohorts: 23 * 3600e3, polymarket: 3 * 3600e3 - 5 * 60e3, distribution: 20 * 3600e3 };
   await Promise.all(Object.entries(blocks).map(async ([k, fn]) => {
     const p = prev?.[k];
     if (EVERY[k] && p?.fetchedAt && !p.error && Date.now() - Date.parse(p.fetchedAt) < EVERY[k]) { out[k] = p; log(`${k}: cached`); return; }
     // after a failure, wait before retrying (6 h for the rate-limited BGeometrics, else 1 h)
     if (EVERY[k] && p?.failedAt && Date.now() - Date.parse(p.failedAt) < (k === 'cohorts' ? 6 * 3600e3 : 3600e3)) { out[k] = p; log(`${k}: backing off`); return; }
-    try { out[k] = await fn(); log(`${k}: ok`); }
+    try { out[k] = await fn(p); log(`${k}: ok`); }
     catch (e) {
       log(`${k}: ${e.message}`);
       // carry the last good value forward, marked stale with its original timestamps

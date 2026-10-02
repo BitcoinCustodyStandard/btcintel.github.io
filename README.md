@@ -118,7 +118,8 @@ On the first run the agent **backfills ~1 year** of daily rows from series that 
   index.html, assets/          the page
   engine/                      collect · analyze · report · history queries · reference library (shared by page and agent)
   agent/feed.mjs               BTC Dashboard feed (news RSS, Fear & Greed, treasuries, volume, exchange flows) → data/dash.json
-  assets/dash.js · network.js · moves.js   dashboard tab · mempool.space live data · large-moves WebSockets
+  assets/dash.js · pricechart.js · network.js · moves.js   dashboard · price chart (averages, ±2σ envelope) · mempool.space · large moves
+  engine/envelope.js           50/100/200-day averages and the 20-day ±2σ volatility envelope
   agent/run.mjs                the daily agent;  agent/narrate.mjs  optional Claude narrative
   agent/query.mjs              archive questions (CLI);  agent/test/offline.mjs  synthetic end-to-end test
   data/latest.json             current analysis (what the page shows)

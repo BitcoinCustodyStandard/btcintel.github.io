@@ -6,7 +6,7 @@
 
 import { startNetwork, seedNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js';
 import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js';
-import { piCardHtml } from './pichart.js';
+import { priceCardHtml, envelopeNow } from './pricechart.js';
 
 // ---------- formatting ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -32,7 +32,7 @@ function ago(t, now = Date.now()) {
 const relShort = (t) => { const m = Math.round((Date.now() - t) / 60e3); return m < 1 ? 'now' : m < 60 ? `${m}m` : m < 1440 ? `${Math.floor(m / 60)}h` : `${Math.floor(m / 1440)}d`; };
 
 // ---------- state ----------
-const S = { a: null, dash: null, pi: null, live: null, cg: null, cgAt: null, glob: null, moves: [], moveStatus: {}, newsFilter: 'all', newsTone: 'all', newsAll: false, moveFilter: 'all', info: () => '' };
+const S = { a: null, dash: null, pi: null, live: null, cg: null, cgAt: null, glob: null, moves: [], moveStatus: {}, newsFilter: 'all', newsTone: 'all', newsAll: false, pmIdx: 0, pmAll: false, moveFilter: 'all', info: () => '' };
 const price = () => S.live?.price ?? S.a?.metrics?.price?.spot ?? null;
 const supplyNow = () => (N.height ? issuedSupply(N.height) : null);
 const cyM = (id) => S.a?.cycle?.metrics?.find((x) => x.id === id);
@@ -171,6 +171,9 @@ const GROUPS = [
       return { v: '', sub: `<table class="ttable"><thead><tr><th>#</th><th>Company</th><th>Ticker</th><th>Country</th><th class="r">BTC</th><th class="r">Value</th><th class="r">% of supply</th></tr></thead><tbody>${T.top.slice(0, n).map((c, i) => `<tr><td class="dim">${i + 1}</td><td>${esc(c.name)}</td><td class="dim">${esc(c.symbol)}</td><td class="dim">${esc(c.country || '')}</td><td class="r num">${num(c.btc)}</td><td class="r num">${big(c.btc * price())}</td><td class="r num">${sup ? ((c.btc / sup) * 100).toFixed(3) + '%' : '—'}</td></tr>`).join('')}</tbody></table>${T.top.length > 12 ? `<button type="button" class="linkbtn" data-treas-more>${S.treasAll ? 'Show top 12' : `Show top ${T.top.length}`}</button>` : ''}`, src: `${T.source} · holdings as last disclosed by each company`, at: T.fetchedAt, max: 2 * DAY };
     } },
   ] },
+  { id: 'corr', title: 'Correlations', note: 'Rolling correlation of daily returns between Bitcoin and other markets — co-movement, not causation. +1 means they moved together, −1 opposite, 0 unrelated.', cards: [
+    corrCard('SPX', 'BTC vs S&P 500'), corrCard('GOLD', 'BTC vs gold'), corrCard('DXY', 'BTC vs US dollar index'),
+  ] },
   { id: 'sentiment', title: 'Sentiment & positioning', cards: [
     { k: 'fngc', label: 'Fear & Greed (90 days)', info: 'd_fng', get: () => { const F = S.dash?.fng; return ok(F?.value) ? { v: `${F.value} <small>${esc(F.label)}</small>`, sub: `7-day average ${F.avg7 ?? '—'} · 30-day average ${F.avg30 ?? '—'} · 30 days ago ${F.d30 ?? '—'}`, spark: lastN(F.series, 90), sfmt: (y) => String(y), src: 'alternative.me (third-party)', at: F.asOf, max: 2 * DAY } : null; } },
     { k: 'ls', label: 'Long/short account ratio', info: 'd_ls', get: () => { const L = S.a?.metrics.derivs?.longShort; return ok(L?.okx) ? { v: num(L.okx, 2), sub: `${L.okx >= 1 ? 'more' : 'fewer'} accounts long than short · a week ago ${num(L.okx7dAgo, 2)}${ok(L.binance) ? ` · Binance ${num(L.binance, 2)}` : ''}`, src: 'OKX trading data', at: srcQ('okx_rubik')?.asOf, max: 26 * H } : null; } },
@@ -185,6 +188,14 @@ const GROUPS = [
     } },
   ] },
 ];
+function corrCard(k, label) {
+  return { k: 'corr-' + k, label, info: 'd_corr', get: () => {
+    const P = S.dash?.correlations?.pairs?.[k]; if (!ok(P?.c30)) return null;
+    const words = (c) => `${Math.abs(c) < 0.2 ? 'little co-movement' : `${Math.abs(c) < 0.5 ? 'moderate' : 'strong'} ${c > 0 ? 'co-movement' : 'opposite movement'}`}`;
+    const sg = (c) => (ok(c) ? `${c > 0 ? '+' : c < 0 ? '−' : ''}${Math.abs(c).toFixed(2)}` : '—');
+    return { v: `${sg(P.c30)} <small>30-day</small>`, sub: `${words(P.c30)} · 90-day ${sg(P.c90)} · a month ago ${sg(P.c30MonthAgo)}`, spark: lastN(P.s30, 180), sfmt: sg, src: 'Computed by BTC Intel · Coin Metrics + Yahoo Finance closes', at: P.asOf, max: 5 * DAY };
+  } };
+}
 function cycleCard(id, label, info) {
   return { k: 'cy-' + id, label, info, get: () => { const x = cyM(id); if (!x) return null; if (x.value === null) return NA(x.unavailableWhy || 'Not available from free sources.'); return { v: esc(x.display), sub: `${x.zone ? `<b class="z-${x.zone.tone || 'neu'}">${esc(x.zone.label)}</b> · ` : ''}${esc(String(x.meaning || '').split(/(?<!\d)\.(?!\d)| — /)[0])}`, src: x.source, at: x.asOf, max: 4 * DAY }; } };
 }
@@ -205,13 +216,15 @@ const shortD = (d) => { const x = new Date(d + 'T00:00:00Z'); return isNaN(x) ? 
 const cardShell = (c) => `<div class="dkcard${c.wide ? ' wide' : ''}${c.full ? ' full' : ''}" data-k="${c.k}"><div class="mc-h"><span class="mc-l">${esc(c.label)}</span>${S.info(c.info)}</div><div class="mc-v num"></div><div class="mc-s"></div><div class="mc-sp"></div><div class="mc-m"><i class="fd"></i><span></span></div></div>`;
 const freshLabel = { ok: 'up to date', stale: 'older than its usual update interval', na: 'not available' };
 export function paintCards(root = document) {
-  for (const g of GROUPS) for (const c of g.cards) {
+  for (const g of GROUPS) { const hidden = []; for (const c of g.cards) {
     const el = root.querySelector(`.dkcard[data-k="${c.k}"]`);
     if (!el) continue;
     let r; try { r = c.get(); } catch { r = null; }
     if (!r) r = { na: true, v: 'Waiting for data…', sub: '', src: '' };
     const f = r.na ? 'na' : fresh(r.at, r.max ?? DAY);
     el.classList.toggle('na', !!r.na);
+    // a card with no free data is hidden and named in the group's footnote instead of leaving an empty slot
+    el.hidden = !!r.na && r.v !== 'Waiting for data…';
     el.querySelector('.mc-v').innerHTML = r.v;
     el.querySelector('.mc-s').innerHTML = r.sub || '';
     el.querySelector('.mc-sp').innerHTML = r.spark ? sparkSvg(r.spark, r.sfmt) : '';
@@ -219,6 +232,9 @@ export function paintCards(root = document) {
     m.querySelector('.fd').className = 'fd ' + f;
     m.title = `Freshness: ${freshLabel[f]}`;
     m.querySelector('span').textContent = r.src ? `${r.src}${r.at ? ' · ' + (typeof r.at === 'number' || r.at.length > 10 ? (Date.now() - new Date(r.at) < DAY ? hhmm.format(new Date(r.at)) : dShort(r.at)) : dShort(r.at)) : ''}` : '';
+    if (el.hidden) hidden.push(`<b>${esc(c.label)}</b> — ${r.sub}`);
+  }
+  const gn = root.querySelector(`#g-${g.id} .gnote`); if (gn) { gn.innerHTML = hidden.length ? `Not shown (no current free source): ${hidden.join(' · ')}` : ''; gn.hidden = !hidden.length; }
   }
 }
 
@@ -275,7 +291,7 @@ function paintMoves() {
     const side = m.kind === 'tx' ? `<span class="dim" title="Total outputs incl. change; ${m.ins ?? '?'} inputs → ${m.outs} outputs">${m.ins ?? '?'}→${m.outs}</span>` : `<span class="${s[1]}" title="${s[2]}">${s[0]}</span>`;
     const size = `${m.usd ? big(m.usd) : ''} <span class="dim">${num(m.btc, m.btc >= 100 ? 0 : 2)} BTC</span>`;
     return `<tr class="k-${m.kind}"><td class="num">${hms.format(new Date(m.t))}</td><td><span class="mk ${m.kind}">${type}</span></td><td>${esc(m.venue)}${m.kind === 'tx' && /^[0-9a-f]{64}$/.test(m.hash) ? ` <a href="https://mempool.space/tx/${m.hash}" target="_blank" rel="noopener" title="Open on mempool.space">↗</a>` : ''}</td><td>${side}</td><td class="r num">${size}</td></tr>`;
-  }).join('') : `<tr><td colspan="5" class="muted small empty">Watching… nothing above the thresholds yet in this browser. Large prints are irregular; this fills as they happen.</td></tr>`;
+  }).join('') : `<tr><td colspan="5" class="muted small empty"><b>All quiet so far.</b> Nothing above the thresholds (trades ≥ $1M, liquidations ≥ $100K, on-chain ≥ 500 BTC) has printed since this page opened${Object.values(S.moveStatus).includes('live') ? ` — ${Object.values(S.moveStatus).filter((v) => v === 'live').length} feeds are connected and watching` : ''}. Large prints come in bursts, often around big price moves; quiet stretches of an hour or more are normal.</td></tr>`;
   const hr = S.moves.filter((m) => Date.now() - m.t < H), t = hr.filter((m) => m.kind === 'trade'), l = hr.filter((m) => m.kind === 'liq'), x = hr.filter((m) => m.kind === 'tx');
   const sum = (a, f) => a.filter(f).reduce((s, m) => s + (m.usd || 0), 0);
   const ms = document.getElementById('d-msum');
@@ -286,6 +302,67 @@ function paintMoveStatus() {
   const el = document.getElementById('d-mstat'); if (!el) return;
   const names = { 'Coinbase-trade': 'Coinbase', 'Binance-trade': 'Binance', 'Kraken-trade': 'Kraken', 'OKX-liq': 'OKX liq.', 'Bybit-liq': 'Bybit liq.', 'Binance-liq': 'Binance liq.', 'On-chain-tx': 'blockchain.info mempool' };
   el.innerHTML = Object.entries(S.moveStatus).map(([k, v]) => `<span class="mst"><i class="fd ${v === 'live' ? 'ok' : v === 'down' || v === 'unavailable' ? 'na' : 'stale'}"></i>${names[k] || k} <span class="dim">${STAT_LABEL[v] || v}</span></span>`).join('') + `<span class="dim"> · shown only while this page is open; kept in this browser for 24 h</span>`;
+}
+
+// ---------- today's read ----------
+// Up to three short, factual observations picked from the figures on this page by fixed rules.
+function readBullets() {
+  const out = [], p = price(), E = envelopeNow(S.pi, p), a = S.a?.metrics;
+  if (E) out.push({ w: 10, t: `Price is <b>${esc(E.label)}</b> of its 20-day volatility envelope (${usd(E.lo)} – ${usd(E.up)}).${E.widthPct < 8 ? ' The envelope is unusually narrow, meaning recent daily moves have been small.' : E.widthPct > 25 ? ' The envelope is wide, reflecting large recent swings.' : ''}` });
+  if (E?.sma200 && E?.sma50) { const x = (p / E.sma200 - 1) * 100; out.push({ w: 6 + Math.min(4, Math.abs(x) / 10), t: `Price is ${pct(Math.abs(x), 0, false)} ${x >= 0 ? 'above' : 'below'} its 200-day average (${usd(E.sma200)}), and the 50-day average is ${E.sma50 >= E.sma200 ? 'above' : 'below'} the 200-day — the longer-term trend is ${E.sma50 >= E.sma200 && x >= 0 ? 'up' : E.sma50 < E.sma200 && x < 0 ? 'down' : 'mixed'}.` }); }
+  const F = S.dash?.fng; if (ok(F?.value)) { const ext = F.value <= 25 || F.value >= 75; out.push({ w: ext ? 9 : 3, t: `The Fear &amp; Greed Index reads <b>${F.value} (${esc(F.label)})</b>${ok(F.avg30) ? `, against a 30-day average of ${F.avg30}` : ''}.` }); }
+  const e = a?.etf; if (ok(e?.s5) && Math.abs(e.s5) > 300) out.push({ w: 5 + Math.min(4, Math.abs(e.s5) / 500), t: `US spot ETFs saw <b>${e.s5 >= 0 ? 'net inflows' : 'net outflows'} of $${num(Math.abs(e.s5))}M</b> over the last five trading days.` });
+  const f = a?.derivs?.fundingAnn; if (ok(f) && (f > 15 || f < 0)) out.push({ w: 7, t: `Perpetual funding is <b>${pct(f)}</b> annualised — ${f < 0 ? 'shorts are paying longs, which is uncommon' : 'longs are paying a high rate to hold leverage'}.` });
+  const pm = S.dash?.polymarket?.events?.find((x) => /in 20\d\d/i.test(x.title)), up = pm?.markets?.filter((m) => m.dir === 'up' && m.strike > (p || 0)).sort((x, y) => x.strike - y.strike)[0];
+  if (up) out.push({ w: 4, t: `Polymarket traders currently price about a <b>${Math.round(up.yes * 100)}%</b> chance of Bitcoin reaching ${usd(up.strike)} by the end of the year (market-implied, not our forecast).` });
+  return out.sort((x, y) => y.w - x.w).slice(0, 3);
+}
+function paintRead() {
+  const el = document.getElementById('d-read'); if (!el) return;
+  const b = readBullets(); if (!b.length) { el.hidden = true; return; }
+  el.hidden = false;
+  el.innerHTML = `<div class="tr-h"><h2>Today’s read</h2>${S.info('d_read')}</div><ul>${b.map((x) => `<li>${x.t}</li>`).join('')}</ul><p class="tr-n">Picked from the figures on this page by fixed rules; context, not a forecast or advice.</p>`;
+}
+
+// ---------- Polymarket ----------
+function pmHtml() {
+  const P = S.dash?.polymarket;
+  if (!P?.events?.length) return '';
+  return `<section class="dcard pm" id="d-pm"><div class="dc-h"><h2>Prediction markets: Bitcoin price${S.info('d_polymarket')}</h2><div class="seg" role="group" aria-label="Market">${P.events.map((e, i) => `<button type="button" data-pm="${i}" aria-pressed="${i === S.pmIdx}">${esc(pmShort(e))}</button>`).join('')}</div></div>
+    <p class="pm-note">These are market-implied probabilities from Polymarket prediction markets, not forecasts from us. A price of 38¢ on “Yes” means traders collectively price about a 38% chance.</p>
+    <div class="pm-body" id="d-pm-body"></div>
+    <p class="srcl"><i class="fd ${P.stale ? 'stale' : fresh(P.fetchedAt, 4 * H)}"></i>Polymarket public API · refreshed every 3 hours · fetched ${hhmm.format(new Date(P.fetchedAt))}</p></section>`;
+}
+const pmShort = (e) => { const t = e.title.replace(/^What price will Bitcoin hit /i, '').replace(/\?$/, ''); return /^bitcoin above/i.test(e.title) ? `Above … on ${e.title.replace(/^Bitcoin above ___ on /i, '').replace(/\?$/, '')}` : t.charAt(0).toUpperCase() + t.slice(1); };
+function paintPm() {
+  const body = document.getElementById('d-pm-body'), E = S.dash?.polymarket?.events?.[S.pmIdx]; if (!body || !E) return;
+  const p = price();
+  let rows = E.markets.filter((m) => m.yes > 0.005 && m.yes < 0.995);
+  if (!S.pmAll && rows.length > 12 && p) rows = rows.sort((x, y) => Math.abs(x.strike - p) - Math.abs(y.strike - p)).slice(0, 12).sort((x, y) => y.strike - x.strike);
+  const kind = (m) => (m.dir === 'up' ? 'reach' : m.dir === 'down' ? 'dip to' : 'above');
+  body.innerHTML = `<p class="pm-q"><a href="${esc(E.url)}" target="_blank" rel="noopener">${esc(E.title)} ↗</a> <span class="dim">· resolves ${dShort(E.end)} · total volume ${big(E.vol)}</span></p>
+    <div class="pm-wrap"><table class="pmt"><thead><tr><th>Outcome</th><th class="r">Yes</th><th class="pmbar-h"></th><th class="r">24h</th><th class="r">24h vol.</th><th class="r">Volume</th></tr></thead><tbody>${rows.map((m) => `<tr><td>${m.dir === 'up' ? '↑' : m.dir === 'down' ? '↓' : '≥'} ${kind(m)} <b class="num">${m.strike ? usd(m.strike) : esc(m.label)}</b></td><td class="r num"><b>${(m.yes * 100).toFixed(m.yes < 0.1 ? 1 : 0)}%</b></td><td class="pmbar"><i style="width:${(m.yes * 100).toFixed(1)}%"></i></td><td class="r num ${cls(m.ch)}">${ok(m.ch) && m.ch !== 0 ? `${m.ch > 0 ? '+' : '−'}${Math.abs(m.ch * 100).toFixed(1)} pts` : '<span class="dim">—</span>'}</td><td class="r num">${big(m.v24)}</td><td class="r num">${big(m.vol)}</td></tr>`).join('')}</tbody></table></div>
+    ${E.markets.length > rows.length || S.pmAll ? `<button type="button" class="linkbtn" data-pm-all>${S.pmAll ? 'Show strikes nearest the price' : `Show all ${E.markets.filter((m) => m.yes > 0.005 && m.yes < 0.995).length} open strikes`}</button>` : ''}`;
+}
+
+// ---------- address & coin distribution ----------
+const COH = [['shrimp', '🦐', 'Shrimp', '< 1 BTC'], ['crab', '🦀', 'Crab', '1–10 BTC'], ['fish', '🐟', 'Fish', '10–100 BTC'], ['shark', '🦈', 'Shark', '100–1K BTC'], ['whale', '🐳', 'Whale', '1K–10K BTC'], ['humpback', '🐋', 'Humpback', '> 10K BTC']];
+function distHtml() {
+  return `<section class="mgroup" id="g-dist"><h2>Address &amp; coin distribution${S.info('d_dist')}</h2><p class="gintro">How many addresses fall into each balance band, and how many coins they hold. Addresses are not people: exchanges hold millions of users’ coins in a few large addresses, and one person can use many small ones.</p><div class="dcard dist" id="d-dist"></div></section>`;
+}
+function paintDist() {
+  const el = document.getElementById('d-dist'); if (!el) return;
+  const D = S.dash?.distribution;
+  if (!D?.cohorts) { el.innerHTML = '<p class="muted small">Distribution data is not available yet; it is fetched once a day.</p>'; return; }
+  const hist = D.history || [], cur = D.cohorts;
+  const ago = (n) => { const t = new Date(Date.parse(D.asOf) - n * DAY).toISOString().slice(0, 10); return [...hist].reverse().find((h) => h.date <= t) || null; };
+  const H1 = ago(1), H7 = ago(7), H30 = ago(30);
+  const chg = (h, k, i) => { if (!h?.c?.[k]) return '<span class="dim">—</span>'; const d = cur[k][i] - h.c[k][i]; return d === 0 ? '<span class="dim">0</span>' : `<span class="${cls(d)}">${d > 0 ? '+' : '−'}${num(Math.abs(d))}</span>`; };
+  const tot = [Object.values(cur).reduce((a, c) => a + c[0], 0), Object.values(cur).reduce((a, c) => a + c[1], 0)];
+  const row = (k, ic, nm, rg) => `<tr><td><span class="coh">${ic}</span> <b>${nm}</b> <span class="dim">${rg}</span></td><td class="r num">${num(cur[k][0])}</td><td class="r num">${chg(H1, k, 0)}</td><td class="r num">${chg(H7, k, 0)}</td><td class="r num">${chg(H30, k, 0)}</td><td class="r num">${num(cur[k][1])}</td><td class="r num">${((cur[k][1] / tot[1]) * 100).toFixed(1)}%</td><td class="r num">${chg(H1, k, 1)}</td><td class="r num">${chg(H7, k, 1)}</td><td class="r num">${chg(H30, k, 1)}</td></tr>`;
+  const days = hist.length;
+  el.innerHTML = `<div class="dist-wrap"><table class="distt"><thead><tr><th rowspan="2">Cohort</th><th class="r grp" colspan="4">Addresses</th><th class="r grp" colspan="6">Coins held (BTC)</th></tr><tr><th class="r">Count</th><th class="r">1d</th><th class="r">7d</th><th class="r">30d</th><th class="r">BTC</th><th class="r">Share</th><th class="r">1d</th><th class="r">7d</th><th class="r">30d</th></tr></thead><tbody>${COH.map((c) => row(...c)).join('')}<tr class="tot"><td><b>Total</b> <span class="dim">addresses with a balance</span></td><td class="r num">${num(tot[0])}</td><td></td><td></td><td></td><td class="r num">${num(tot[1])}</td><td class="r num">100%</td><td></td><td></td><td></td></tr></tbody></table></div>
+    <p class="srcl"><i class="fd ${D.stale ? 'stale' : fresh(D.asOf, 2 * DAY)}"></i>${esc(D.source)} · as of ${dShort(D.asOf)} · changes are computed from BTC Intel’s own daily snapshots${days < 31 ? ` (${days} day${days === 1 ? '' : 's'} collected so far; 7- and 30-day changes appear once enough snapshots exist)` : ''} · <a href="${esc(D.url)}" target="_blank" rel="noopener">source table</a></p>`;
 }
 
 // ---------- hero ----------
@@ -377,11 +454,13 @@ const DEEPER = [
 export function dashTab({ a, pi, dash, info }) {
   S.a = a; S.pi = pi; S.dash = dash; S.info = (k) => info(k).s;
   return `${heroHtml()}
+  <section class="tread" id="d-read" aria-label="Today’s read"></section>
   <div class="dgrid">
-    <div class="dmain">${piCardHtml(pi, S.info('picycle'))}${movesHtml()}</div>
+    <div class="dmain">${priceCardHtml(S.info)}${movesHtml()}</div>
     <aside class="dside">${fngHtml()}${newsHtml()}</aside>
   </div>
-  ${GROUPS.map((g) => `<section class="mgroup" id="g-${g.id}"><h2>${g.title}</h2><div class="dkcards">${g.cards.map(cardShell).join('')}</div></section>`).join('')}
+  ${pmHtml()}
+  ${GROUPS.map((g) => `<section class="mgroup" id="g-${g.id}"><h2>${g.title}</h2>${g.note ? `<p class="gintro">${g.note}</p>` : ''}<div class="dkcards">${g.cards.map(cardShell).join('')}</div><p class="gnote" hidden></p></section>${g.id === 'onchain' ? distHtml() : ''}`).join('')}
   <section class="deeper"><h2>Go deeper</h2><div class="dlinks">${DEEPER.map(([u, t, d]) => `<a href="${u}"${u.startsWith('http') ? ' target="_blank" rel="noopener"' : ''}><b>${t}</b><span>${d}</span></a>`).join('')}</div></section>
   <details class="about"><summary>About this dashboard</summary>
     <p><b>All data on this page comes from free public sources. We do not paywall any of these metrics. Some advanced on-chain or entity-adjusted metrics require paid providers and are therefore not shown here.</b></p>
@@ -406,6 +485,9 @@ export function dashTab({ a, pi, dash, info }) {
 let started = false, tickT = null, cgT = null;
 document.addEventListener('click', (e) => {
   if (e.target.closest?.('[data-treas-more]')) { S.treasAll = !S.treasAll; paintCards(); return; }
+  const pmb = e.target.closest?.('[data-pm]');
+  if (pmb) { S.pmIdx = +pmb.dataset.pm; S.pmAll = false; document.querySelectorAll('[data-pm]').forEach((x) => x.setAttribute('aria-pressed', String(x === pmb))); paintPm(); return; }
+  if (e.target.closest?.('[data-pm-all]')) { S.pmAll = !S.pmAll; paintPm(); return; }
   const t = e.target.closest?.('[data-tone]');
   if (t) {
     const k = t.dataset.tone;
@@ -425,7 +507,7 @@ export function mountDash({ dash, getLive }) {
   u?.addEventListener('input', () => { cvSource = 'usd'; paintConverter(true); });
   s?.addEventListener('input', () => { cvSource = 'sats'; paintConverter(true); });
   seedNetwork(dash?.network);
-  paintNews(); paintMoves(); paintMoveStatus(); paintHero(); paintCards(); paintClock(); paintSince();
+  paintNews(); paintMoves(); paintMoveStatus(); paintHero(); paintCards(); paintClock(); paintSince(); paintRead(); paintPm(); paintDist();
   if (started) return;
   started = true;
   startNetwork({ onUpdate: () => { paintCards(); paintClock(); paintHero(); paintSince(); }, onBlock: toastBlock });
@@ -441,10 +523,12 @@ export function mountDash({ dash, getLive }) {
 let visitRead = false;
 function readVisitOnce() { if (!visitRead) { visitRead = true; readVisit(); } }
 function refreshSide() {
+  paintRead(); paintPm(); paintDist();
   const f = document.querySelector('.dcard.fng'); if (f) f.outerHTML = fngHtml();
   const n = document.getElementById('d-news'); if (n) { n.outerHTML = newsHtml(); document.querySelectorAll('[data-nf]').forEach((b) => b.addEventListener('click', () => { S.newsFilter = b.dataset.nf; document.querySelectorAll('[data-nf]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.nf === S.newsFilter))); paintNews(); })); paintNews(); }
 }
-export function dashLive(live) { S.live = live; paintHero(); paintCards(); paintSince(); }
+let readT = 0;
+export function dashLive(live) { S.live = live; paintHero(); paintCards(); paintSince(); if (Date.now() - readT > 60e3) { readT = Date.now(); paintRead(); } }
 async function fetchCg() {
   if (document.hidden && S.cg) return;
   try {

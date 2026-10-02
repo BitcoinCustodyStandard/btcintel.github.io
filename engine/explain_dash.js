@@ -289,6 +289,48 @@ export const DASH_EXPLAIN = {
     what: 'The share of the 50 largest coins (excluding stablecoins) that did better than Bitcoin over the last 7 days.',
     why: 'Low breadth means money is concentrated in Bitcoin; high breadth means speculation is spreading to smaller coins.',
   },
+  d_chart: {
+    title: 'Price chart',
+    what: 'Bitcoin’s price with its 50-, 100- and 200-day moving averages and a volatility envelope. Pick a timeframe from one hour to the full history.',
+    why: 'Averages show the trend at different speeds; the envelope shows how far price has recently strayed from its short-term average.',
+    caveat: () => 'Daily views use completed daily closes (Coin Metrics); the 1-hour, 1-day and 7-day views use Coinbase candles and show today’s daily averages and bands as flat reference lines.',
+  },
+  d_sma: {
+    title: 'Moving averages (50, 100, 200 days)',
+    what: 'The average daily closing price over the last 50, 100 or 200 days, recalculated each day.',
+    why: 'They smooth out daily noise. Price above a rising average is the usual definition of an uptrend; the 200-day is the most widely watched.',
+    caveat: () => 'Averages follow price, so they always lag turning points.',
+  },
+  d_envelope: {
+    title: 'Volatility envelope (±2σ)',
+    what: 'A band drawn 2 standard deviations above and below the 20-day average of daily closes (the classic Bollinger Band setting). Standard deviation measures how spread out the last 20 closes were.',
+    why: 'When recent moves are small the band narrows; after big swings it widens. Price near a band edge has moved unusually far from its recent average.',
+    caveat: () => 'It describes recent volatility, not a prediction: price can ride along a band edge for weeks in a strong trend.',
+  },
+  d_polymarket: {
+    title: 'Prediction markets',
+    what: 'Polymarket lets people trade contracts that pay $1 if an event happens. The price of “Yes” — say 38¢ — is the crowd’s implied probability, about 38%.',
+    why: 'It shows how traders with money at stake currently weigh different price outcomes by a given date.',
+    caveat: () => 'These are market-implied probabilities from Polymarket, not forecasts from BTC Intel. Thinly traded strikes can be noisy, and the markets resolve on specific exchange prices described on Polymarket.',
+  },
+  d_dist: {
+    title: 'Address & coin distribution',
+    what: 'All Bitcoin addresses with a balance, grouped by size: shrimp under 1 BTC, crabs 1–10, fish 10–100, sharks 100–1,000, whales 1,000–10,000 and humpbacks above 10,000 — with the coins each group holds.',
+    why: 'Shifts between groups hint at whether coins are spreading out or concentrating, and the large groups show how much supply sits in big wallets.',
+    caveat: () => 'Addresses are not people. Exchanges and ETF custodians hold many users’ coins in a few huge addresses, which inflates the whale and humpback groups. Source: bitinfocharts’ public table, captured once a day.',
+  },
+  d_corr: {
+    title: 'Rolling correlation',
+    what: 'How closely Bitcoin’s daily returns moved with another market over the last 30 (or 90) trading days, from −1 (opposite) through 0 (unrelated) to +1 (together).',
+    why: 'It shows whether Bitcoin is currently trading like a risk asset, like a hedge, or on its own drivers.',
+    caveat: () => 'Co-movement, not causation. Correlations shift often and are computed only over days when both markets traded.',
+  },
+  d_read: {
+    title: 'Today’s read',
+    what: 'Up to three short observations picked automatically from the figures on this page by fixed rules — for example where price sits in its volatility envelope, or an unusual reading in sentiment or ETF flows.',
+    why: 'A quick orientation before reading the details.',
+    caveat: () => 'Context, not a forecast or advice. The rules only pick and describe; they do not judge what will happen next.',
+  },
   d_lightning: {
     title: 'Lightning Network',
     what: 'Public channels, nodes and total capacity of the Lightning Network, Bitcoin’s layer for fast, small payments.',

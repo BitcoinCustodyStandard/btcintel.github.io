@@ -9,7 +9,7 @@ import { brief } from '../engine/brief.js';
 import { ZONES } from '../engine/cycle.js';
 import { explain, EXPLAIN, REMINDER } from '../engine/explain.js';
 import { startLivePrice } from './live.js';
-import { drawPiChart, piState } from './pichart.js';
+import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js';
 import { dashTab, mountDash, dashLive } from './dash.js';
 import { fmtUsd, fmtUsdSigned, fmtPrice, fmtPct, fmtNum, fmtK, ordinal } from '../engine/util.js';
 
@@ -222,7 +222,7 @@ function drawChart(el) {
 }
 function drawCharts(root = document) { root.querySelectorAll('[data-chart],[data-spark]').forEach(drawChart); }
 let resizeT;
-window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { drawCharts(document); drawPiChart($('#pi-chart'), state.pi, state.live); }, 200); });
+window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { drawCharts(document); if (tabFromHash() === 'dashboard') drawPriceChart($('#pc-chart'), state.pi, state.live); }, 200); });
 document.addEventListener('toggle', (e) => { if (e.target.matches?.('details') && e.target.open) drawCharts(e.target); }, true);
 const chartEl = (key) => h`<div class="chart" data-chart="${key}"></div>`;
 const sparkEl = (key) => h`<div class="chart spark" data-spark="${key}"></div>`;
@@ -239,7 +239,7 @@ function showTab(scroll) {
   document.querySelectorAll('[data-tab]').forEach((s) => { s.hidden = s.dataset.tab !== t; });
   document.querySelectorAll('[data-tab-link]').forEach((x) => x.setAttribute('aria-current', x.dataset.tabLink === t ? 'page' : 'false'));
   drawCharts($(`[data-tab="${t}"]`) || document);
-  if (t === 'dashboard') drawPiChart($('#pi-chart'), state.pi, state.live);
+  if (t === 'dashboard') drawPriceChart($('#pc-chart'), state.pi, state.live);
   if (k.startsWith('force-')) openForce(k);
   else if (LEGACY[k]) document.getElementById(k)?.scrollIntoView();
   else if (scroll) window.scrollTo(0, 0);
@@ -409,7 +409,7 @@ function dashboard() {
 }
 
 function overviewTab(b) {
-  return h`${execStrip(b)}<p class="pi-moved small">The live price chart with the Pi Cycle Top indicator is on the <a href="#dashboard">BTC Dashboard</a>.</p>${top3(b)}${forcesBlock(b)}${ladderBlock(b)}${accelBlock(b)}${watchBlock(b)}${dashboard()}<p class="foot-note">${b.footer}</p>`;
+  return h`${execStrip(b)}<p class="pi-moved small">The live price chart (moving averages, volatility envelope and an optional Pi Cycle Top overlay) is on the <a href="#dashboard">BTC Dashboard</a>.</p>${top3(b)}${forcesBlock(b)}${ladderBlock(b)}${accelBlock(b)}${watchBlock(b)}${dashboard()}<p class="foot-note">${b.footer}</p>`;
 }
 
 // ---------- On-chain cycle tab ----------
@@ -653,9 +653,7 @@ function render() {
   showTab(false);
   const np = $('#nav-price');
   if (np) np.innerHTML = h`${fmtPrice(a.metrics.price.spot)} <span class="${cls(a.metrics.price.ch24h)}">${fmtPct(a.metrics.price.ch24h)}</span>`.s;
-  drawPiChart($('#pi-chart'), state.pi, state.live);
-  document.querySelectorAll('[data-pirange]').forEach((b) => b.addEventListener('click', () => { piState.range = +b.dataset.pirange; document.querySelectorAll('[data-pirange]').forEach((x) => x.setAttribute('aria-pressed', String(+x.dataset.pirange === piState.range))); drawPiChart($('#pi-chart'), state.pi, state.live); }));
-  $('#pi-log')?.addEventListener('click', (e) => { piState.log = !piState.log; e.currentTarget.setAttribute('aria-pressed', String(piState.log)); drawPiChart($('#pi-chart'), state.pi, state.live); });
+  wirePriceChart(() => state.pi, () => state.live);
   if (state.live) paintLive(); else if (!liveFeed) liveFeed = startLivePrice({ onPrice: (v) => { state.live = v; paintLive(); }, onState: (s) => { state.liveState = s; paintLive(); } });
 }
 
@@ -684,7 +682,7 @@ function paintLive() {
     const stale = state.liveState === 'stale';
     setBadge(stale ? 'stale' : 'live', stale ? `Stale · last update ${timeFmt.format(L.at)}` : `Live · ${L.source} · ${timeFmt.format(L.at)}`, `${L.source}${L.note ? ' · ' + L.note : ''} · polled every 10–30 s`);
     const np = $('#nav-price'); if (np) np.innerHTML = h`${fmtPrice(L.price)} <span class="${cls(ch24)}">${fmtPct(ch24)}</span>`.s;
-    if (Date.now() - lastPiDraw > 60e3 && tabFromHash() === 'dashboard') { lastPiDraw = Date.now(); drawPiChart($('#pi-chart'), state.pi, L); }
+    if (Date.now() - lastPiDraw > 60e3 && tabFromHash() === 'dashboard') { lastPiDraw = Date.now(); drawPriceChart($('#pc-chart'), state.pi, L); }
     dashLive(L);
   } else if (state.liveState === 'stale') {
     setBadge('stale', `Live price unavailable · server snapshot ${fmtTime(state.a.dataThrough)}`);
@@ -716,7 +714,7 @@ async function load() {
   const [latest, ts, idx, runs, pi, dash] = await Promise.allSettled([getJSON('data/latest.json'), getJSON('data/timeseries.json'), getJSON('data/index.json'), getJSON('data/runs.json'), getJSON('data/pi_cycle.json'), getJSON('data/dash.json')]);
   state.pi = pi.status === 'fulfilled' ? pi.value : null;
   state.dash = dash.status === 'fulfilled' ? dash.value : null;
-  if (state.dash?.volume?.rows?.length) { piState.vol = state.dash.volume.rows; piState.volSource = 'CoinGecko aggregate spot, daily'; }
+  if (state.dash?.volume?.rows?.length) { pcState.vol = state.dash.volume.rows; pcState.volSource = 'CoinGecko aggregate spot, daily'; }
   state.runs = runs.status === 'fulfilled' ? runs.value.runs || [] : [];
   state.rows = ts.status === 'fulfilled' ? ts.value.rows || [] : [];
   state.index = idx.status === 'fulfilled' ? idx.value : null;

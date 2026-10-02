@@ -99,8 +99,12 @@ async function cgSpot() {
 async function cgHistory() {
   const j = await cg('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=365&interval=daily');
   const byDate = new Map();
+  // CoinGecko stamps each daily point at 00:00 UTC, i.e. the close of the previous day; label it
+  // with that day so it lines up with other daily closes (equities, gold, Coin Metrics). The final
+  // point is the current price and keeps today's date.
   j.prices.forEach(([t, p], i) => {
-    byDate.set(isoDate(t), [isoDate(t), p, num(j.total_volumes[i]?.[1]), num(j.market_caps[i]?.[1])]);
+    const d = isoDate(t % DAY === 0 ? t - DAY : t);
+    byDate.set(d, [d, p, num(j.total_volumes[i]?.[1]), num(j.market_caps[i]?.[1])]);
   });
   const rows = [...byDate.values()].sort((a, b) => (a[0] < b[0] ? -1 : 1));
   return { rows, __asOf: new Date(j.prices.at(-1)[0]).toISOString() };

@@ -851,3 +851,86 @@ details.more[open] > summary { border-bottom: 1px solid var(--line); }
 .tone.clear { color: var(--orange-ink); }
 .mc-v .tone { font: 500 21px/1.2 var(--mono); padding: 0 4px; }
 .mc-v .tone small { font-size: 11px; }
+
+/* ── Price chart: averages + volatility envelope ── */
+:root { --sma50: #4cc3e6; --sma100: #b48cf0; --sma200: #f08a3c; --env-fill: rgba(247, 147, 26, 0.08); --env-line: rgba(247, 147, 26, 0.55); }
+:root[data-theme='light'] { --sma50: #0f84a8; --sma100: #7a4fc4; --sma200: #c8560f; --env-fill: rgba(194, 106, 6, 0.08); --env-line: rgba(194, 106, 6, 0.6); }
+.pc-tools { display: flex; gap: 3px; overflow-x: auto; scrollbar-width: none; max-width: 100%; }
+.pc-tools::-webkit-scrollbar { display: none; }
+.pc-tools button { flex: none; font: 500 11.5px var(--mono); background: transparent; border: 1px solid var(--line2); color: var(--muted); padding: 4px 8px; border-radius: 4px; cursor: pointer; }
+.pc-tools button[aria-pressed='true'] { color: var(--text); border-color: var(--orange-line); background: var(--orange-dim); }
+.pc-tools #pc-log { margin-left: 6px; }
+.pc-ovs { display: flex; flex-wrap: wrap; gap: 4px 14px; margin: 2px 0 6px; font-size: 11.5px; color: var(--muted); }
+.pc-ov { display: inline-flex; align-items: center; gap: 5px; cursor: pointer; user-select: none; }
+.pc-ov input { margin: 0; accent-color: var(--orange); }
+.pc-ov i { display: inline-block; width: 14px; height: 3px; border-radius: 2px; }
+.pc-ov .info { margin-left: 2px; }
+.pc-ov.o50 i { background: var(--sma50); } .pc-ov.o100 i { background: var(--sma100); } .pc-ov.o200 i { background: var(--sma200); }
+.pc-ov.oenv i { height: 9px; background: var(--env-fill); border: 1px dashed var(--env-line); }
+.pc-ov.opi i { background: linear-gradient(90deg, var(--pi-fast) 50%, var(--pi-slow) 50%); }
+.pi-chart .s50 { fill: none; stroke: var(--sma50); stroke-width: 1.4; }
+.pi-chart .s100 { fill: none; stroke: var(--sma100); stroke-width: 1.4; }
+.pi-chart .s200 { fill: none; stroke: var(--sma200); stroke-width: 1.6; }
+.pi-chart .envf { fill: var(--env-fill); }
+.pi-chart .envl { fill: none; stroke: var(--env-line); stroke-width: 1; stroke-dasharray: 4 3; }
+.pi-chart .envm { fill: none; stroke: var(--env-line); stroke-width: 0.8; opacity: 0.6; }
+.pi-chart .refl { stroke-dasharray: 5 4; }
+.pi-chart .refx { fill: var(--dim); font: 10px var(--mono); }
+.pc-empty { padding: 60px 12px; text-align: center; color: var(--muted); font-size: 13px; }
+.pi-tip .a50 em { color: var(--sma50); } .pi-tip .a100 em { color: var(--sma100); } .pi-tip .a200 em { color: var(--sma200); } .pi-tip .ae em { color: var(--orange-ink); }
+.pc-status { margin: 8px 0 0; font-size: 13px; color: var(--text2); line-height: 1.5; }
+.pc-status .pz.above, .pc-status .pz.nearUpper { color: var(--warn); }
+.pc-status .pz.below, .pc-status .pz.nearLower { color: var(--warn); }
+.pc-status .pz.upperHalf, .pc-status .pz.lowerHalf { color: var(--text); }
+
+/* ── Today's read ── */
+.tread { margin-top: 12px; background: var(--card); border: 1px solid var(--line); border-left: 3px solid var(--orange); border-radius: 6px; padding: 12px 18px 10px; }
+.tread[hidden] { display: none; }
+.tr-h { display: flex; align-items: center; gap: 4px; }
+.tr-h h2 { margin: 0; font: 600 12px/1.3 var(--sans); letter-spacing: 0.16em; text-transform: uppercase; color: var(--muted); }
+.tread ul { margin: 6px 0 4px; padding-left: 18px; }
+.tread li { font-size: 14px; color: var(--text2); margin: 3px 0; }
+.tread li b { color: var(--text); font-weight: 600; }
+.tr-n { margin: 4px 0 0; font-size: 11px; color: var(--dim); }
+
+/* ── group intro / hidden-card note ── */
+.gintro { margin: -4px 0 10px; font-size: 12.5px; color: var(--muted); max-width: 900px; }
+.gnote { margin: 8px 0 0; font-size: 11.5px; color: var(--dim); }
+.gnote b { font-weight: 600; color: var(--muted); }
+.dkcard[hidden] { display: none; }
+
+/* ── Polymarket ── */
+.dcard.pm { margin-top: 12px; }
+.pm-note { margin: 0 0 8px; font-size: 12.5px; color: var(--muted); }
+.pm-q { margin: 0 0 6px; font-size: 13px; }
+.pm-wrap, .dist-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.pmt, .distt { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.pmt th, .distt th { text-align: left; font: 600 9.5px/1.3 var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--dim); padding: 5px 8px 5px 0; border-bottom: 1px solid var(--line2); white-space: nowrap; }
+.pmt td, .distt td { padding: 6px 8px 6px 0; border-bottom: 1px solid var(--line); color: var(--text2); white-space: nowrap; }
+.pmt .r, .distt .r { text-align: right; }
+.pmt td.up, .distt .up { color: var(--up); } .pmt td.down, .distt .down { color: var(--down); }
+.pmbar { width: 28%; min-width: 80px; }
+.pmbar i { display: block; height: 7px; border-radius: 2px; background: var(--orange); opacity: 0.75; }
+.pmbar-h { width: 28%; }
+.seg button { white-space: nowrap; }
+.dcard.pm .seg { max-width: 100%; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+
+/* ── Distribution ── */
+.dcard.dist { padding: 10px 16px 8px; }
+.distt th.grp { text-align: center; border-bottom: 1px solid var(--line); }
+.distt .coh { font-size: 15px; }
+.distt tr.tot td { border-bottom: 0; border-top: 1px solid var(--line2); }
+
+@media (max-width: 820px) {
+  .pc-tools button { padding: 4px 7px; }
+  .tread { padding: 10px 14px 8px; }
+  .tread li { font-size: 13.5px; }
+}
+@media (max-width: 520px) {
+  .pmbar, .pmbar-h, .pmt th:nth-child(6), .pmt td:nth-child(6) { display: none; }
+  .distt { font-size: 12px; }
+}
+@media (max-width: 820px) {
+  .distt th:first-child, .distt td:first-child { position: sticky; left: 0; background: var(--card); z-index: 1; }
+  .dist-wrap::after { content: 'Scroll sideways for coin holdings and changes →'; display: block; font-size: 10.5px; color: var(--dim); padding-top: 4px; position: sticky; left: 0; }
+}
