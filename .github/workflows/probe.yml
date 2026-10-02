@@ -12,27 +12,7 @@ jobs:
       - run: |
           cat > p.mjs <<'JS'
           const get = async (u, n = 600) => { try { const r = await fetch(u, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; btcintel/1.0; +https://btcintel.org)', accept: 'application/json, text/html;q=0.9, */*;q=0.8' }, signal: AbortSignal.timeout(20000) }); const t = await r.text(); console.log(`\n### ${r.status} ${u}\nlen=${t.length} type=${r.headers.get('content-type')} acao=${r.headers.get('access-control-allow-origin')} rl=${r.headers.get('x-ratelimit-remaining') ?? ''}\n${t.slice(0, n).replace(/\s+/g, ' ')}`); return t; } catch (e) { console.log(`\n### ERR ${u} ${e.message}`); return ''; } };
-          await get('https://cloudminecrypto.com/api/hashpower-market', 1200);
-          await get('https://cloudminecrypto.com/api', 400);
-          for (const u of ['https://cryptocurrency.cv/api/news?ticker=BTC', 'https://cryptocurrency.cv/api/news?category=bitcoin', 'https://cryptocurrency.cv/api/news', 'https://cryptocurrency.cv/api/bitcoin', 'https://cryptocurrency.cv/api', 'https://cryptocurrency.cv/'])
-            await get(u, 900);
-          // BGeometrics docs (should not count toward data limits)
-          const docs = await get('https://bitcoin-data.com/v3/api-docs', 300);
-          try { const j = JSON.parse(docs); console.log('\nBGEO PATHS:', Object.keys(j.paths || {}).filter((p) => p.startsWith('/v1/')).join(' ')); } catch {}
-          await get('https://bitcoin-data.com/api-docs', 200);
-          // Coin Metrics community: which on-chain activity metrics are free
-          for (const m of ['AdrActCnt', 'TxCnt', 'TxTfrCnt', 'FeeTotNtv', 'FeeMeanUSD', 'NVTAdj', 'NVTAdj90', 'VelCur1yr', 'SplyAct1yr', 'SplyFF', 'AdrBalCnt', 'AdrBal1in100KCnt', 'AdrBalUSD1MCnt', 'SplyAdrBalNtv1', 'BlkSizeMeanByte', 'HashRate', 'RevNtv', 'ROI30d', 'CapAct1yrUSD', 'SplyExpFut10yr'])
-            await get(`https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc&metrics=${m}&frequency=1d&page_size=1&paging_from=end`, 220);
-          // CoinGecko treasury variants
-          await get('https://api.coingecko.com/api/v3/entities/list?per_page=5', 400);
-          await get('https://api.coingecko.com/api/v3/public_treasury/strategy', 300);
-          // mempool.space extras
-          await get('https://mempool.space/api/v1/mining/pools/1w', 700);
-          await get('https://mempool.space/api/v1/statistics/2h', 200);
-          await get('https://mempool.space/api/v1/mining/blocks/fee-rates/1m', 300);
-          // alternative.me history length
-          await get('https://api.alternative.me/fng/?limit=90', 200);
-          // OKX long/short & Coinbase premium inputs already used by the agent; check taker ratio endpoint
-          await get('https://www.okx.com/api/v5/rubik/stat/contracts/long-short-account-ratio?ccy=BTC&period=1H', 200);
+          for (const p of ['sth-realized-price', 'lth-realized-price', 'active-addresses', 'sth-mvrv'])
+            await get(`https://bitcoin-data.com/v1/${p}?startday=2026-09-20`, 500);
           JS
           node p.mjs
