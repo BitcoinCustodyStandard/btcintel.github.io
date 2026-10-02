@@ -32,7 +32,7 @@ function ago(t, now = Date.now()) {
 const relShort = (t) => { const m = Math.round((Date.now() - t) / 60e3); return m < 1 ? 'now' : m < 60 ? `${m}m` : m < 1440 ? `${Math.floor(m / 60)}h` : `${Math.floor(m / 1440)}d`; };
 
 // ---------- state ----------
-const S = { a: null, dash: null, pi: null, live: null, cg: null, cgAt: null, glob: null, moves: [], moveStatus: {}, newsFilter: 'all', newsAll: false, moveFilter: 'all', info: () => '' };
+const S = { a: null, dash: null, pi: null, live: null, cg: null, cgAt: null, glob: null, moves: [], moveStatus: {}, newsFilter: 'all', newsTone: 'all', newsAll: false, moveFilter: 'all', info: () => '' };
 const price = () => S.live?.price ?? S.a?.metrics?.price?.spot ?? null;
 const supplyNow = () => (N.height ? issuedSupply(N.height) : null);
 const cyM = (id) => S.a?.cycle?.metrics?.find((x) => x.id === id);
@@ -181,7 +181,7 @@ const GROUPS = [
     { k: 'newstone', label: 'News tone (24 hours)', info: 'd_news', get: () => {
       const day = (S.dash?.news?.items || []).filter((i) => !i.macro && Date.now() - Date.parse(i.t) < DAY); if (!day.length) return null;
       const c = { bullish: 0, bearish: 0, neutral: 0 }; day.forEach((i) => c[i.tag]++);
-      return { v: `<span class="up">${c.bullish}▲</span> <span class="down">${c.bearish}▼</span> <small>${c.neutral} neutral</small>`, sub: `of ${day.length} headlines · keyword tags, not a judgement of the stories`, src: 'News feed (keyword rules)', at: S.dash.updated, max: 45 * 60e3 };
+      return { v: `<button type="button" class="tone up" data-tone="bullish" title="Read only bullish headlines">${c.bullish}▲</button> <button type="button" class="tone down" data-tone="bearish" title="Read only bearish headlines">${c.bearish}▼</button> <button type="button" class="tone dim" data-tone="neutral" title="Read only neutral headlines"><small>${c.neutral} neutral</small></button>`, sub: `of ${day.length} headlines · click a count to read only those · keyword tags, not a judgement of the stories`, src: 'News feed (keyword rules)', at: S.dash.updated, max: 45 * 60e3 };
     } },
   ] },
 ];
@@ -246,14 +246,16 @@ function newsHtml() {
 }
 function paintNews() {
   const list = document.getElementById('d-nlist'); if (!list) return;
-  const items = (S.dash?.news?.items || []).filter((i) => (S.newsFilter === 'all' ? true : S.newsFilter === 'macro' ? i.macro : !i.macro));
+  const items = (S.dash?.news?.items || []).filter((i) => (S.newsFilter === 'all' ? true : S.newsFilter === 'macro' ? i.macro : !i.macro) && (S.newsTone === 'all' || (!i.macro && i.tag === S.newsTone)));
   const shown = S.newsAll ? items.slice(0, 60) : items.slice(0, 14);
   const icon = { bullish: '▲', bearish: '▼', neutral: '•' };
-  list.innerHTML = shown.length ? shown.map((i) => `<li><span class="ntag ${i.tag}" title="${i.macro ? 'Central-bank release — not tagged' : i.words.length ? `Keyword tag “${i.tag}” from: ${esc(i.words.join(', '))}` : 'No tag keywords found'}">${i.macro ? 'FED' : icon[i.tag]}</span><div><a href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.title)}</a><span class="nmeta">${esc(i.source)}${i.via ? ` <span class="via">via ${esc(i.via)}</span>` : ''} · ${relShort(Date.parse(i.t))}</span></div></li>`).join('') + (items.length > 14 ? `<li class="nmore"><button type="button" id="d-nmore">${S.newsAll ? 'Show fewer' : `Show ${Math.min(60, items.length) - 14} more`}</button></li>` : '') : '<li class="muted small">No headlines in this filter.</li>';
-  const day = (S.dash?.news?.items || []).filter((i) => !i.macro && Date.now() - Date.parse(i.t) < DAY), c = { bullish: 0, bearish: 0, neutral: 0 };
+  list.innerHTML = shown.length ? shown.map((i) => `<li><span class="ntag ${i.tag}" title="${i.macro ? 'Central-bank release — not tagged' : i.words.length ? `Keyword tag “${i.tag}” from: ${esc(i.words.join(', '))}` : 'No tag keywords found'}">${i.macro ? 'FED' : icon[i.tag]}</span><div><a href="${esc(i.link)}" target="_blank" rel="noopener">${esc(i.title)}</a><span class="nmeta">${esc(i.source)}${i.via ? ` <span class="via">via ${esc(i.via)}</span>` : ''} · ${relShort(Date.parse(i.t))}</span></div></li>`).join('') + (items.length > 14 ? `<li class="nmore"><button type="button" id="d-nmore">${S.newsAll ? 'Show fewer' : `Show ${Math.min(60, items.length) - 14} more`}</button></li>` : '') : `<li class="muted small">No ${S.newsTone !== 'all' ? S.newsTone + ' ' : ''}headlines in this filter.</li>`;
+  // counts cover the same window as the list (the feed keeps 72 hours), so a count matches what a click shows
+  const day = (S.dash?.news?.items || []).filter((i) => !i.macro), c = { bullish: 0, bearish: 0, neutral: 0 };
   day.forEach((i) => c[i.tag]++);
   const tal = document.getElementById('d-ntally');
-  if (tal) tal.innerHTML = day.length ? `<span>Last 24h, ${day.length} headlines:</span><span class="up">▲ ${c.bullish} bullish</span><span class="down">▼ ${c.bearish} bearish</span><span class="dim">• ${c.neutral} neutral</span><span class="tbar"><i class="up" style="width:${(c.bullish / day.length) * 100}%"></i><i class="down" style="width:${(c.bearish / day.length) * 100}%"></i></span>` : '';
+  const tb = (k, cl, label) => `<button type="button" class="tone ${cl}" data-tone="${k}" aria-pressed="${S.newsTone === k}" title="${S.newsTone === k ? 'Show all headlines' : `Show only ${k} headlines`}">${label}</button>`;
+  if (tal) tal.innerHTML = day.length ? `<span>Last 3 days, ${day.length} headlines:</span>${tb('bullish', 'up', `▲ ${c.bullish} bullish`)}${tb('bearish', 'down', `▼ ${c.bearish} bearish`)}${tb('neutral', 'dim', `• ${c.neutral} neutral`)}${S.newsTone !== 'all' ? `<button type="button" class="tone clear" data-tone="all">Show all</button>` : ''}<span class="tbar"><i class="up" style="width:${(c.bullish / day.length) * 100}%"></i><i class="down" style="width:${(c.bearish / day.length) * 100}%"></i></span>` : '';
   document.getElementById('d-nmore')?.addEventListener('click', () => { S.newsAll = !S.newsAll; paintNews(); });
 }
 function movesHtml() {
@@ -394,7 +396,7 @@ export function dashTab({ a, pi, dash, info }) {
       <li><b>Lightning Network statistics</b> — shown only while mempool.space’s free statistics are current.</li>
     </ul>
     <h3>Sources</h3>
-    <p class="small muted">Live price: Coinbase, Binance (USDT, ≈USD), CoinGecko, Kraken · Network, fees, mining: mempool.space · Large trades: Coinbase, Binance, Kraken public WebSockets · Liquidations: OKX, Bybit public WebSockets · On-chain transactions: blockchain.info public WebSocket · Market cap, dominance, ATH, treasuries, volume: CoinGecko · On-chain valuation and exchange flows: Coin Metrics Community API, BGeometrics free tier · Stablecoins: DefiLlama · Derivatives: OKX, Deribit, Hyperliquid, CoinGecko · ETF flows: Farside Investors · Fear &amp; Greed: alternative.me · Hashprice and fee share: CloudMineCrypto · Pool shares: mempool.space · Network activity: Coin Metrics Community · Holder-cohort realised prices: BGeometrics free tier (fetched at most once a day) · News: CoinDesk, Cointelegraph, Bitcoin Magazine, Decrypt, The Block, Federal Reserve (RSS), cryptocurrency.cv (aggregator, Bitcoin category) · Price history for the Pi Cycle chart: Coin Metrics.</p>
+    <p class="small muted">Live price: Coinbase, Binance (USDT, ≈USD), CoinGecko, Kraken · Network, fees, mining: mempool.space · Large trades: Coinbase, Binance, Kraken public WebSockets · Liquidations: OKX, Bybit public WebSockets · On-chain transactions: blockchain.info public WebSocket · Market cap, dominance, ATH, treasuries, volume: CoinGecko · On-chain valuation and exchange flows: Coin Metrics Community API, BGeometrics free tier · Stablecoins: DefiLlama · Derivatives: OKX, Deribit, Hyperliquid, CoinGecko · ETF flows: Farside Investors · Fear &amp; Greed: alternative.me · Hashprice and fee share: CloudMineCrypto · Pool shares: mempool.space · Network activity: Coin Metrics Community · Holder-cohort realised prices: BGeometrics free tier (fetched at most once a day) · News: CoinDesk, Cointelegraph, Bitcoin Magazine, Decrypt, The Block, Federal Reserve (RSS) · Price history for the Pi Cycle chart: Coin Metrics.</p>
     <p class="small muted">Market-structure research, not investment advice. No price targets or probabilities.</p>
   </details>
   <div class="toast" id="d-toast" role="status" aria-live="polite" hidden></div>`;
@@ -402,7 +404,17 @@ export function dashTab({ a, pi, dash, info }) {
 
 // wiring that must run after every render; live feeds start only once per page load
 let started = false, tickT = null, cgT = null;
-document.addEventListener('click', (e) => { if (e.target.closest?.('[data-treas-more]')) { S.treasAll = !S.treasAll; paintCards(); } });
+document.addEventListener('click', (e) => {
+  if (e.target.closest?.('[data-treas-more]')) { S.treasAll = !S.treasAll; paintCards(); return; }
+  const t = e.target.closest?.('[data-tone]');
+  if (t) {
+    const k = t.dataset.tone;
+    S.newsTone = k === 'all' || S.newsTone === k ? 'all' : k;
+    S.newsAll = false;
+    paintNews();
+    if (t.closest('.dkcard')) { paintCards(); document.getElementById('d-news')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+  }
+});
 export function mountDash({ dash, getLive }) {
   S.dash = dash;
   S.live = getLive();

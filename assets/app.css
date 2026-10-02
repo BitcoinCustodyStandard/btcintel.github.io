@@ -843,3 +843,11 @@ details.more[open] > summary { border-bottom: 1px solid var(--line); }
   .ttable th:nth-child(3), .ttable td:nth-child(3), .ttable th:nth-child(4), .ttable td:nth-child(4), .ttable th:nth-child(6), .ttable td:nth-child(6) { display: none; }
   .plist li { grid-template-columns: 84px 1fr 42px; }
 }
+/* clickable news-tone filters */
+.tone { font: inherit; background: none; border: 1px solid transparent; border-radius: 10px; padding: 0 6px; margin: 0 -2px; cursor: pointer; color: inherit; }
+.tone.up { color: var(--up); } .tone.down { color: var(--down); } .tone.dim { color: var(--dim); }
+.tone:hover { border-color: var(--line2); }
+.tone[aria-pressed='true'] { border-color: currentColor; background: var(--card2); }
+.tone.clear { color: var(--orange-ink); }
+.mc-v .tone { font: 500 21px/1.2 var(--mono); padding: 0 4px; }
+.mc-v .tone small { font-size: 11px; }

@@ -46,18 +46,8 @@ export function parseRss(xml, feed, now = Date.now()) {
   return out;
 }
 const norm = (s) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(' ').filter((w) => w.length > 3).slice(0, 8).join(' ');
-// cryptocurrency.cv aggregates many publishers; keep only its Bitcoin category, drop
-// automated readings (gas trackers), and credit the original publisher.
-async function aggregator(now = Date.now()) {
-  const j = await get('https://cryptocurrency.cv/api/news?category=bitcoin');
-  return (j.articles || []).filter((a) => a.category === 'bitcoin' && !/gas/i.test(a.sourceKey || '') && /^https:\/\//.test(a.link || '') && a.title)
-    .map((a) => { const t = Date.parse(a.pubDate); const title = decode(a.title).replace(/\s+/g, ' ').trim(); const s = tagHeadline(title); return Number.isFinite(t) && t <= now + 3600e3 ? { t: new Date(t).toISOString(), title, link: decode(a.link), source: a.source || 'cryptocurrency.cv', via: 'cryptocurrency.cv', tag: s.tag, words: s.words } : null; })
-    .filter(Boolean).slice(0, 30);
-}
 async function news() {
   const sources = [], all = [];
-  try { const items = await aggregator(); all.push(...items); sources.push({ name: 'cryptocurrency.cv (aggregator)', url: 'https://cryptocurrency.cv', ok: true, n: items.length }); }
-  catch (e) { sources.push({ name: 'cryptocurrency.cv (aggregator)', url: 'https://cryptocurrency.cv', ok: false, error: e.message }); }
   await Promise.all(FEEDS.map(async (f) => {
     try { const items = parseRss(await get(f.url, 'text'), f); all.push(...items); sources.push({ name: f.name, url: f.url, ok: true, n: items.length }); }
     catch (e) { sources.push({ name: f.name, url: f.url, ok: false, error: e.message }); }
