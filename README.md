@@ -5,6 +5,7 @@ A persistent research system that explains, every day, **which forces are drivin
 - **Page:** `https://btcintel.org/` (works on phone, tablet, desktop)
 - **Agent:** GitHub Actions workflow `market-intel` — 07:00 every morning in `INTEL_TZ`, plus on demand
 - **Archive:** `data/` — every run is kept; nothing is overwritten except the "latest" pointers
+- **BTC Dashboard** (landing tab): live price, network, fees, mining, supply and halving, on-chain valuation, derivatives, ETFs and treasuries, news with keyword sentiment tags, Fear & Greed, and a live large-moves feed — all from free public sources. Feed workflow `dashboard-feed` refreshes `data/dash.json` every 15 minutes.
 
 ## How it works
 
@@ -116,6 +117,8 @@ On the first run the agent **backfills ~1 year** of daily rows from series that 
 
   index.html, assets/          the page
   engine/                      collect · analyze · report · history queries · reference library (shared by page and agent)
+  agent/feed.mjs               BTC Dashboard feed (news RSS, Fear & Greed, treasuries, volume, exchange flows) → data/dash.json
+  assets/dash.js · network.js · moves.js   dashboard tab · mempool.space live data · large-moves WebSockets
   agent/run.mjs                the daily agent;  agent/narrate.mjs  optional Claude narrative
   agent/query.mjs              archive questions (CLI);  agent/test/offline.mjs  synthetic end-to-end test
   data/latest.json             current analysis (what the page shows)

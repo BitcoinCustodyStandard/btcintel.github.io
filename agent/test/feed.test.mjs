@@ -28,3 +28,8 @@ const fx = parseRss(`<item><title>Federal Reserve Board issues enforcement actio
 assert.equal(fx.length, 1, 'Fed enforcement actions are filtered out');
 assert.equal(fx[0].macro, true);
 console.log('feed tests passed');
+assert.equal(tagHeadline('Bitcoin reaches for $87K as short liquidations top $120M').tag, 'bullish');
+assert.equal(tagHeadline('Long liquidations hit $300M as bitcoin slides').tag, 'bearish');
+assert.equal(tagHeadline('Live updates: Bitcoin reverses big early gains following soft U.S. jobs data').tag, 'neutral');
+assert.equal(tagHeadline('Bitcoin Heads Higher on Macro Moves').tag, 'bullish');
+console.log('sentiment edge cases passed');

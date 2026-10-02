@@ -9,13 +9,14 @@ import { brief } from '../engine/brief.js';
 import { ZONES } from '../engine/cycle.js';
 import { explain, EXPLAIN, REMINDER } from '../engine/explain.js';
 import { startLivePrice } from './live.js';
-import { piCardHtml, drawPiChart, piState } from './pichart.js';
+import { drawPiChart, piState } from './pichart.js';
+import { dashTab, mountDash, dashLive } from './dash.js';
 import { fmtUsd, fmtUsdSigned, fmtPrice, fmtPct, fmtNum, fmtK, ordinal } from '../engine/util.js';
 
 const REPO = 'BitcoinCustodyStandard/btcintel.github.io';
 const WORKFLOW = 'market-intel.yml';
 const SERVER_ONLY = ['farside', 'fred', 'yahoo', 'cftc_cot', 'bgeometrics'];
-const state = { a: null, rows: [], runs: [], index: null, snapshot: null, range: 90, pi: null, live: null, liveState: 'init' };
+const state = { a: null, rows: [], runs: [], index: null, snapshot: null, range: 90, pi: null, dash: null, live: null, liveState: 'init' };
 const $ = (s, r = document) => r.querySelector(s);
 
 // ---------- safe templating ----------
@@ -228,16 +229,17 @@ const sparkEl = (key) => h`<div class="chart spark" data-spark="${key}"></div>`;
 const rangeBar = () => h`<div class="range" role="group" aria-label="Chart range">${[[30, '30D'], [90, '90D'], [180, '6M'], [365, '1Y']].map(([r, l]) => h`<button type="button" data-range="${r}" aria-pressed="${state.range === r}">${l}</button>`)}</div>`;
 
 // ---------- tabs ----------
-// Overview is the default 60–90 second read; full research depth lives in the other tabs
-// and in expandable rows. Old section anchors (#forces, #scenarios) still resolve.
-const TABS = ['overview', 'cycle', 'report', 'liquidity'];
+// The BTC Dashboard is the landing view; Intelligence (#overview) is the daily 60–90 second
+// read, with research depth in the other tabs. Old section anchors (#forces, #scenarios) still resolve.
+const TABS = ['dashboard', 'overview', 'cycle', 'report', 'liquidity'];
 const LEGACY = { forces: 'overview', scenarios: 'overview', liqmap: 'overview', watch: 'overview', top3: 'overview' };
-const tabFromHash = () => { const k = location.hash.slice(1); return TABS.includes(k) ? k : LEGACY[k] || 'overview'; };
+const tabFromHash = () => { const k = location.hash.slice(1); return TABS.includes(k) ? k : LEGACY[k] || (k.startsWith('force-') ? 'overview' : 'dashboard'); };
 function showTab(scroll) {
   const t = tabFromHash(), k = location.hash.slice(1);
   document.querySelectorAll('[data-tab]').forEach((s) => { s.hidden = s.dataset.tab !== t; });
   document.querySelectorAll('[data-tab-link]').forEach((x) => x.setAttribute('aria-current', x.dataset.tabLink === t ? 'page' : 'false'));
   drawCharts($(`[data-tab="${t}"]`) || document);
+  if (t === 'dashboard') drawPiChart($('#pi-chart'), state.pi, state.live);
   if (k.startsWith('force-')) openForce(k);
   else if (LEGACY[k]) document.getElementById(k)?.scrollIntoView();
   else if (scroll) window.scrollTo(0, 0);
@@ -262,7 +264,7 @@ function execStrip(b) {
   const ch = (v, k) => h`<span class="chg"><span class="${cls(v)}">${fmtPct(v, 1)}</span> ${k}</span>`;
   return h`<section class="exec" aria-label="Summary">
     <div class="exec-row">
-      <div class="exec-px"><span class="px num" id="live-px">${fmtPrice(state.live?.price ?? P.spot)}</span><span id="live-ch">${ch(P.ch24h, '24h')}${ch(P.ch7d, '7d')}${ch(P.ch30d, '30d')}</span><span class="livebadge snap" id="live-badge"><i></i><span>Server snapshot · ${fmtTime(a.dataThrough)}</span></span></div>
+      <div class="exec-px"><span class="px num" data-live="px">${fmtPrice(state.live?.price ?? P.spot)}</span><span data-live="ch">${ch(P.ch24h, '24h')}${ch(P.ch7d, '7d')}${ch(P.ch30d, '30d')}</span><span class="livebadge snap" data-live="badge"><i></i><span>Server snapshot · ${fmtTime(a.dataThrough)}</span></span></div>
       <div class="exec-regime"><span class="k">Regime</span><b>${b.regime.label}</b>${info('regime')}<span class="muted"> — ${b.regime.desc}</span>${b.regime.secondary ? h`<span class="muted"> Secondary: ${b.regime.secondary}.</span>` : ''}</div>
       ${b.cycle ? h`<div class="cyrow"><a class="cybadge t-${TONE_CHIP[b.cycle.tone] || 'neu'}" href="#cycle" title="On-chain cycle position — open the full On-chain cycle page"><span class="k">On-chain cycle</span>${b.cycle.phase ? h`<b>${b.cycle.phase}</b> · ` : ''}${b.cycle.zone}${b.cycle.momentum ? h` · momentum ${b.cycle.momentum.toLowerCase()}` : ''}${b.cycle.stretched ? ' · stretched' : ''} <span class="arr">→</span></a>${info('cyclebadge')}</div>` : ''}
     </div>
@@ -407,7 +409,7 @@ function dashboard() {
 }
 
 function overviewTab(b) {
-  return h`${execStrip(b)}${raw(piCardHtml(state.pi, info('picycle').s))}${top3(b)}${forcesBlock(b)}${ladderBlock(b)}${accelBlock(b)}${watchBlock(b)}${dashboard()}<p class="foot-note">${b.footer}</p>`;
+  return h`${execStrip(b)}<p class="pi-moved small">The live price chart with the Pi Cycle Top indicator is on the <a href="#dashboard">BTC Dashboard</a>.</p>${top3(b)}${forcesBlock(b)}${ladderBlock(b)}${accelBlock(b)}${watchBlock(b)}${dashboard()}<p class="foot-note">${b.footer}</p>`;
 }
 
 // ---------- On-chain cycle tab ----------
@@ -640,12 +642,14 @@ function render() {
   if (a.kind === 'browser' && liveN < 5) banners.push(h`<div class="banner warn">Browser refresh could reach only ${liveN} of ${a.quality.length} sources from this network. All other values are the last server values, marked stale with their original timestamps. Try again later or start a <b>Server run</b>.</div>`);
   else if (a.kind === 'browser') banners.push(h`<div class="banner">Browser refresh: ${liveN} sources retrieved live. ETF flows, FRED, Yahoo and CFTC data cannot be fetched from a browser and show their last server values. Not saved to the archive — use <b>Server run</b> for that.</div>`);
   $('#app').innerHTML = h`${banners}
-    <div data-tab="overview">${overviewTab(b)}</div>
+    <div data-tab="dashboard" hidden>${raw(dashTab({ a, pi: state.pi, dash: state.dash, info }))}</div>
+    <div data-tab="overview" hidden>${overviewTab(b)}</div>
     <div data-tab="cycle" hidden>${cycleTab()}</div>
     <div data-tab="report" hidden>${reportTab()}</div>
     <div data-tab="liquidity" hidden>${liquidityTab()}</div>
 `.s;
   wireSections();
+  mountDash({ dash: state.dash, getLive: () => state.live });
   showTab(false);
   const np = $('#nav-price');
   if (np) np.innerHTML = h`${fmtPrice(a.metrics.price.spot)} <span class="${cls(a.metrics.price.ch24h)}">${fmtPct(a.metrics.price.ch24h)}</span>`.s;
@@ -668,21 +672,22 @@ function closeDaysAgo(n) {
   return best;
 }
 function paintLive() {
-  const L = state.live, px = $('#live-px'), badge = $('#live-badge'), chEl = $('#live-ch');
-  if (!px || !badge) return;
+  const L = state.live, pxs = document.querySelectorAll('[data-live="px"]'), badges = document.querySelectorAll('[data-live="badge"]'), chs = document.querySelectorAll('[data-live="ch"]');
+  if (!pxs.length) return;
+  const setBadge = (c, t, title) => badges.forEach((bd) => { bd.className = 'livebadge ' + c; bd.querySelector('span').textContent = t; if (title) bd.title = title; });
   if (L) {
-    px.textContent = fmtPrice(L.price);
+    pxs.forEach((e) => { e.textContent = fmtPrice(L.price); });
     const c7 = closeDaysAgo(7), c30 = closeDaysAgo(30), ch24 = L.ch24 ?? state.a.metrics.price.ch24h;
     const piece = (v, k) => `<span class="chg"><span class="${cls(v)}">${esc(fmtPct(v, 1))}</span> ${k}</span>`;
-    chEl.innerHTML = piece(ch24, '24h') + piece(c7 ? (L.price / c7 - 1) * 100 : state.a.metrics.price.ch7d, '7d') + piece(c30 ? (L.price / c30 - 1) * 100 : state.a.metrics.price.ch30d, '30d');
+    const html = piece(ch24, '24h') + piece(c7 ? (L.price / c7 - 1) * 100 : state.a.metrics.price.ch7d, '7d') + piece(c30 ? (L.price / c30 - 1) * 100 : state.a.metrics.price.ch30d, '30d');
+    chs.forEach((e) => { e.innerHTML = html; });
     const stale = state.liveState === 'stale';
-    badge.className = 'livebadge ' + (stale ? 'stale' : 'live');
-    badge.title = `${L.source}${L.note ? ' · ' + L.note : ''} · polled every 10–30 s`;
-    badge.querySelector('span').textContent = stale ? `Stale · last update ${timeFmt.format(L.at)}` : `Live · ${L.source} · ${timeFmt.format(L.at)}`;
+    setBadge(stale ? 'stale' : 'live', stale ? `Stale · last update ${timeFmt.format(L.at)}` : `Live · ${L.source} · ${timeFmt.format(L.at)}`, `${L.source}${L.note ? ' · ' + L.note : ''} · polled every 10–30 s`);
     const np = $('#nav-price'); if (np) np.innerHTML = h`${fmtPrice(L.price)} <span class="${cls(ch24)}">${fmtPct(ch24)}</span>`.s;
-    if (Date.now() - lastPiDraw > 60e3) { lastPiDraw = Date.now(); drawPiChart($('#pi-chart'), state.pi, L); }
+    if (Date.now() - lastPiDraw > 60e3 && tabFromHash() === 'dashboard') { lastPiDraw = Date.now(); drawPiChart($('#pi-chart'), state.pi, L); }
+    dashLive(L);
   } else if (state.liveState === 'stale') {
-    badge.className = 'livebadge stale'; badge.querySelector('span').textContent = `Live price unavailable · server snapshot ${fmtTime(state.a.dataThrough)}`;
+    setBadge('stale', `Live price unavailable · server snapshot ${fmtTime(state.a.dataThrough)}`);
   }
 }
 
@@ -708,8 +713,10 @@ const runPoint = (r) => ({ price: r.price, depth1: r.depth1, depthVenues: r.dept
 async function getJSON(u) { const r = await fetch(u, { cache: 'no-store' }); if (!r.ok) throw new Error(`${u}: HTTP ${r.status}`); return r.json(); }
 
 async function load() {
-  const [latest, ts, idx, runs, pi] = await Promise.allSettled([getJSON('data/latest.json'), getJSON('data/timeseries.json'), getJSON('data/index.json'), getJSON('data/runs.json'), getJSON('data/pi_cycle.json')]);
+  const [latest, ts, idx, runs, pi, dash] = await Promise.allSettled([getJSON('data/latest.json'), getJSON('data/timeseries.json'), getJSON('data/index.json'), getJSON('data/runs.json'), getJSON('data/pi_cycle.json'), getJSON('data/dash.json')]);
   state.pi = pi.status === 'fulfilled' ? pi.value : null;
+  state.dash = dash.status === 'fulfilled' ? dash.value : null;
+  if (state.dash?.volume?.rows?.length) { piState.vol = state.dash.volume.rows; piState.volSource = 'CoinGecko aggregate spot, daily'; }
   state.runs = runs.status === 'fulfilled' ? runs.value.runs || [] : [];
   state.rows = ts.status === 'fulfilled' ? ts.value.rows || [] : [];
   state.index = idx.status === 'fulfilled' ? idx.value : null;

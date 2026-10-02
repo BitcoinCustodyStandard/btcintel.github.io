@@ -4,15 +4,16 @@
 // edge; the averages are defined on completed daily closes.
 import { piZone } from '../engine/picycle.js';
 
-const RANGES = [['6M', 182], ['1Y', 365], ['2Y', 730], ['All', 0]];
+const RANGES = [['1M', 30], ['3M', 91], ['6M', 182], ['1Y', 365], ['All', 0]];
 const esc = (s) => String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const usd = (v) => (v === null || v === undefined ? '—' : v >= 1000 ? '$' + Math.round(v).toLocaleString('en-US') : v >= 1 ? '$' + v.toFixed(2) : '$' + v.toPrecision(3));
-const usdK = (v) => (v >= 1e6 ? `$${+(v / 1e6).toFixed(1)}M` : v >= 1000 ? `$${+(v / 1000).toFixed(v >= 1e4 ? 0 : 1)}K` : v >= 1 ? `$${+v.toFixed(0)}` : `$${+v.toPrecision(2)}`);
+const usdK = (v) => (v >= 1e9 ? `$${+(v / 1e9).toFixed(1)}B` : v >= 1e6 ? `$${+(v / 1e6).toFixed(1)}M` : v >= 1000 ? `$${+(v / 1000).toFixed(v >= 1e4 ? 0 : 1)}K` : v >= 1 ? `$${+v.toFixed(0)}` : `$${+v.toPrecision(2)}`);
 const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const dLabel = (d) => `${MON[+d.slice(5, 7) - 1]} ${+d.slice(8, 10)}, ${d.slice(0, 4)}`;
 const ZONE_FILL = { far: 'var(--pi-env)', approaching: 'var(--pi-env-warn)', close: 'var(--pi-env-hot)', crossed: 'var(--pi-env-hot)' };
 
-export const piState = { range: 365, log: true };
+// vol: optional [[date, usd]] daily spot volume, drawn as bars for ranges up to 1Y
+export const piState = { range: 365, log: true, vol: null, volSource: '' };
 
 export function piCardHtml(pi, infoBtn) {
   const L = pi?.latest, z = L ? piZone(L.gap) : null;
@@ -28,9 +29,9 @@ export function piCardHtml(pi, infoBtn) {
       </div>
     </div>
     <div class="pi-chart" id="pi-chart"></div>
-    <div class="pi-legend"><span><i class="lp"></i>Price (daily close)</span><span><i class="lf"></i>111DMA</span><span><i class="ls"></i>350DMA × 2</span><span><i class="le"></i>Envelope</span>${pi?.crosses?.length ? '<span><i class="lc"></i>Past crosses</span>' : ''}<span><i class="ll"></i>Live price</span></div>
+    <div class="pi-legend"><span><i class="lp"></i>Price (daily close)</span><span><i class="lf"></i>111DMA</span><span><i class="ls"></i>350DMA × 2</span><span><i class="le"></i>Envelope</span>${pi?.crosses?.length ? '<span><i class="lc"></i>Past crosses</span>' : ''}<span><i class="ll"></i>Live price</span><span class="pi-vleg"><i class="lv"></i>Daily volume (≤1Y)</span></div>
     <p class="pi-status">${status}</p>
-    <p class="pi-src">Daily closes: ${esc(pi?.source || 'Coin Metrics')}${pi?.asOf ? ` · through ${esc(dLabel(pi.asOf))}` : ''} · averages computed by BTC Intel · envelope shading: grey &gt; 20% gap, amber 5–20%, red &lt; 5% or crossed</p>
+    <p class="pi-src">Daily closes: ${esc(pi?.source || 'Coin Metrics')}${pi?.asOf ? ` · through ${esc(dLabel(pi.asOf))}` : ''} · averages computed by BTC Intel${piState.volSource ? ` · volume: ${esc(piState.volSource)}` : ''} · envelope shading: grey &gt; 20% gap, amber 5–20%, red &lt; 5% or crossed</p>
   </section>`;
 }
 
@@ -87,9 +88,18 @@ export function drawPiChart(host, pi, live) {
     const lx = W - PAD.r - 4, ly = Y(live.price), lastX = X(pts.at(-1)[0]), lastY = Y(pts.at(-1)[1]);
     liveMark = `<line class="livelink" x1="${lastX.toFixed(1)}" y1="${lastY.toFixed(1)}" x2="${lx}" y2="${ly.toFixed(1)}"/><circle class="livedot" cx="${lx}" cy="${ly.toFixed(1)}" r="4"/>`;
   }
-  const data = esc(JSON.stringify(pts.map((r) => [+X(r[0]).toFixed(1), r[0], r[1], r[2], r[3]])));
+  // volume: bars in the bottom fifth of the plot, own scale (no axis; values in the tooltip)
+  const volMap = piState.vol && piState.range && piState.range <= 365 ? new Map(piState.vol) : null;
+  let vbars = '';
+  if (volMap) {
+    const vs = rows.map((r) => volMap.get(r[0])).filter((v) => v > 0), vmax = Math.max(...vs, 1), band = (H - PAD.t - PAD.b) * 0.2;
+    const bw = Math.max(1, ((W - PAD.l - PAD.r) / rows.length) * 0.7);
+    vbars = rows.map((r) => { const v = volMap.get(r[0]); if (!(v > 0)) return ''; const hh = (v / vmax) * band; return `<rect x="${(X(r[0]) - bw / 2).toFixed(1)}" y="${(base - hh).toFixed(1)}" width="${bw.toFixed(1)}" height="${hh.toFixed(1)}"/>`; }).join('');
+  }
+  host.closest('.picard')?.classList.toggle('novol', !vbars);
+  const data = esc(JSON.stringify(pts.map((r) => [+X(r[0]).toFixed(1), r[0], r[1], r[2], r[3], volMap?.get(r[0]) ?? null])));
   host.innerHTML = `<svg viewBox="0 0 ${W} ${H}" width="${W}" height="${H}" role="img" aria-label="Bitcoin daily close with the 111-day average and twice the 350-day average" data-pts="${data}">
-    ${grid}${xlab}<g class="env">${env.join('')}</g>
+    ${grid}${xlab}<g class="vol">${vbars}</g><g class="env">${env.join('')}</g>
     <path class="pline" d="${pricePath}"/>
     <path class="m111" d="${line(2)}"/><path class="m350" d="${line(3)}"/>
     ${crosses}${liveMark}
@@ -104,10 +114,10 @@ function wireHover(host, W, Y) {
   const show = (clientX) => {
     const r = svg.getBoundingClientRect(), x = ((clientX - r.left) / r.width) * W;
     let best = P[0]; for (const p of P) if (Math.abs(p[0] - x) < Math.abs(best[0] - x)) best = p;
-    const [px, d, c, a, b] = best;
+    const [px, d, c, a, b, v] = best;
     xh.setAttribute('x1', px); xh.setAttribute('x2', px); xh.style.display = '';
     const gap = a > 0 && b > 0 ? (b - a) / b : null;
-    tip.innerHTML = `<b>${esc(dLabel(d))}</b><span>Price <em>${usd(c)}</em></span><span class="f">111DMA <em>${usd(a)}</em></span><span class="s">350DMA×2 <em>${usd(b)}</em></span>${gap !== null ? `<span>Gap <em>${(gap * 100).toFixed(1)}% · ${usd(Math.abs(b - a))}</em></span>` : '<span class="dim">Averages need 350 days of history</span>'}`;
+    tip.innerHTML = `<b>${esc(dLabel(d))}</b><span>Price <em>${usd(c)}</em></span><span class="f">111DMA <em>${usd(a)}</em></span><span class="s">350DMA×2 <em>${usd(b)}</em></span>${gap !== null ? `<span>Gap <em>${(gap * 100).toFixed(1)}% · ${usd(Math.abs(b - a))}</em></span>` : '<span class="dim">Averages need 350 days of history</span>'}${v ? `<span class="v">Volume <em>${usdK(v)}</em></span>` : ''}`;
     tip.hidden = false;
     const hx = (px / W) * r.width, tw = tip.offsetWidth;
     tip.style.left = Math.max(4, Math.min(hx + 12, r.width - tw - 4)) + 'px';

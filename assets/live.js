@@ -1,4 +1,4 @@
-// Live BTC price for the Overview header. Polls public tickers in order of
+// Live BTC price for the page headers. Polls public tickers in order of
 // preference and falls back when one fails; never invents a value. If every
 // source fails, the caller keeps the last good value and marks it stale.
 
@@ -6,12 +6,12 @@ const SOURCES = [
   { // true USD, with a 24h open for the 24h change
     name: 'Coinbase', every: 10e3,
     url: 'https://api.exchange.coinbase.com/products/BTC-USD/stats',
-    parse: (j) => { const last = +j.last, open = +j.open; return { price: last, ch24: open ? (last / open - 1) * 100 : null }; },
+    parse: (j) => { const last = +j.last, open = +j.open; return { price: last, ch24: open ? (last / open - 1) * 100 : null, high: +j.high, low: +j.low, volBtc: +j.volume }; },
   },
   { // quoted in USDT, which trades within a few basis points of USD
     name: 'Binance', every: 10e3, note: 'quoted in USDT (≈ USD)',
     url: 'https://data-api.binance.vision/api/v3/ticker/24hr?symbol=BTCUSDT',
-    parse: (j) => ({ price: +j.lastPrice, ch24: +j.priceChangePercent }),
+    parse: (j) => ({ price: +j.lastPrice, ch24: +j.priceChangePercent, high: +j.highPrice, low: +j.lowPrice, volBtc: +j.volume }),
   },
   { // free tier allows ~30 calls a minute, so never faster than every 30 s
     name: 'CoinGecko', every: 30e3,

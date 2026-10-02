@@ -70,7 +70,7 @@ async function treasuries() {
   return { source: 'CoinGecko public company treasuries', url: 'https://www.coingecko.com/en/treasuries/bitcoin', fetchedAt: new Date().toISOString(), totalBtc: Math.round(j.total_holdings), companies: cos.length, top: cos.slice(0, 5).map((c) => ({ name: c.name, symbol: c.symbol, country: c.country, btc: Math.round(c.total_holdings), pctSupply: c.percentage_of_total_supply })) };
 }
 async function volume() {
-  const j = await get('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=400&interval=daily');
+  const j = await get('https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=365&interval=daily');
   const today = new Date().toISOString().slice(0, 10);
   // keep completed UTC days only (the last point is a running value)
   const rows = j.total_volumes.filter(([ts]) => ts % 864e5 === 0).map(([ts, v]) => [new Date(ts).toISOString().slice(0, 10), Math.round(v)]).filter(([d]) => d < today);

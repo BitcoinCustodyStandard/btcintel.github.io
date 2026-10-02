@@ -10,6 +10,7 @@
 import { fmtNum, fmtPct, fmtUsd, fmtUsdSigned, fmtK } from './util.js';
 import { macroTransmission } from './analyze.js';
 import { ZONES } from './cycle.js';
+import { DASH_EXPLAIN } from './explain_dash.js';
 
 export const REMINDER = 'This is historical context, not a prediction.';
 
@@ -342,6 +343,8 @@ export const EXPLAIN = {
     caveat: () => 'Liquidation figures are model estimates; dealer positioning can’t always be confirmed from public data.',
   },
 };
+
+Object.assign(EXPLAIN, DASH_EXPLAIN);
 
 function levelNow(l) {
   const parts = [];
