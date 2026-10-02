@@ -12,23 +12,16 @@ jobs:
       - run: |
           cat > p.mjs <<'JS'
           const get = async (u, n = 600) => { try { const r = await fetch(u, { headers: { 'user-agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126 Safari/537.36', accept: 'application/json, text/html;q=0.9, */*;q=0.8' }, signal: AbortSignal.timeout(20000) }); const t = await r.text(); console.log(`\n### ${r.status} ${u}\nlen=${t.length} type=${r.headers.get('content-type')} acao=${r.headers.get('access-control-allow-origin')}\n${t.slice(0, n).replace(/\s+/g, ' ')}`); return t; } catch (e) { console.log(`\n### ERR ${u} ${e.message}`); return ''; } };
-          // Polymarket discovery
-          const ev = await get('https://gamma-api.polymarket.com/events?tag_slug=bitcoin&active=true&closed=false&limit=40&order=volume24hr&ascending=false', 300);
-          try { const j = JSON.parse(ev); for (const e of j.slice(0, 25)) console.log('EVENT', e.slug, '|', e.title, '| vol24', Math.round(e.volume24hr || 0), '| markets', e.markets?.length, '| end', e.endDate); const m = j[0]?.markets?.[0]; console.log('MARKET KEYS', m && Object.keys(m).join(',')); console.log('MARKET SAMPLE', JSON.stringify(m && { q: m.question, op: m.outcomePrices, o: m.outcomes, v24: m.volume24hr, v: m.volume, ch: m.oneDayPriceChange, slug: m.slug, tok: m.clobTokenIds, last: m.lastTradePrice, bid: m.bestBid, ask: m.bestAsk, end: m.endDate, git: m.groupItemTitle })); } catch (e) { console.log('parse', e.message); }
-          await get('https://gamma-api.polymarket.com/public-search?q=bitcoin%20price&limit_per_type=10', 500);
-          // intraday candles
-          await get('https://api.exchange.coinbase.com/products/BTC-USD/candles?granularity=60', 200);
-          await get('https://data-api.binance.vision/api/v3/klines?symbol=BTCUSDT&interval=1m&limit=60', 200);
-          // distribution candidates
-          const bic = await get('https://bitinfocharts.com/top-100-richest-bitcoin-addresses.html', 200);
-          const i = bic.indexOf('Bitcoin distribution'); console.log('BIC distribution idx', i, i > 0 ? bic.slice(i, i + 3000).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ') : '');
-          for (const m of ['AdrBalNtv0.001Cnt', 'AdrBalNtv0.01Cnt', 'AdrBalNtv0.1Cnt', 'AdrBalNtv1Cnt', 'AdrBalNtv10Cnt', 'AdrBalNtv100Cnt', 'AdrBalNtv1KCnt', 'AdrBalNtv10KCnt', 'AdrBalNtv100KCnt', 'SplyAdrBalNtv1', 'SplyAdrBalNtv10K'])
-            await get(`https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc&metrics=${m}&frequency=1d&page_size=1&paging_from=end`, 200);
-          await get('https://bitcoin-data.com/', 300);
-          await get('https://bitcoin-data.com/api/swagger-ui/index.html', 200);
-          await get('https://bitcoin-data.com/v3/api-docs/public', 200);
-          await get('https://bitcoin-data.com/api/v3/api-docs', 400);
-          // Yahoo for correlation history
-          await get('https://query1.finance.yahoo.com/v8/finance/chart/%5EGSPC?range=2y&interval=1d', 200);
+          const bic = await get('https://bitinfocharts.com/top-100-richest-bitcoin-addresses.html', 50);
+          const k = bic.indexOf('Balance, BTC'); console.log('BIC TABLE', k, bic.slice(Math.max(0, k - 400), k + 4500));
+          const spec = await get('https://bitcoin-data.com/api/v3/api-docs', 50);
+          try { const j = JSON.parse(spec); const ps = Object.entries(j.paths); console.log('BGEO N PATHS', ps.length); for (const [p, v] of ps) if (/shrimp|crab|fish|shark|whale|humpback|cohort|balance|distribution|addresses/i.test(p)) console.log('BGEO', p, '|', (v.get?.summary || v.get?.description || '').slice(0, 120)); } catch (e) { console.log('spec parse', e.message); }
+          for (const s of ['%5Espx', 'xauusd', 'gc.f', 'dx.f', 'btcusd'])
+            await get(`https://stooq.com/q/d/l/?s=${s}&i=d`, 160);
+          await get('https://query2.finance.yahoo.com/v8/finance/chart/GC%3DF?range=2y&interval=1d', 120);
+          const ev = await get('https://gamma-api.polymarket.com/events?slug=what-price-will-bitcoin-hit-before-2027', 50);
+          try { const e = JSON.parse(ev)[0]; for (const m of e.markets.filter((m) => m.active && !m.closed).slice(0, 50)) console.log('M', m.groupItemTitle, '|', m.question, '|', m.outcomePrices, '| v24', Math.round(m.volume24hr || 0), '| v', Math.round(m.volumeNum || 0), '| ch', m.oneDayPriceChange, '| thr', m.groupItemThreshold); } catch (e) { console.log(e.message); }
+          const mo = await get('https://gamma-api.polymarket.com/events?tag_slug=bitcoin&active=true&closed=false&limit=100', 50);
+          try { for (const e of JSON.parse(mo)) if (/month|october|november|december|2026|end of/i.test(e.title) && !/up or down|on october \d/i.test(e.title)) console.log('EV', e.slug, '|', e.title, '| v', Math.round(e.volume || 0), '| end', e.endDate); } catch (e) { console.log(e.message); }
           JS
           node p.mjs
