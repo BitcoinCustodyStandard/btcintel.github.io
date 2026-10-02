@@ -10,7 +10,8 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@400;500&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="assets/app.css">
+<!-- bump ?v= here and on the assets/*.js imports together when CSS or page modules change -->
+<link rel="stylesheet" href="assets/app.css?v=20261003a">
 <script>
   try { const t = localStorage.getItem('bmi-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
 </script>
@@ -22,8 +23,7 @@
       <span class="t1">BTC Intel</span><span class="brand-sep">/</span><span class="t2">Bitcoin Market Intelligence</span>
     </a>
     <div class="actions">
-      <button class="btn" id="btn-refresh" type="button" title="Retrieve the latest available data in your browser and regenerate the analysis">Refresh market</button>
-      <button class="btn ghost hide-sm" id="btn-server" type="button" title="Run the full agent on GitHub Actions (all sources, persisted)">Server run</button>
+      <button class="btn" id="btn-refresh" type="button" title="Update the live price now and reload the latest dashboard data"><i class="spin" aria-hidden="true"></i><span>Refresh</span></button>
       <button class="btn ghost icon-btn" id="btn-theme" type="button" aria-label="Toggle light/dark theme"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 1.5v11a5.5 5.5 0 0 1 0-11z"/></svg></button>
     </div>
   </div>
@@ -41,7 +41,6 @@
     </div>
     <div class="nav-tools">
       <span class="nav-price mono" id="nav-price"></span>
-      <button class="btn mini" id="btn-refresh2" type="button" title="Refresh market">Refresh</button>
     </div>
   </div>
 </nav>
@@ -54,19 +53,6 @@
     <p><a href="/">BTC Intel</a> · <a href="data/index.json">Report archive (JSON)</a> · <a href="data/timeseries.json">Daily timeseries (JSON)</a> · <a href="https://github.com/BitcoinCustodyStandard/btcintel.github.io/blob/main/README.md" target="_blank" rel="noopener">Methodology &amp; operations</a></p>
   </div>
 </footer>
-<dialog id="dlg-server">
-  <h3>Run the full agent on the server</h3>
-  <p>The browser refresh updates crypto market data directly from exchanges. Some sources (Farside ETF flows, FRED, Yahoo, CFTC) do not allow browser requests; a <b>server run</b> retrieves everything, regenerates the report, stores it in the archive and republishes this page (≈3–6 minutes).</p>
-  <p class="small muted">It triggers the <span class="mono">market-intel</span> GitHub Actions workflow. Paste a fine-grained GitHub token with <i>Actions: read &amp; write</i> on this repository only. It is stored only in this browser (localStorage) and sent only to api.github.com.</p>
-  <div class="row"><input type="password" id="gh-token" placeholder="github_pat_…" autocomplete="off"></div>
-  <div class="row">
-    <button class="btn" id="btn-dispatch" type="button">Run now</button>
-    <button class="btn ghost" id="btn-forget" type="button">Forget token</button>
-    <a class="btn ghost" href="https://github.com/BitcoinCustodyStandard/btcintel.github.io/actions/workflows/market-intel.yml" target="_blank" rel="noopener">Open in GitHub</a>
-    <button class="btn ghost" id="btn-close" type="button">Close</button>
-  </div>
-  <p class="small" id="dispatch-msg"></p>
-</dialog>
-<script type="module" src="assets/app.js"></script>
+<script type="module" src="assets/app.js?v=20261003a"></script>
 </body>
 </html>

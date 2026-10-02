@@ -32,6 +32,10 @@ export function seedNetwork(snap) {
   N.seeded = Date.parse(snap.at);
 }
 
+let api = null;
+// re-fetch everything now (used by the Refresh button); the WebSocket keeps running
+export const refreshNetwork = () => (api ? Promise.all([api.fast(), api.slow()]) : Promise.resolve());
+
 export function startNetwork({ onUpdate, onBlock }) {
   let ws = null, poll = null, tries = 0, slowT = 0;
   const done = (live = true) => { if (live) { N.at = Date.now(); N.live = true; } onUpdate(N); };
@@ -64,6 +68,7 @@ export function startNetwork({ onUpdate, onBlock }) {
     ws.onerror = () => { try { ws.close(); } catch {} };
     const ping = setInterval(() => { if (ws.readyState === 1) ws.send(JSON.stringify({ action: 'ping' })); else if (ws.readyState > 1) clearInterval(ping); }, 30e3);
   };
+  api = { fast, slow };
   fast(); slow(); connect();
   return N;
 }

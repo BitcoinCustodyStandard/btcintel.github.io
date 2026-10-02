@@ -2,20 +2,15 @@
 // Renders the agent's latest analysis and can regenerate it in the browser
 // using the same engine the scheduled agent runs.
 
-import { analyze } from '../engine/analyze.js';
-import { collectAll, mergeWithPrevious } from '../engine/collect.js';
-import { morningReport, briefReport } from '../engine/report.js';
+import { briefReport } from '../engine/report.js';
 import { brief } from '../engine/brief.js';
 import { ZONES } from '../engine/cycle.js';
 import { explain, EXPLAIN, REMINDER } from '../engine/explain.js';
-import { startLivePrice } from './live.js';
-import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js';
-import { dashTab, mountDash, dashLive } from './dash.js';
+import { startLivePrice } from './live.js?v=20261003a';
+import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003a';
+import { dashTab, mountDash, dashLive, refreshDash } from './dash.js?v=20261003a';
 import { fmtUsd, fmtUsdSigned, fmtPrice, fmtPct, fmtNum, fmtK, ordinal } from '../engine/util.js';
 
-const REPO = 'BitcoinCustodyStandard/btcintel.github.io';
-const WORKFLOW = 'market-intel.yml';
-const SERVER_ONLY = ['farside', 'fred', 'yahoo', 'cftc_cot', 'bgeometrics'];
 const state = { a: null, rows: [], runs: [], index: null, snapshot: null, range: 90, pi: null, dash: null, live: null, liveState: 'init' };
 const $ = (s, r = document) => r.querySelector(s);
 
@@ -637,10 +632,10 @@ function render() {
   state.b = b;
   const old = ageH(a.dataThrough);
   const banners = [];
-  if (old !== null && old > 30) banners.push(h`<div class="banner warn">The latest analysis is ${Math.round(old)} hours old. Press <b>Refresh market</b> to update crypto market data in your browser, or start a server run.</div>`);
+  if (old !== null && old > 30) banners.push(h`<div class="banner warn">The latest analysis is ${Math.round(old)} hours old. The scheduled server update may be delayed; press <b>Refresh</b> to check for newer data.</div>`);
   const liveN = a.quality.filter((q) => q.status === 'ok').length;
-  if (a.kind === 'browser' && liveN < 5) banners.push(h`<div class="banner warn">Browser refresh could reach only ${liveN} of ${a.quality.length} sources from this network. All other values are the last server values, marked stale with their original timestamps. Try again later or start a <b>Server run</b>.</div>`);
-  else if (a.kind === 'browser') banners.push(h`<div class="banner">Browser refresh: ${liveN} sources retrieved live. ETF flows, FRED, Yahoo and CFTC data cannot be fetched from a browser and show their last server values. Not saved to the archive — use <b>Server run</b> for that.</div>`);
+  if (a.kind === 'browser' && liveN < 5) banners.push(h`<div class="banner warn">Browser refresh could reach only ${liveN} of ${a.quality.length} sources from this network. All other values are the last server values, marked stale with their original timestamps. Values from the last server update are shown with their original timestamps.</div>`);
+  else if (a.kind === 'browser') banners.push(h`<div class="banner">Browser refresh: ${liveN} sources retrieved live. ETF flows, FRED, Yahoo and CFTC data cannot be fetched from a browser and show their last server values. Not saved to the archive.</div>`);
   $('#app').innerHTML = h`${banners}
     <div data-tab="dashboard" hidden>${raw(dashTab({ a, pi: state.pi, dash: state.dash, info }))}</div>
     <div data-tab="overview" hidden>${overviewTab(b)}</div>
@@ -707,7 +702,6 @@ function wireSections() {
 }
 
 // ---------- data ----------
-const runPoint = (r) => ({ price: r.price, depth1: r.depth1, depthVenues: r.depthVenues, depthBid1: r.depthBid1, depthAsk1: r.depthAsk1, oiTotal: r.oiTotal, oiCoverage: r.oiCoverage, fundingAnn: r.fundingAnn, iv30: r.iv30, cbPremium: r.cbPremium });
 async function getJSON(u) { const r = await fetch(u, { cache: 'no-store' }); if (!r.ok) throw new Error(`${u}: HTTP ${r.status}`); return r.json(); }
 
 async function load() {
@@ -719,76 +713,50 @@ async function load() {
   state.rows = ts.status === 'fulfilled' ? ts.value.rows || [] : [];
   state.index = idx.status === 'fulfilled' ? idx.value : null;
   if (latest.status === 'fulfilled' && latest.value?.metrics) { state.a = latest.value; render(); return; }
-  $('#app').innerHTML = h`<div class="empty-state"><p><b>No stored analysis yet.</b></p><p>The agent has not completed its first server run. Press <b>Refresh market</b> to build the analysis now from live exchange data in your browser.</p></div>`.s;
+  $('#app').innerHTML = h`<div class="empty-state"><p><b>No stored analysis yet.</b></p><p>The scheduled server job has not published its first analysis yet. Press <b>Refresh</b> in a few minutes.</p></div>`.s;
 }
 
 const progress = (t) => { $('#progress').textContent = t || ''; };
 
-async function liveRefresh() {
-  const btn = $('#btn-refresh');
-  btn.disabled = true;
-  const t0 = Date.now();
+// ---------- the single Refresh button ----------
+// Polls the live price now, re-fetches the dashboard's live sources (mempool.space, CoinGecko),
+// and reloads the published data files; the page re-renders only if the server analysis changed.
+let refreshing = false;
+async function refreshAll() {
+  if (refreshing) return;
+  refreshing = true;
+  const btn = $('#btn-refresh'), label = btn.querySelector('span');
+  btn.disabled = true; btn.classList.add('busy'); label.textContent = 'Refreshing…';
+  progress('Refreshing live price, network data and published analysis…');
+  const t0 = Date.now(), before = state.a?.generatedAt;
   try {
-    progress('Retrieving order books, derivatives, options and on-chain data from source APIs…');
-    if (!state.snapshot) state.snapshot = await getJSON('data/snapshot.json').catch(() => null);
-    let snap = await collectAll({ scope: 'browser', log: progress });
-    snap = mergeWithPrevious(snap, state.snapshot);
-    for (const id of SERVER_ONLY) {
-      const p = state.snapshot?.sources?.[id];
-      if (p) snap.sources[id] = { ...p, status: p.status === 'ok' ? 'server-only' : p.status, lastError: 'not retrievable from a browser (no CORS); last server value shown' };
-    }
-    progress('Analysing…');
-    if (!state.rows.length) state.rows = (await getJSON('data/timeseries.json').catch(() => ({ rows: [] }))).rows;
-    const a = analyze(snap, state.rows);
-    a.kind = 'browser';
-    a.reportMd = morningReport(a);
-    a.briefMd = briefReport(a);
-    a.narrative = null;
-    state.a = a;
-    state.runs = (state.runs || []).concat([{ t: a.dataThrough, live: true, ...runPoint(a.row) }]);
-    render();
-    const ok = a.quality.filter((q) => q.status === 'ok').length;
-    progress(`Refreshed in ${((Date.now() - t0) / 1000).toFixed(0)}s — ${ok} of ${a.quality.length} sources live.`);
-    setTimeout(() => progress(''), 12000);
+    const [live, files] = await Promise.all([
+      liveFeed ? liveFeed.now() : null,
+      Promise.allSettled([getJSON('data/latest.json'), getJSON('data/timeseries.json'), getJSON('data/pi_cycle.json'), getJSON('data/index.json'), getJSON('data/runs.json')]),
+      refreshDash(),
+    ]);
+    await new Promise((r) => setTimeout(r, Math.max(0, 600 - (Date.now() - t0)))); // keep the busy state visible briefly
+    const [latest, ts, pi, idx, runs] = files.map((r) => (r.status === 'fulfilled' ? r.value : null));
+    if (ts?.rows) state.rows = ts.rows;
+    if (idx) state.index = idx;
+    if (runs?.runs) state.runs = runs.runs;
+    const piChanged = pi?.rows && pi.asOf !== state.pi?.asOf;
+    if (pi?.rows) state.pi = pi;
+    const changed = latest?.metrics && latest.generatedAt !== before;
+    if (changed) { state.a = latest; render(); } else if (piChanged && tabFromHash() === 'dashboard') drawPriceChart($('#pc-chart'), state.pi, state.live);
+    if (live) { state.live = live; paintLive(); }
+    const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    progress(`Updated ${t} in ${((Date.now() - t0) / 1000).toFixed(1)}s — live price ${live ? `${live.source} ${fmtPrice(live.price)}` : 'unavailable'} · analysis data through ${fmtTime(state.a?.dataThrough)}${changed ? ' (new analysis loaded)' : ''}.`);
+    label.textContent = `Updated ${t}`;
+    setTimeout(() => { if (!refreshing) label.textContent = 'Refresh'; }, 4000);
+    setTimeout(() => progress(''), 10000);
   } catch (e) {
     progress('Refresh failed: ' + e.message);
-  } finally { btn.disabled = false; }
+    label.textContent = 'Refresh';
+  } finally { refreshing = false; btn.disabled = false; btn.classList.remove('busy'); }
 }
 
-// ---------- server run (GitHub Actions workflow_dispatch) ----------
-function serverDialog() {
-  const dlg = $('#dlg-server');
-  try { $('#gh-token').value = localStorage.getItem('bmi-gh-token') || ''; } catch {}
-  $('#dispatch-msg').textContent = '';
-  dlg.showModal();
-}
-async function dispatch() {
-  const tok = $('#gh-token').value.trim();
-  const msg = $('#dispatch-msg');
-  if (!tok) { msg.textContent = 'A token is required (or use “Open in GitHub” → Run workflow).'; return; }
-  try { localStorage.setItem('bmi-gh-token', tok); } catch {}
-  msg.textContent = 'Starting…';
-  try {
-    const r = await fetch(`https://api.github.com/repos/${REPO}/actions/workflows/${WORKFLOW}/dispatches`, { method: 'POST', headers: { Authorization: `Bearer ${tok}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' }, body: JSON.stringify({ ref: 'main' }) });
-    if (r.status !== 204) throw new Error(`GitHub responded ${r.status}: ${(await r.text()).slice(0, 160)}`);
-    msg.textContent = 'Server run started. This page will reload automatically when the new analysis is published (usually 3–6 minutes).';
-    const before = state.a?.generatedAt;
-    let n = 0;
-    const iv = setInterval(async () => {
-      n++;
-      const l = await getJSON('data/latest.json').catch(() => null);
-      if (l && l.generatedAt !== before && l.kind !== 'browser') { clearInterval(iv); state.a = l; state.rows = (await getJSON('data/timeseries.json').catch(() => ({ rows: state.rows }))).rows; state.index = await getJSON('data/index.json').catch(() => state.index); render(); progress('Server analysis published.'); }
-      if (n > 15) { clearInterval(iv); progress('Server run still in progress — reload the page in a few minutes.'); }
-    }, 60000);
-  } catch (e) { msg.textContent = 'Could not start: ' + e.message; }
-}
-
-$('#btn-refresh').addEventListener('click', liveRefresh);
-$('#btn-refresh2')?.addEventListener('click', liveRefresh);
-$('#btn-server').addEventListener('click', serverDialog);
-$('#btn-dispatch').addEventListener('click', dispatch);
-$('#btn-close').addEventListener('click', () => $('#dlg-server').close());
-$('#btn-forget').addEventListener('click', () => { try { localStorage.removeItem('bmi-gh-token'); } catch {} $('#gh-token').value = ''; $('#dispatch-msg').textContent = 'Token removed from this browser.'; });
+$('#btn-refresh').addEventListener('click', refreshAll);
 $('#btn-theme').addEventListener('click', () => {
   const cur = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
   document.documentElement.dataset.theme = cur;

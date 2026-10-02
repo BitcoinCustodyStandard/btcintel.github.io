@@ -37,7 +37,7 @@ Where BTC sits in the historical on-chain valuation cycle — positioning resear
 
 Composite valuation = mean of the scored valuation inputs available (minimum 3): ≥+1.25 Deep value · +0.5…+1.25 Value · −0.5…+0.5 Neutral / mid-cycle · −1.25…−0.5 Elevated · ≤−1.25 Euphoria / stretched. Momentum = sum of four −1/0/+1 components (price vs 200-day average, 200-day slope, MVRV vs its 365-day average, stablecoin supply 30d); ≥+2 constructive, ≤−2 weakening. **BGeometrics free tier** (15 requests/day) is called at most once every 20 hours (2 requests) and carried forward between runs; values the provider flags as delayed (latest ~7 days withheld) are shown as “Data delayed — last good value as of …”.
 
-The **same engine** runs in the agent (Node 22) and in the browser. The page's **Refresh market** button re-collects exchange, derivatives, options and on-chain data directly from source APIs in your browser and regenerates the full analysis in place. Sources that block browser requests (Farside ETF flows, FRED, Yahoo, CFTC) keep their last server values, labelled with their own timestamps. **Server run** triggers the full agent (all sources, archived) via `workflow_dispatch`.
+The **same engine** runs in the agent (Node 22) and is used by the page to render the analysis. The page's single **Refresh** button polls the live price immediately, re-fetches the dashboard's live sources (mempool.space, CoinGecko) and reloads the published data files; the server-side data itself is produced by the scheduled `market-intel` (daily) and `dashboard-feed` (every 15 minutes) workflows, which can also be started manually from the Actions tab.
 
 ### Schedule and time zone
 

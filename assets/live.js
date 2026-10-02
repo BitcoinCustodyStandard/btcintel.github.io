@@ -63,5 +63,10 @@ export function startLivePrice({ onPrice, onState }) {
   const onVis = () => { if (document.hidden) clearTimeout(timer); else tick().then(schedule); };
   document.addEventListener('visibilitychange', onVis);
   tick().then(schedule);
-  return { stop() { stopped = true; clearTimeout(timer); document.removeEventListener('visibilitychange', onVis); }, get last() { return last; } };
+  return {
+    stop() { stopped = true; clearTimeout(timer); document.removeEventListener('visibilitychange', onVis); },
+    // poll now, ignoring each source's minimum interval (used by the Refresh button)
+    async now() { clearTimeout(timer); for (const h of health.values()) { h.lastAt = 0; h.skipUntil = 0; } await tick(); schedule(); return last; },
+    get last() { return last; },
+  };
 }

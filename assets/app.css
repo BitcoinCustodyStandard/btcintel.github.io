@@ -965,3 +965,15 @@ details.more[open] > summary { border-bottom: 1px solid var(--line); }
 /* Today's read sits inside the "Bitcoin right now" card, under the price and stats */
 .dh-main { display: flex; flex-direction: column; }
 .dh-main .tread { margin: 14px 0 0; padding: 12px 0 0; background: none; border: 0; border-top: 1px solid var(--line); border-radius: 0; }
+
+/* ── Full width, take 2: only true ultrawides (>2560px) get any outer margin ── */
+.wrap { max-width: 2560px; padding-left: clamp(16px, 1.6vw, 40px); padding-right: clamp(16px, 1.6vw, 40px); }
+@media (min-width: 2300px) { .dkcards { grid-template-columns: repeat(7, minmax(0, 1fr)); } }
+
+/* single Refresh button: spinner while busy */
+#btn-refresh { display: inline-flex; align-items: center; gap: 8px; }
+#btn-refresh .spin { display: none; width: 12px; height: 12px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin 0.8s linear infinite; }
+#btn-refresh.busy .spin { display: inline-block; }
+#btn-refresh:disabled { opacity: 0.85; cursor: progress; }
+@keyframes spin { to { transform: rotate(360deg); } }
+@media (prefers-reduced-motion: reduce) { #btn-refresh .spin { animation-duration: 2.4s; } }

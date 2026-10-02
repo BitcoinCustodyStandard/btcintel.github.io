@@ -4,9 +4,9 @@
 // data/latest.json (agent snapshot) and data/pi_cycle.json. Values that cannot be
 // obtained free are shown as such, never estimated.
 
-import { startNetwork, seedNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js';
-import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js';
-import { priceCardHtml, envelopeNow } from './pricechart.js';
+import { startNetwork, seedNetwork, refreshNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js?v=20261003a';
+import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js?v=20261003a';
+import { priceCardHtml, envelopeNow } from './pricechart.js?v=20261003a';
 
 // ---------- formatting ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -529,8 +529,14 @@ function refreshSide() {
 }
 let readT = 0;
 export function dashLive(live) { S.live = live; paintHero(); paintCards(); paintSince(); if (Date.now() - readT > 60e3) { readT = Date.now(); paintRead(); } }
-async function fetchCg() {
-  if (document.hidden && S.cg) return;
+// Refresh button: network data, CoinGecko market stats and the 15-minute feed file, now
+export async function refreshDash() {
+  const feed = fetch('data/dash.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { S.dash = j; refreshSide(); paintCards(); } }).catch(() => {});
+  await Promise.allSettled([refreshNetwork(), fetchCg(true), feed]);
+  paintHero(); paintCards(); paintClock(); paintRead();
+}
+async function fetchCg(force) {
+  if (!force && document.hidden && S.cg) return;
   try {
     const [c, g] = await Promise.all([
       fetch('https://api.coingecko.com/api/v3/coins/bitcoin?localization=false&tickers=false&community_data=false&developer_data=false&sparkline=false').then((r) => (r.ok ? r.json() : null)),
