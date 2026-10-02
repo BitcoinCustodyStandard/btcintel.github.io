@@ -131,9 +131,4 @@ Run locally: `cd agent && npm ci && node run.mjs` (live) or `node test/offline.m
 
 ## Market Battlefield (`/battlefield/`)
 
-A real-time visualization of market structure: bulls stand on resting bids, bears on resting asks, the front line is the aggregated mid-price, formations scale with displayed order-book liquidity, $50 price bands holding ≥4× the median band and ≥$2M appear as labelled champions (walls), large aggressive trades arc into the front line, and liquidations explode in the ranks of the side that was liquidated.
-
-- **Live mode** connects from the browser to public exchange WebSockets: Coinbase Advanced Trade (level2, trades, ticker), Kraken v2 (1000-level book, trades, ticker), OKX (spot book, spot + perp trades, all-SWAP liquidations, funding, OI), Deribit (BTC-PERPETUAL trades, whose `liquidation` flag marks forced trades) and Binance (spot trades; USDⓈ-M all-market liquidation stream filtered to BTC — US locations receive no data, which the page reports as "silent"). No keys, no server.
-- **Replay mode** plays back real feed data recorded by the `battle-record` workflow (`battlefield/record.mjs` → `replay.json`). It is used automatically if live feeds cannot be reached, and in previews that cannot open connections.
-- **Observed vs modeled.** Price, 24h change, walls, book imbalance, liquidations, large trades, funding, OI and spot volume are observed (with venue coverage stated). The pressure index, army strength, liquidation zones (from the daily model) and front-line momentum are labelled as modeled.
-- Coinbase trade aggressor side is inferred from execution price versus the book mid; Kraken, OKX, Deribit and Binance report it directly. A venue counts as live only once data arrives; liquidation totals cover only the connected venues and are labelled as not market-wide.
+A real-time visualization of order-book pressure, trades and liquidations. Not built yet; the page is a placeholder.
