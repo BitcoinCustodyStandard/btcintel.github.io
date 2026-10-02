@@ -88,11 +88,23 @@ async function lightning() {
   return { source: 'mempool.space Lightning statistics', asOf: L.added.slice(0, 10), channels: L.channel_count, nodes: L.node_count, capacityBtc: L.total_capacity / 1e8 };
 }
 
+// snapshot of mempool.space network state, used by the page when a browser cannot reach it
+async function network() {
+  const M = 'https://mempool.space/api';
+  const [blocks, fees, mp, da, hr, rw] = await Promise.all(['/v1/blocks', '/v1/fees/recommended', '/mempool', '/v1/difficulty-adjustment', '/v1/mining/hashrate/3d', '/v1/mining/reward-stats/144'].map((p) => get(M + p)));
+  return {
+    source: 'mempool.space (server snapshot)', at: new Date().toISOString(),
+    blocks: blocks.slice(0, 15).map((b) => ({ height: b.height, timestamp: b.timestamp, tx_count: b.tx_count, size: b.size, extras: { reward: b.extras?.reward ?? null, totalFees: b.extras?.totalFees ?? null, pool: { name: b.extras?.pool?.name ?? null } } })),
+    fees, mempool: { count: mp.count, vsize: mp.vsize, total_fee: mp.total_fee }, da,
+    hash: { currentHashrate: hr.currentHashrate, currentDifficulty: hr.currentDifficulty }, reward: rw,
+  };
+}
+
 async function main() {
   let prev = null;
   try { prev = JSON.parse(await readFile(OUT, 'utf8')); } catch {}
   const out = { updated: new Date().toISOString() };
-  const blocks = { news, fng, treasuries, volume, flows, lightning };
+  const blocks = { news, fng, treasuries, volume, flows, lightning, network };
   await Promise.all(Object.entries(blocks).map(async ([k, fn]) => {
     try { out[k] = await fn(); log(`${k}: ok`); }
     catch (e) {
@@ -102,7 +114,7 @@ async function main() {
     }
   }));
   if (out.news?.sources) log(out.news.sources.map((s) => `${s.name}:${s.ok ? s.n : 'ERR ' + s.error}`).join(' · '));
-  const strip = (o) => JSON.stringify({ ...o, updated: 0, treasuries: o?.treasuries && { ...o.treasuries, fetchedAt: 0 } });
+  const strip = (o) => JSON.stringify({ ...o, updated: 0, treasuries: o?.treasuries && { ...o.treasuries, fetchedAt: 0 }, network: o?.network && { ...o.network, at: 0 } });
   if (prev && strip(prev) === strip(out)) { log('No content change.'); return; }
   await writeFile(OUT, JSON.stringify(out) + '\n');
   log('Wrote data/dash.json');

@@ -18,25 +18,39 @@ const setBlocks = (bl) => {
   N.height = N.blocks[0]?.height ?? N.height; N.tipTime = N.blocks[0]?.t ?? N.tipTime;
 };
 
+// Fill gaps from the server's 15-minute snapshot (data/dash.json → network) so cards are not
+// empty when this browser cannot reach mempool.space. Live data replaces it as it arrives.
+export function seedNetwork(snap) {
+  if (!snap?.blocks?.length || N.live) return;
+  setBlocks(snap.blocks);
+  N.fees = N.fees || snap.fees;
+  N.mempool = N.mempool || { count: snap.mempool.count, vsize: snap.mempool.vsize, totalFee: snap.mempool.total_fee };
+  N.da = N.da || snap.da;
+  N.hash = N.hash || { current: snap.hash.currentHashrate, difficulty: snap.hash.currentDifficulty };
+  N.reward = N.reward || { start: snap.reward.startBlock, end: snap.reward.endBlock, total: +snap.reward.totalReward, fees: +snap.reward.totalFee, tx: +snap.reward.totalTx };
+  N.at = N.at || Date.parse(snap.at);
+  N.seeded = Date.parse(snap.at);
+}
+
 export function startNetwork({ onUpdate, onBlock }) {
   let ws = null, poll = null, tries = 0, slowT = 0;
-  const done = () => { N.at = Date.now(); onUpdate(N); };
+  const done = (live = true) => { if (live) { N.at = Date.now(); N.live = true; } onUpdate(N); };
   const get = async (k, path, fn) => { try { fn(await j(path)); delete N.errors[k]; } catch (e) { N.errors[k] = e.message; } };
   const fast = () => Promise.all([
     get('blocks', '/v1/blocks', setBlocks),
     get('fees', '/v1/fees/recommended', (v) => { N.fees = v; }),
     get('mempool', '/mempool', (v) => { N.mempool = { count: v.count, vsize: v.vsize, totalFee: v.total_fee }; }),
     get('da', '/v1/difficulty-adjustment', (v) => { N.da = v; }),
-  ]).then(done);
+  ]).then(() => done(!N.errors.blocks || !N.errors.fees));
   // hash rate and the 144-block reward window change only per block
   const slow = () => { slowT = Date.now(); return Promise.all([
     get('hash', '/v1/mining/hashrate/3d', (v) => { N.hash = { current: v.currentHashrate, difficulty: v.currentDifficulty }; }),
     get('reward', '/v1/mining/reward-stats/144', (v) => { N.reward = { start: v.startBlock, end: v.endBlock, total: +v.totalReward, fees: +v.totalFee, tx: +v.totalTx }; }),
-  ]).then(done); };
+  ]).then(() => done(!N.errors.hash || !N.errors.reward)); };
   const startPoll = () => { if (!poll) poll = setInterval(() => { fast(); if (Date.now() - slowT > 300e3) slow(); }, 60e3); };
   const connect = () => {
     try { ws = new WebSocket('wss://mempool.space/api/v1/ws'); } catch { N.ws = 'down'; startPoll(); return; }
-    ws.onopen = () => { tries = 0; N.ws = 'live'; clearInterval(poll); poll = null; ws.send(JSON.stringify({ action: 'want', data: ['blocks', 'stats'] })); done(); };
+    ws.onopen = () => { tries = 0; N.ws = 'live'; clearInterval(poll); poll = null; ws.send(JSON.stringify({ action: 'want', data: ['blocks', 'stats'] })); done(false); };
     ws.onmessage = (m) => {
       let d; try { d = JSON.parse(m.data); } catch { return; }
       if (d.blocks) setBlocks(d.blocks);

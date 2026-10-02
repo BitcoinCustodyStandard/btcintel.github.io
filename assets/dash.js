@@ -4,7 +4,7 @@
 // data/latest.json (agent snapshot) and data/pi_cycle.json. Values that cannot be
 // obtained free are shown as such, never estimated.
 
-import { startNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js';
+import { startNetwork, seedNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js';
 import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js';
 import { piCardHtml } from './pichart.js';
 
@@ -43,6 +43,7 @@ const fresh = (at, maxAge) => (!at ? 'na' : Date.now() - (typeof at === 'number'
 
 // ---------- metric cards ----------
 // get() → { v, sub?, src, at?, max?, na? } or null (shown as "not available")
+const mpSrc = (extra = '') => (N.live ? `mempool.space${extra}` : `mempool.space snapshot${extra}`);
 const NA = (why) => ({ na: true, v: 'Not available from free sources', sub: why });
 const GROUPS = [
   { id: 'market', title: 'Price & market', cards: [
@@ -56,18 +57,18 @@ const GROUPS = [
     { k: 'rv', label: 'Realised volatility (30d)', info: 'd_rv', get: () => { const p = S.a?.metrics.price; return ok(p?.rv30) ? { v: `${p.rv30.toFixed(0)}%`, sub: `7-day ${p.rv7?.toFixed(0) ?? '—'}% · annualised`, src: 'Computed from daily closes', at: srcQ('coingecko_hist')?.asOf, max: 36 * H } : null; } },
   ] },
   { id: 'network', title: 'Network', cards: [
-    { k: 'height', label: 'Block height', info: 'd_height', get: () => N.height ? { v: num(N.height), sub: `last block <b data-tick="tip">${ago(N.tipTime)}</b>${N.blocks[0]?.pool ? ` · ${esc(N.blocks[0].pool)}` : ''}`, src: `mempool.space · ${N.ws === 'live' ? 'live' : 'polling'}`, at: N.at, max: 5 * 60e3 } : null },
-    { k: 'hash', label: 'Hash rate (3-day estimate)', info: 'd_hashrate', get: () => N.hash ? { v: `${num(N.hash.current / 1e18)} EH/s`, sub: ok(S.a?.metrics.onchain?.hashCh30d) ? `<span class="${cls(S.a.metrics.onchain.hashCh30d)}">${pct(S.a.metrics.onchain.hashCh30d)}</span> over 30 days` : '', src: 'mempool.space', at: N.at, max: 30 * 60e3 } : null },
-    { k: 'diff', label: 'Difficulty', info: 'd_difficulty', get: () => N.hash ? { v: `${(N.hash.difficulty / 1e12).toFixed(1)} T`, sub: N.da ? `last adjustment <span class="${cls(N.da.previousRetarget)}">${pct(N.da.previousRetarget, 2)}</span>` : '', src: 'mempool.space', at: N.at, max: 30 * 60e3 } : null },
-    { k: 'nextadj', label: 'Next difficulty adjustment', info: 'd_nextadj', get: () => N.da ? { v: `<span class="${cls(N.da.difficultyChange)}">${pct(N.da.difficultyChange, 2)}</span> <small>est.</small>`, sub: `in ${num(N.da.remainingBlocks)} blocks · ~${dShort(N.da.estimatedRetargetDate)}`, src: 'mempool.space', at: N.at, max: 30 * 60e3 } : null },
-    { k: 'blocktime', label: 'Average block time', info: 'd_blocktime', get: () => N.da ? { v: `${(N.da.timeAvg / 60e3).toFixed(1)} min`, sub: `this difficulty period · target 10 min · ${N.da.progressPercent.toFixed(0)}% through`, src: 'mempool.space', at: N.at, max: 30 * 60e3 } : null },
+    { k: 'height', label: 'Block height', info: 'd_height', get: () => N.height ? { v: num(N.height), sub: `last block <b data-tick="tip">${ago(N.tipTime)}</b>${N.blocks[0]?.pool ? ` · ${esc(N.blocks[0].pool)}` : ''}`, src: N.live ? `mempool.space · ${N.ws === 'live' ? 'live' : 'polling'}` : 'mempool.space snapshot', at: N.at, max: 5 * 60e3 } : null },
+    { k: 'hash', label: 'Hash rate (3-day estimate)', info: 'd_hashrate', get: () => N.hash ? { v: `${num(N.hash.current / 1e18)} EH/s`, sub: ok(S.a?.metrics.onchain?.hashCh30d) ? `<span class="${cls(S.a.metrics.onchain.hashCh30d)}">${pct(S.a.metrics.onchain.hashCh30d)}</span> over 30 days` : '', src: mpSrc(), at: N.at, max: 30 * 60e3 } : null },
+    { k: 'diff', label: 'Difficulty', info: 'd_difficulty', get: () => N.hash ? { v: `${(N.hash.difficulty / 1e12).toFixed(1)} T`, sub: N.da ? `last adjustment <span class="${cls(N.da.previousRetarget)}">${pct(N.da.previousRetarget, 2)}</span>` : '', src: mpSrc(), at: N.at, max: 30 * 60e3 } : null },
+    { k: 'nextadj', label: 'Next difficulty adjustment', info: 'd_nextadj', get: () => N.da ? { v: `<span class="${cls(N.da.difficultyChange)}">${pct(N.da.difficultyChange, 2)}</span> <small>est.</small>`, sub: `in ${num(N.da.remainingBlocks)} blocks · ~${dShort(N.da.estimatedRetargetDate)}`, src: mpSrc(), at: N.at, max: 30 * 60e3 } : null },
+    { k: 'blocktime', label: 'Average block time', info: 'd_blocktime', get: () => N.da ? { v: `${(N.da.timeAvg / 60e3).toFixed(1)} min`, sub: `this difficulty period · target 10 min · ${N.da.progressPercent.toFixed(0)}% through`, src: mpSrc(), at: N.at, max: 30 * 60e3 } : null },
     { k: 'ln', label: 'Lightning capacity', info: 'd_lightning', get: () => { const L = S.dash?.lightning; if (!L?.asOf) return NA('Lightning statistics could not be retrieved.'); if (Date.now() - Date.parse(L.asOf) > 14 * DAY) return NA(`mempool.space’s free Lightning statistics stopped updating on ${dShort(L.asOf)}; older figures are not shown.`); return { v: btcF(L.capacityBtc), sub: `${num(L.channels)} channels · ${num(L.nodes)} nodes`, src: L.source, at: L.asOf, max: 3 * DAY }; } },
   ] },
   { id: 'fees', title: 'Fees & mempool', cards: [
-    { k: 'fees', label: 'Fee to confirm in ~10 min', info: 'd_fees', get: () => N.fees ? { v: `${N.fees.fastestFee} sat/vB`, sub: `30 min ${N.fees.halfHourFee} · 1 h ${N.fees.hourFee} · economy ${N.fees.economyFee}`, src: 'mempool.space', at: N.at, max: 10 * 60e3 } : null },
-    { k: 'txcost', label: 'Simple transaction cost', info: 'd_txcost', get: () => N.fees && price() ? { v: usd((140 * N.fees.halfHourFee * price()) / 1e8, 2), sub: `≈140 vB at ${N.fees.halfHourFee} sat/vB (30-min rate)`, src: 'mempool.space · live price', at: N.at, max: 10 * 60e3 } : null },
-    { k: 'mempool', label: 'Mempool backlog', info: 'd_mempool', get: () => N.mempool ? { v: `${num(N.mempool.count)} tx`, sub: `${(N.mempool.vsize / 1e6).toFixed(1)} MvB ≈ ${Math.max(1, Math.ceil(N.mempool.vsize / 1e6))} blocks of transactions waiting`, src: 'mempool.space', at: N.at, max: 10 * 60e3 } : null },
-    { k: 'feeshare', label: 'Fees share of miner revenue', info: 'd_feeshare', get: () => N.reward ? { v: pct((N.reward.fees / N.reward.total) * 100, 2, false), sub: `${btcF(N.reward.fees / 1e8, 2)} in fees over the last 144 blocks`, src: 'mempool.space reward stats', at: N.at, max: 60 * 60e3 } : null },
+    { k: 'fees', label: 'Fee to confirm in ~10 min', info: 'd_fees', get: () => N.fees ? { v: `${N.fees.fastestFee} sat/vB`, sub: `30 min ${N.fees.halfHourFee} · 1 h ${N.fees.hourFee} · economy ${N.fees.economyFee}`, src: mpSrc(), at: N.at, max: 10 * 60e3 } : null },
+    { k: 'txcost', label: 'Simple transaction cost', info: 'd_txcost', get: () => N.fees && price() ? { v: usd((140 * N.fees.halfHourFee * price()) / 1e8, 2), sub: `≈140 vB at ${N.fees.halfHourFee} sat/vB (30-min rate)`, src: mpSrc(' · live price'), at: N.at, max: 10 * 60e3 } : null },
+    { k: 'mempool', label: 'Mempool backlog', info: 'd_mempool', get: () => N.mempool ? { v: `${num(N.mempool.count)} tx`, sub: `${(N.mempool.vsize / 1e6).toFixed(1)} MvB ≈ ${Math.max(1, Math.ceil(N.mempool.vsize / 1e6))} blocks of transactions waiting`, src: mpSrc(), at: N.at, max: 10 * 60e3 } : null },
+    { k: 'feeshare', label: 'Fees share of miner revenue', info: 'd_feeshare', get: () => N.reward ? { v: pct((N.reward.fees / N.reward.total) * 100, 2, false), sub: `${btcF(N.reward.fees / 1e8, 2)} in fees over the last 144 blocks`, src: mpSrc(' reward stats'), at: N.at, max: 60 * 60e3 } : null },
   ] },
   { id: 'mining', title: 'Mining', cards: [
     { k: 'hashprice', label: 'Hashprice', info: 'd_hashprice', get: () => { const hp = N.reward && N.hash ? hashprice(N.reward.total / 1e8 / (N.reward.end - N.reward.start + 1), price(), N.hash.difficulty) : null; return ok(hp) ? { v: `$${hp.toFixed(2)}`, sub: 'per PH/s per day · last 144 blocks’ rewards ÷ difficulty', src: 'Computed from mempool.space', at: N.at, max: 60 * 60e3 } : null; } },
@@ -121,11 +122,11 @@ function flowBars(net) {
   const W = 300, Hh = 46, m = Math.max(...net.map((r) => Math.abs(r[1]))) || 1, bw = W / net.length;
   return `<svg class="fbars" viewBox="0 0 ${W} ${Hh}" preserveAspectRatio="none" role="img" aria-label="Daily exchange net flow, last ${net.length} days">${net.map(([d, v], i) => { const hh = (Math.abs(v) / m) * (Hh / 2 - 1); return `<rect class="${v > 0 ? 'in' : 'out'}" x="${(i * bw + 0.5).toFixed(1)}" width="${Math.max(0.8, bw - 1).toFixed(1)}" y="${(v > 0 ? Hh / 2 - hh : Hh / 2).toFixed(1)}" height="${Math.max(0.5, hh).toFixed(1)}"><title>${d}: ${v > 0 ? '+' : '−'}${num(Math.abs(v))} BTC</title></rect>`; }).join('')}<line x1="0" x2="${W}" y1="${Hh / 2}" y2="${Hh / 2}"/></svg><span class="fleg"><i class="in"></i>into exchanges <i class="out"></i>out of exchanges · ${net.length} days</span>`;
 }
-const cardShell = (c) => `<div class="mcard${c.wide ? ' wide' : ''}" data-k="${c.k}"><div class="mc-h"><span class="mc-l">${esc(c.label)}</span>${S.info(c.info)}</div><div class="mc-v num"></div><div class="mc-s"></div><div class="mc-m"><i class="fd"></i><span></span></div></div>`;
+const cardShell = (c) => `<div class="dkcard${c.wide ? ' wide' : ''}" data-k="${c.k}"><div class="mc-h"><span class="mc-l">${esc(c.label)}</span>${S.info(c.info)}</div><div class="mc-v num"></div><div class="mc-s"></div><div class="mc-m"><i class="fd"></i><span></span></div></div>`;
 const freshLabel = { ok: 'up to date', stale: 'older than its usual update interval', na: 'not available' };
 export function paintCards(root = document) {
   for (const g of GROUPS) for (const c of g.cards) {
-    const el = root.querySelector(`.mcard[data-k="${c.k}"]`);
+    const el = root.querySelector(`.dkcard[data-k="${c.k}"]`);
     if (!el) continue;
     let r; try { r = c.get(); } catch { r = null; }
     if (!r) r = { na: true, v: 'Waiting for data…', sub: '', src: '' };
@@ -241,7 +242,7 @@ function paintClock() {
   const n = document.getElementById('bc-n'); if (!n || !N.height) return;
   n.textContent = '#' + num(N.height);
   const tip = N.tipTime, mins = (Date.now() - tip) / 60e3;
-  document.getElementById('bc-s').innerHTML = `found <b>${ago(tip)}</b>${N.blocks[0]?.tx ? ` · ${num(N.blocks[0].tx)} tx` : ''}${N.blocks[0]?.pool ? ` · ${esc(N.blocks[0].pool)}` : ''}<span class="bc-bar"><i style="width:${Math.min(100, (mins / 10) * 100).toFixed(0)}%" class="${mins > 20 ? 'long' : ''}"></i></span><span class="dim small">${N.ws === 'live' ? 'live' : 'polling'} · 10-min target</span>`;
+  document.getElementById('bc-s').innerHTML = `found <b>${ago(tip)}</b>${N.blocks[0]?.tx ? ` · ${num(N.blocks[0].tx)} tx` : ''}${N.blocks[0]?.pool ? ` · ${esc(N.blocks[0].pool)}` : ''}<span class="bc-bar"><i style="width:${Math.min(100, (mins / 10) * 100).toFixed(0)}%" class="${mins > 20 ? 'long' : ''}"></i></span><span class="dim small">${!N.live ? 'server snapshot · live feed unreachable' : N.ws === 'live' ? 'live' : 'polling'} · 10-min target</span>`;
   document.getElementById('bc-blocks').innerHTML = N.blocks.slice(0, 8).map((b, i) => `<span title="#${b.height} · ${num(b.tx)} tx · ${hhmm.format(new Date(b.t))}" style="opacity:${1 - i * 0.1}">${String(b.height).slice(-3)}</span>`).join('');
   document.querySelectorAll('[data-tick="tip"]').forEach((e) => { e.textContent = ago(tip); });
 }
@@ -296,7 +297,7 @@ export function dashTab({ a, pi, dash, info }) {
     <div class="dmain">${piCardHtml(pi, S.info('picycle'))}${movesHtml()}</div>
     <aside class="dside">${fngHtml()}${newsHtml()}</aside>
   </div>
-  ${GROUPS.map((g) => `<section class="mgroup" id="g-${g.id}"><h2>${g.title}</h2><div class="mcards">${g.cards.map(cardShell).join('')}</div></section>`).join('')}
+  ${GROUPS.map((g) => `<section class="mgroup" id="g-${g.id}"><h2>${g.title}</h2><div class="dkcards">${g.cards.map(cardShell).join('')}</div></section>`).join('')}
   <section class="deeper"><h2>Go deeper</h2><div class="dlinks">${DEEPER.map(([u, t, d]) => `<a href="${u}"${u.startsWith('http') ? ' target="_blank" rel="noopener"' : ''}><b>${t}</b><span>${d}</span></a>`).join('')}</div></section>
   <details class="about"><summary>About this dashboard</summary>
     <p><b>All data on this page comes from free public sources. We do not paywall any of these metrics. Some advanced on-chain or entity-adjusted metrics require paid providers and are therefore not shown here.</b></p>
@@ -327,6 +328,7 @@ export function mountDash({ dash, getLive }) {
   const u = document.getElementById('cv-usd'), s = document.getElementById('cv-sats');
   u?.addEventListener('input', () => { cvSource = 'usd'; paintConverter(true); });
   s?.addEventListener('input', () => { cvSource = 'sats'; paintConverter(true); });
+  seedNetwork(dash?.network);
   paintNews(); paintMoves(); paintMoveStatus(); paintHero(); paintCards(); paintClock(); paintSince();
   if (started) return;
   started = true;
