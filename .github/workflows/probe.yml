@@ -12,35 +12,34 @@ jobs:
         with: { node-version: 22 }
       - run: |
           cat > p.mjs <<'JS'
-          const urls = [
-            'https://www.coindesk.com/arc/outboundfeeds/rss/',
-            'https://cointelegraph.com/rss/tag/bitcoin',
-            'https://cointelegraph.com/rss',
-            'https://bitcoinmagazine.com/feed',
-            'https://decrypt.co/feed',
-            'https://www.theblock.co/rss.xml',
-            'https://www.federalreserve.gov/feeds/press_all.xml',
-            'https://api.blockchair.com/bitcoin/transactions?q=output_total(50000000000..)&s=id(desc)&limit=10',
-            'https://mempool.space/api/v1/lightning/statistics/latest',
-            'https://mempool.space/api/v1/mining/reward-stats/144',
-            'https://mempool.space/api/v1/difficulty-adjustment',
-            'https://mempool.space/api/v1/fees/recommended',
-            'https://mempool.space/api/blocks/tip/height',
-            'https://mempool.space/api/v1/mining/hashrate/3d',
-            'https://api.coingecko.com/api/v3/companies/public_treasury/bitcoin',
-            'https://api.coingecko.com/api/v3/coins/bitcoin?localization=false&tickers=false&community_data=false&developer_data=false',
-            'https://api.coingecko.com/api/v3/global',
-            'https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=365&interval=daily',
-            'https://api.alternative.me/fng/?limit=2',
-            'https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc&metrics=FlowInExNtv,FlowOutExNtv,SplyCur,CapRealUSD&frequency=1d&page_size=3',
-            'https://api.exchange.coinbase.com/products/BTC-USD/stats',
-          ];
-          for (const u of urls) {
+          const get = async (u) => { try { const r = await fetch(u, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; btcintel/1.0)' }, signal: AbortSignal.timeout(15000) }); const t = await r.text(); console.log(`\n### ${r.status} ${u}\nlen=${t.length} acao=${r.headers.get('access-control-allow-origin')}\n${t.slice(0, 500).replace(/\s+/g, ' ')}`); } catch (e) { console.log(`\n### ERR ${u} ${e.message}`); } };
+          for (const m of ['FlowInExNtv', 'FlowOutExNtv', 'FlowInExUSD', 'SplyCur', 'CapMVRVCur', 'SplyExNtv', 'TxTfrValAdjUSD'])
+            await get(`https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc&metrics=${m}&frequency=1d&page_size=2&paging_from=end`);
+          await get('https://blockchain.info/unconfirmed-transactions?format=json&cors=true');
+          await get('https://mempool.space/api/v1/blocks');
+          await get('https://mempool.space/api/mempool');
+          await get('https://mempool.space/api/v1/lightning/statistics/3m');
+          const ws = (name, url, sub, ms = 20000) => new Promise((res) => {
+            let n = 0, sample = '', err = '';
             try {
-              const r = await fetch(u, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; btcintel/1.0; +https://btcintel.org)', accept: '*/*' }, signal: AbortSignal.timeout(15000) });
-              const t = await r.text();
-              console.log(`\n### ${r.status} ${u}\nlen=${t.length} type=${r.headers.get('content-type')}\n${t.slice(0, 700).replace(/\s+/g, ' ')}`);
-            } catch (e) { console.log(`\n### ERR ${u} ${e.message}`); }
-          }
+              const s = new WebSocket(url);
+              s.onopen = () => { if (sub) s.send(typeof sub === 'string' ? sub : JSON.stringify(sub)); };
+              s.onmessage = (e) => { n++; if (sample.length < 400) sample += String(e.data).slice(0, 200) + ' | '; };
+              s.onerror = (e) => { err = e.message || 'error'; };
+              s.onclose = (e) => { err += ` closed ${e.code}`; };
+              setTimeout(() => { try { s.close(); } catch {} console.log(`\n### WS ${name} msgs=${n} ${err}\n${sample}`); res(); }, ms);
+            } catch (e) { console.log(`\n### WS ${name} ERR ${e.message}`); res(); }
+          });
+          await Promise.all([
+            ws('blockchain.info unconfirmed', 'wss://ws.blockchain.info/inv', { op: 'unconfirmed_sub' }),
+            ws('coinbase matches', 'wss://ws-feed.exchange.coinbase.com', { type: 'subscribe', product_ids: ['BTC-USD'], channels: ['matches'] }),
+            ws('binance data-stream aggTrade', 'wss://data-stream.binance.vision/ws/btcusdt@aggTrade'),
+            ws('binance fstream forceOrder', 'wss://fstream.binance.com/ws/btcusdt@forceOrder', null, 30000),
+            ws('binance fstream all forceOrder', 'wss://fstream.binance.com/ws/!forceOrder@arr', null, 30000),
+            ws('okx liquidations', 'wss://ws.okx.com:8443/ws/v5/public', { op: 'subscribe', args: [{ channel: 'liquidation-orders', instType: 'SWAP' }] }, 30000),
+            ws('bybit liquidations', 'wss://stream.bybit.com/v5/public/linear', { op: 'subscribe', args: ['allLiquidation.BTCUSDT'] }, 30000),
+            ws('mempool blocks', 'wss://mempool.space/api/v1/ws', { action: 'want', data: ['blocks', 'stats', 'mempool-blocks'] }),
+            ws('kraken trades', 'wss://ws.kraken.com/v2', { method: 'subscribe', params: { channel: 'trade', symbol: ['BTC/USD'] } }),
+          ]);
           JS
           node p.mjs
