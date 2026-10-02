@@ -934,3 +934,34 @@ details.more[open] > summary { border-bottom: 1px solid var(--line); }
   .distt th:first-child, .distt td:first-child { position: sticky; left: 0; background: var(--card); z-index: 1; }
   .dist-wrap::after { content: 'Scroll sideways for coin holdings and changes →'; display: block; font-size: 10.5px; color: var(--dim); padding-top: 4px; position: sticky; left: 0; }
 }
+
+/* ── Full-width layout ──
+   One fluid container for header, nav, main and footer: fills the window with padding that
+   scales 16→32px, soft-capped at 1920px so ultra-wide screens stay readable. Prose blocks
+   (.report, .lead, footer text) keep their own reading-width caps. */
+.wrap { max-width: 1920px; padding-left: clamp(16px, 1.8vw, 32px); padding-right: clamp(16px, 1.8vw, 32px); }
+/* desktop: side columns grow with the window instead of fixed narrow strips */
+@media (min-width: 1200px) {
+  .dhero { grid-template-columns: minmax(0, 1fr) clamp(320px, 22vw, 440px); gap: 14px; }
+  .dgrid { grid-template-columns: minmax(0, 1fr) clamp(360px, 24vw, 500px); gap: 14px; }
+  .dkcards { gap: 12px; }
+  /* news and large-moves panels stretch to sit level with the taller chart */
+  .nlist { max-height: clamp(560px, 64vh, 820px); }
+  .mtable-wrap { max-height: clamp(330px, 34vh, 480px); }
+  .dh-px .px { font-size: clamp(46px, 3.2vw, 60px); }
+}
+/* large screens: denser metric rows */
+@media (min-width: 1600px) {
+  .dkcards { grid-template-columns: repeat(5, minmax(0, 1fr)); }
+  .mgroup { margin-top: 30px; }
+}
+@media (min-width: 1900px) {
+  .dkcards { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+}
+/* timeframe buttons stay on one line beside the title; the row scrolls instead of wrapping */
+.pi-head { flex-wrap: nowrap; }
+.pi-head h2 { flex: none; }
+@media (max-width: 700px) { .pi-head { flex-wrap: wrap; } }
+/* Today's read sits inside the "Bitcoin right now" card, under the price and stats */
+.dh-main { display: flex; flex-direction: column; }
+.dh-main .tread { margin: 14px 0 0; padding: 12px 0 0; background: none; border: 0; border-top: 1px solid var(--line); border-radius: 0; }

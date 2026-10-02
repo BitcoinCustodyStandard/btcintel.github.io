@@ -100,8 +100,10 @@ export async function drawPriceChart(host, pi, live) {
   }
   host.dataset.loaded = '1';
   const last = D?.at(-1), ref = intra && last ? { s50: last[2], s100: last[3], s200: last[4], mid: last[5], up: last[6], lo: last[7] } : null;
-  const W = Math.max(280, Math.round(host.clientWidth || 600)), mobile = W < 640;
-  const H = mobile ? 240 : 340, PAD = { l: mobile ? 52 : 64, r: mobile ? 10 : 16, t: 12, b: 26 };
+  const W = Math.max(280, Math.round(host.clientWidth || 600)), mobile = (window.innerWidth || W) < 768;
+  // the chart is the page's centrepiece: 55% of the window height, capped by its own width
+  // (keeps a wide, not tall, shape) and to 320–600px; phones keep a compact 240px
+  const H = mobile ? 240 : Math.round(Math.max(320, Math.min(600, (window.innerHeight || 800) * 0.55, W * 0.45))), PAD = { l: mobile ? 52 : 64, r: mobile ? 10 : 16, t: 12, b: 26 };
   const ov = pcState.ov;
   const x0 = pts[0].t, x1 = pts.at(-1).t + (live && !intra ? (pts.at(-1).t - x0) / 60 : 0);
   // y range: price always; overlays only within ±60% of the price range so flat references don't squash the line

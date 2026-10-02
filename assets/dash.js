@@ -373,6 +373,7 @@ function heroHtml() {
       <div class="dh-px"><span class="px num" data-live="px">${usd(price())}</span><span data-live="ch"></span>${S.info('d_price')}</div>
       <dl class="dh-stats" id="dh-stats"></dl>
       <div class="dh-since" id="dh-since" hidden></div>
+      <section class="tread" id="d-read" aria-label="Today’s read"></section>
     </div>
     <div class="dh-side">
       <div class="bclock"><div class="bc-h"><span class="k">Latest block</span>${S.info('d_height')}</div><div class="bc-n num" id="bc-n">—</div><div class="bc-s" id="bc-s">Connecting to mempool.space…</div><div class="bc-blocks" id="bc-blocks" aria-hidden="true"></div></div>
@@ -454,7 +455,6 @@ const DEEPER = [
 export function dashTab({ a, pi, dash, info }) {
   S.a = a; S.pi = pi; S.dash = dash; S.info = (k) => info(k).s;
   return `${heroHtml()}
-  <section class="tread" id="d-read" aria-label="Today’s read"></section>
   <div class="dgrid">
     <div class="dmain">${priceCardHtml(S.info)}${movesHtml()}</div>
     <aside class="dside">${fngHtml()}${newsHtml()}</aside>
