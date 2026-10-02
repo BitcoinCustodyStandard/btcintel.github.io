@@ -1,0 +1,46 @@
+name: probe-sources
+# Temporary: checks free data sources reachable from Actions. Will be removed.
+on:
+  push:
+    paths: ['.github/workflows/probe.yml']
+  workflow_dispatch:
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: |
+          cat > p.mjs <<'JS'
+          const urls = [
+            'https://www.coindesk.com/arc/outboundfeeds/rss/',
+            'https://cointelegraph.com/rss/tag/bitcoin',
+            'https://cointelegraph.com/rss',
+            'https://bitcoinmagazine.com/feed',
+            'https://decrypt.co/feed',
+            'https://www.theblock.co/rss.xml',
+            'https://www.federalreserve.gov/feeds/press_all.xml',
+            'https://api.blockchair.com/bitcoin/transactions?q=output_total(50000000000..)&s=id(desc)&limit=10',
+            'https://mempool.space/api/v1/lightning/statistics/latest',
+            'https://mempool.space/api/v1/mining/reward-stats/144',
+            'https://mempool.space/api/v1/difficulty-adjustment',
+            'https://mempool.space/api/v1/fees/recommended',
+            'https://mempool.space/api/blocks/tip/height',
+            'https://mempool.space/api/v1/mining/hashrate/3d',
+            'https://api.coingecko.com/api/v3/companies/public_treasury/bitcoin',
+            'https://api.coingecko.com/api/v3/coins/bitcoin?localization=false&tickers=false&community_data=false&developer_data=false',
+            'https://api.coingecko.com/api/v3/global',
+            'https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=365&interval=daily',
+            'https://api.alternative.me/fng/?limit=2',
+            'https://community-api.coinmetrics.io/v4/timeseries/asset-metrics?assets=btc&metrics=FlowInExNtv,FlowOutExNtv,SplyCur,CapRealUSD&frequency=1d&page_size=3',
+            'https://api.exchange.coinbase.com/products/BTC-USD/stats',
+          ];
+          for (const u of urls) {
+            try {
+              const r = await fetch(u, { headers: { 'user-agent': 'Mozilla/5.0 (compatible; btcintel/1.0; +https://btcintel.org)', accept: '*/*' }, signal: AbortSignal.timeout(15000) });
+              const t = await r.text();
+              console.log(`\n### ${r.status} ${u}\nlen=${t.length} type=${r.headers.get('content-type')}\n${t.slice(0, 700).replace(/\s+/g, ' ')}`);
+            } catch (e) { console.log(`\n### ERR ${u} ${e.message}`); }
+          }
+          JS
+          node p.mjs
