@@ -44,6 +44,7 @@ const fresh = (at, maxAge) => (!at ? 'na' : Date.now() - (typeof at === 'number'
 // ---------- metric cards ----------
 // get() → { v, sub?, src, at?, max?, na? } or null (shown as "not available")
 const mpSrc = (extra = '') => (N.live ? `mempool.space${extra}` : `mempool.space snapshot${extra}`);
+const fee = (v) => (ok(v) ? (v >= 10 ? Math.round(v) : +(+v).toFixed(1)) : '—');
 const NA = (why) => ({ na: true, v: 'Not available from free sources', sub: why });
 const GROUPS = [
   { id: 'market', title: 'Price & market', cards: [
@@ -65,8 +66,8 @@ const GROUPS = [
     { k: 'ln', label: 'Lightning capacity', info: 'd_lightning', get: () => { const L = S.dash?.lightning; if (!L?.asOf) return NA('Lightning statistics could not be retrieved.'); if (Date.now() - Date.parse(L.asOf) > 14 * DAY) return NA(`mempool.space’s free Lightning statistics stopped updating on ${dShort(L.asOf)}; older figures are not shown.`); return { v: btcF(L.capacityBtc), sub: `${num(L.channels)} channels · ${num(L.nodes)} nodes`, src: L.source, at: L.asOf, max: 3 * DAY }; } },
   ] },
   { id: 'fees', title: 'Fees & mempool', cards: [
-    { k: 'fees', label: 'Fee to confirm in ~10 min', info: 'd_fees', get: () => N.fees ? { v: `${N.fees.fastestFee} sat/vB`, sub: `30 min ${N.fees.halfHourFee} · 1 h ${N.fees.hourFee} · economy ${N.fees.economyFee}`, src: mpSrc(), at: N.at, max: 10 * 60e3 } : null },
-    { k: 'txcost', label: 'Simple transaction cost', info: 'd_txcost', get: () => N.fees && price() ? { v: usd((140 * N.fees.halfHourFee * price()) / 1e8, 2), sub: `≈140 vB at ${N.fees.halfHourFee} sat/vB (30-min rate)`, src: mpSrc(' · live price'), at: N.at, max: 10 * 60e3 } : null },
+    { k: 'fees', label: 'Fee to confirm in ~10 min', info: 'd_fees', get: () => N.fees ? { v: `${fee(N.fees.fastestFee)} sat/vB`, sub: `30 min ${fee(N.fees.halfHourFee)} · 1 h ${fee(N.fees.hourFee)} · economy ${fee(N.fees.economyFee)}`, src: mpSrc(), at: N.at, max: 10 * 60e3 } : null },
+    { k: 'txcost', label: 'Simple transaction cost', info: 'd_txcost', get: () => N.fees && price() ? { v: usd((140 * N.fees.halfHourFee * price()) / 1e8, 2), sub: `≈140 vB at ${fee(N.fees.halfHourFee)} sat/vB (30-min rate)`, src: mpSrc(' · live price'), at: N.at, max: 10 * 60e3 } : null },
     { k: 'mempool', label: 'Mempool backlog', info: 'd_mempool', get: () => N.mempool ? { v: `${num(N.mempool.count)} tx`, sub: `${(N.mempool.vsize / 1e6).toFixed(1)} MvB ≈ ${Math.max(1, Math.ceil(N.mempool.vsize / 1e6))} blocks of transactions waiting`, src: mpSrc(), at: N.at, max: 10 * 60e3 } : null },
     { k: 'feeshare', label: 'Fees share of miner revenue', info: 'd_feeshare', get: () => N.reward ? { v: pct((N.reward.fees / N.reward.total) * 100, 2, false), sub: `${btcF(N.reward.fees / 1e8, 2)} in fees over the last 144 blocks`, src: mpSrc(' reward stats'), at: N.at, max: 60 * 60e3 } : null },
   ] },
