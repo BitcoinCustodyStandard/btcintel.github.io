@@ -1,0 +1,15 @@
+{
+  "name": "btcintel-market-agent",
+  "private": true,
+  "type": "module",
+  "description": "Daily Bitcoin market-structure research agent (collect → analyze → report).",
+  "scripts": {
+    "run": "node run.mjs",
+    "scheduled": "node run.mjs --scheduled",
+    "query": "node query.mjs",
+    "test": "node test/offline.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.131.0"
+  }
+}

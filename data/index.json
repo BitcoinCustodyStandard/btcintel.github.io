@@ -1,0 +1,54 @@
+{
+ "reports": [
+  {
+   "id": "2026-10-02-0041",
+   "date": "2026-10-02",
+   "kind": "refresh",
+   "generatedAt": "2026-10-02T04:41:12.631Z",
+   "price": 86445,
+   "regime": "Balanced / no dominant driver"
+  },
+  {
+   "id": "2026-10-01-2354",
+   "date": "2026-10-01",
+   "kind": "refresh",
+   "generatedAt": "2026-10-02T03:54:53.703Z",
+   "price": 85364,
+   "regime": "Balanced / no dominant driver"
+  },
+  {
+   "id": "2026-10-01-1422",
+   "date": "2026-10-01",
+   "kind": "refresh",
+   "generatedAt": "2026-10-01T18:23:08.396Z",
+   "price": 84817,
+   "regime": "Balanced / no dominant driver"
+  },
+  {
+   "id": "2026-10-01-1420",
+   "date": "2026-10-01",
+   "kind": "refresh",
+   "generatedAt": "2026-10-01T18:20:54.642Z",
+   "price": 84811,
+   "regime": "Balanced / no dominant driver"
+  },
+  {
+   "id": "2026-10-01-1418",
+   "date": "2026-10-01",
+   "kind": "refresh",
+   "generatedAt": "2026-10-01T18:18:31.934Z",
+   "price": 84867,
+   "regime": "Balanced / no dominant driver"
+  },
+  {
+   "id": "2026-10-01-1414",
+   "date": "2026-10-01",
+   "kind": "refresh",
+   "generatedAt": "2026-10-01T18:14:35.322Z",
+   "price": 84843,
+   "regime": "Macro-led"
+  }
+ ],
+ "updated": "2026-10-02T04:41:12.631Z",
+ "timezone": "America/New_York"
+}

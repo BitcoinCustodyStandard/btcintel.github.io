@@ -1,0 +1,55 @@
+name: market-intel
+
+# Bitcoin Market Intelligence agent.
+# - Scheduled: 07:00 in INTEL_TZ (repo variable; default America/New_York).
+#   GitHub cron is UTC and has no DST, so two slots run and the agent's gate
+#   waits until exactly 07:00 local in whichever slot is correct (the other exits).
+# - Manual: Actions → market-intel → Run workflow, or the page's "Server run" button.
+on:
+  schedule:
+    - cron: '45 10 * * *'
+    - cron: '45 11 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: market-intel
+  cancel-in-progress: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    env:
+      INTEL_TZ: ${{ vars.INTEL_TZ || 'America/New_York' }}
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: agent/package-lock.json
+      - name: Install agent dependencies
+        working-directory: agent
+        run: npm ci --no-audit --no-fund
+      - name: Offline self-test
+        working-directory: agent
+        run: node test/offline.mjs
+      - name: Collect, analyse, report
+        run: node agent/run.mjs ${{ github.event_name == 'schedule' && '--scheduled' || '' }}
+      - name: Commit results
+        run: |
+          if [ -f data/.skipped ]; then rm -f data/.skipped; echo "Gate skipped this slot."; exit 0; fi
+          git config user.name "btcintel-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add data
+          if git diff --cached --quiet; then echo "No changes."; exit 0; fi
+          git commit -m "market-intel: ${{ github.event_name == 'schedule' && 'morning report' || 'refresh' }} $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3 4; do
+            git pull --rebase -X theirs origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((2 ** i))
+          done
+          exit 1

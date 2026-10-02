@@ -1,0 +1,45 @@
+name: battle-record
+
+# Records real exchange feed data for the Battlefield replay mode
+# (used when a viewer cannot open live WebSocket connections).
+on:
+  schedule:
+    - cron: '20 14 * * *'   # US session: more liquidations and large trades
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: Recording length in minutes
+        default: '15'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: battle-record
+  cancel-in-progress: true
+
+jobs:
+  record:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Record feeds
+        env:
+          RECORD_MIN: ${{ github.event.inputs.minutes || '25' }}
+        run: node battlefield/record.mjs
+      - name: Commit replay
+        run: |
+          git config user.name "btcintel-bot"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add battlefield/replay.json
+          if git diff --cached --quiet; then echo "No changes."; exit 0; fi
+          git commit -m "battlefield: record replay $(date -u +%Y-%m-%dT%H:%MZ)"
+          for i in 1 2 3 4; do
+            git pull --rebase -X theirs origin "${GITHUB_REF_NAME}" && git push origin "HEAD:${GITHUB_REF_NAME}" && exit 0
+            sleep $((2 ** i))
+          done
+          exit 1
