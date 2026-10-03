@@ -4,9 +4,9 @@
 // data/latest.json (agent snapshot) and data/pi_cycle.json. Values that cannot be
 // obtained free are shown as such, never estimated.
 
-import { startNetwork, seedNetwork, refreshNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js?v=20261003b';
-import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js?v=20261003b';
-import { priceCardHtml, envelopeNow } from './pricechart.js?v=20261003b';
+import { startNetwork, seedNetwork, refreshNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js?v=20261003c';
+import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js?v=20261003c';
+import { priceCardHtml, envelopeNow } from './pricechart.js?v=20261003c';
 
 // ---------- formatting ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -367,17 +367,12 @@ function paintDist() {
 
 // ---------- hero ----------
 function heroHtml() {
-  return `<section class="dhero" aria-label="Bitcoin right now">
-    <div class="dh-main">
+  return `<section class="dh-main" aria-label="Bitcoin right now">
       <div class="dh-top"><h1>Bitcoin right now</h1><span class="livebadge snap" data-live="badge"><i></i><span>Connecting to live price…</span></span></div>
       <div class="dh-px"><span class="px num" data-live="px">${usd(price())}</span><span data-live="ch"></span>${S.info('d_price')}</div>
       <dl class="dh-stats" id="dh-stats"></dl>
       <div class="dh-since" id="dh-since" hidden></div>
       <section class="tread" id="d-read" aria-label="Today’s read"></section>
-    </div>
-    <div class="dh-side">
-      <section class="dcard posture" id="d-posture" aria-label="Market posture"></section>
-    </div>
   </section>`;
 }
 export function paintHero() {
@@ -454,54 +449,95 @@ function postureSignals() {
   const fl = S.dash?.flows?.rows; if (fl?.length >= 30) { const n30 = fl.slice(-30).reduce((s, r) => s + (r[1] - r[2]), 0); add('flows', 'Exchange flows', n30 < -20000 ? 1 : n30 > 20000 ? -1 : 0, `${num(Math.abs(n30))} BTC net ${n30 < 0 ? 'left' : 'went into'} exchanges over 30 days.`); }
   return out;
 }
+// Market read: the posture label (fixed rules above) plus a section per force, each with a
+// verdict and the numbers behind it, and a conclusion assembled from those verdicts.
+// Directions for liquidity, leverage, flows and macro come from the daily analysis's own
+// force scores (Intelligence tab), so both views agree.
+const FORCE = (id) => S.a?.forces?.find((f) => f.id === id);
+const dirOf = (d = '') => (/bullish|supportive/i.test(d) ? 1 : /bearish/i.test(d) ? -1 : 0);
+const VERDICT = { 1: ['supportive', 'Supportive'], 0: ['neutral', 'Neutral'], '-1': ['headwind', 'Headwind'] };
+function marketSections() {
+  const a = S.a?.metrics || {}, p = price(), E = envelopeNow(S.pi, p), out = [];
+  const add = (key, title, v, lines, phrase) => out.push({ key, title, v: Math.max(-1, Math.min(1, v)), lines: lines.filter(Boolean), phrase });
+  // 1. trend & technicals
+  if (E) {
+    const t = (p >= E.sma200 ? 1 : -1) + (E.sma50 >= E.sma200 ? 1 : -1) + (p >= E.mid ? 1 : -1), v = t >= 2 ? 1 : t <= -2 ? -1 : 0;
+    const iv = a.options?.atmIv30, rv = a.price?.rv30;
+    add('tech', 'Trend & technicals', v, [
+      `Price ${usd(p)} is ${pct((p / E.sma200 - 1) * 100, 0)} vs the 200-day (${usd(E.sma200)}) and ${pct((p / E.sma50 - 1) * 100, 0)} vs the 50-day; the 50-day is ${E.sma50 >= E.sma200 ? 'above' : 'below'} the 200-day.`,
+      `Volatility envelope: ${esc(E.label)} (${usd(E.lo)} – ${usd(E.up)}, ${E.widthPct.toFixed(0)}% wide).${ok(iv) && ok(rv) ? ` Options price ${num(iv, 0)}% volatility vs ${num(rv, 0)}% realised over 30 days.` : ''}`,
+    ], v > 0 ? 'price holds above its rising long-term averages' : v < 0 ? 'price sits below its long-term averages' : 'the trend picture is mixed');
+  }
+  // 2. liquidity & market depth
+  const d = a.depth, dep = FORCE('depth');
+  if (d?.d1) {
+    const imb = d.imbalance1 ?? 0, sell = d.impact?.sell?.find((x) => x.sizeUsd === 1e8)?.slippagePct, buy = d.impact?.buy?.find((x) => x.sizeUsd === 1e8)?.slippagePct;
+    const lv = S.a?.map?.levels || [], notable = (l) => l.tags?.length && !l.tags.includes('no notable structure');
+    const up = lv.filter((l) => l.above && notable(l)).sort((x, y) => x.level - y.level)[0], dn = lv.filter((l) => !l.above && !l.isSpot && notable(l)).sort((x, y) => y.level - x.level)[0];
+    const v = dirOf(dep?.direction) + (imb > 0.1 ? 1 : imb < -0.1 ? -1 : 0);
+    add('liq', 'Liquidity & depth', v > 0 ? 1 : v < 0 ? -1 : 0, [
+      `Order books within ±1% of price hold ${big(d.d1)} across ${d.venueCount} venues: bids ${big(d.bid1)} vs asks ${big(d.ask1)} (${imb >= 0 ? 'bid' : 'ask'}-heavy by ${pct(Math.abs(imb) * 100, 0).replace('+', '')}).`,
+      ok(sell) && ok(buy) ? `A $100M market sell would move price about ${sell.toFixed(2)}%, a $100M buy about ${buy.toFixed(2)}%${Math.abs(sell - buy) > 0.1 ? ` — ${sell < buy ? 'upside is thinner, so rallies can travel further per dollar' : 'downside is thinner, so drops can travel further per dollar'}` : ''}.` : null,
+      up || dn ? `Nearest notable levels: ${up ? `${usd(up.level)} above (${esc(up.tags[0])})` : ''}${up && dn ? ' · ' : ''}${dn ? `${usd(dn.level)} below (${esc(dn.tags[0])})` : ''}.` : null,
+    ], imb > 0.1 ? 'order books are thicker on the bid side, so dips meet more resting demand' : imb < -0.1 ? 'order books are thicker on the ask side, so rallies meet more resting supply' : 'order-book depth is balanced');
+  }
+  // 3. leverage & derivatives
+  const dv = a.derivs, o = a.options;
+  if (dv?.totalOi) {
+    const v = dirOf(FORCE('leverage')?.direction) + dirOf(FORCE('funding')?.direction) + dirOf(FORCE('options')?.direction) + (dv.fundingAnn > 20 ? -1 : 0);
+    add('lev', 'Leverage & derivatives', v > 0 ? 1 : v < 0 ? -1 : 0, [
+      `Futures open interest ${big(dv.totalOi)} (${num(dv.oiPctMcap, 2)}% of market cap)${ok(dv.oiCh30d) ? `, ${pct(dv.oiCh30d)} over 30 days` : ''}; funding ${pct(dv.fundingAnn)} a year${dv.basis?.annPct ? `, futures basis ${pct(dv.basis.annPct)}` : ''}.`,
+      o ? `Options: put/call ${num(o.pcRatio, 2)}, 25-delta skew ${num(o.skew25, 1)} vol pts, implied volatility at the ${Math.round(o.dvolPctile ?? 0)}th percentile of the past year.` : null,
+    ], dv.fundingAnn > 20 ? 'leverage is crowded (funding above 20% a year)' : dv.fundingAnn < 0 ? 'shorts are paying to hold positions' : `leverage is moderate (funding ${pct(dv.fundingAnn, 0)} a year)`);
+  }
+  // 4. flows
+  const e = a.etf, fl = S.dash?.flows?.rows, n30 = fl?.length >= 30 ? fl.slice(-30).reduce((x, r) => x + (r[1] - r[2]), 0) : null, oc = a.onchain;
+  if (e || ok(n30)) {
+    const v = dirOf(FORCE('etf')?.direction) + dirOf(FORCE('onchain')?.direction) + (ok(n30) ? (n30 < -20000 ? 1 : n30 > 20000 ? -1 : 0) : 0);
+    add('flows', 'Flows', v >= 2 ? 1 : v <= -2 ? -1 : v, [
+      e ? `US spot ETFs: ${e.s5 >= 0 ? '+' : '−'}$${num(Math.abs(e.s5))}M over 5 trading days, ${e.s20 >= 0 ? '+' : '−'}$${num(Math.abs(e.s20))}M over 20.` : null,
+      ok(n30) ? `Exchanges: ${num(Math.abs(n30))} BTC net ${n30 < 0 ? 'withdrawn' : 'deposited'} over 30 days${ok(oc?.stables30d) ? `; stablecoin supply ${oc.stables30d >= 0 ? '+' : '−'}${big(Math.abs(oc.stables30d))} over 30 days` : ''}.` : null,
+    ], v > 0 ? 'ETF buying and exchange withdrawals point to steady accumulation' : v < 0 ? 'ETF outflows and exchange deposits point to net selling' : 'flows are mixed');
+  }
+  // 5. macro structure
+  const m = a.macro, C = S.dash?.correlations?.pairs;
+  if (m) {
+    const v = dirOf(FORCE('macro')?.direction) + dirOf(FORCE('dollar')?.direction);
+    const c = C?.SPX?.c30, link = ok(c) ? (Math.abs(c) >= 0.4 ? `Bitcoin is trading closely with stocks (30-day correlation ${num(c, 2)}), so equity moves matter more than usual` : `Bitcoin’s link to stocks is ${Math.abs(c) < 0.2 ? 'weak' : 'moderate'} (30-day correlation ${num(c, 2)})`) : null;
+    add('macro', 'Macro structure', v > 0 ? 1 : v < 0 ? -1 : 0, [
+      `Net liquidity (Fed assets − Treasury account − reverse repo) $${num(m.netLiq?.[1] / 1000, 2)}T, ${m.netLiq4w >= 0 ? '+' : '−'}$${num(Math.abs(m.netLiq4w), 0)}B over 4 weeks. Dollar index ${pct(m.dollar20d)} over 4 weeks; 10-year real yield ${num(m.real10y?.[1], 2)}% (${m.real10y20d >= 0 ? '+' : '−'}${num(Math.abs(m.real10y20d * 100), 0)} bp).`,
+      link ? `${link}.` : null,
+    ], v < 0 ? `a firmer dollar${m.real10y20d > 0.2 ? ' and rising real yields' : ''} tighten financial conditions` : v > 0 ? 'easing financial conditions add liquidity' : 'macro conditions are mixed');
+  }
+  // 6. sentiment & positioning
+  const Fg = S.dash?.fng, ls = a.derivs?.longShort?.okx, cb = a.depth?.coinbasePremiumPct;
+  if (ok(Fg?.value)) {
+    const ext = Fg.value <= 20 || Fg.value >= 80;
+    add('sent', 'Sentiment', ext ? -1 : 0, [
+      `Fear & Greed ${Fg.value} (${esc(Fg.label)}), 30-day average ${Fg.avg30 ?? '—'}${ok(ls) ? `; OKX long/short account ratio ${num(ls, 2)}` : ''}${ok(cb) ? `; Coinbase premium ${cb > 0 ? '+' : ''}${cb.toFixed(3)}%` : ''}.`,
+    ], ext ? `sentiment is at an extreme (${Fg.label.toLowerCase()})` : `sentiment is ${Fg.label.toLowerCase()} but not extreme`);
+  }
+  return out;
+}
+const joinAnd = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs.at(-1)}` : xs[0] || '');
 function paintPosture() {
   const el = document.getElementById('d-posture'); if (!el) return;
-  const sig = postureSignals();
-  if (sig.length < 3) { el.innerHTML = `<div class="dc-h"><h2>Market posture${S.info('d_posture')}</h2></div><p class="muted small">Waiting for enough data.</p>`; return; }
-  const total = sig.reduce((a, x) => a + x.score, 0), key = total >= 3 ? 'constructive' : total <= -2 ? 'cautious' : 'neutral';
+  const sig = postureSignals(), secs = marketSections();
+  if (sig.length < 3) { el.innerHTML = `<div class="dc-h"><h2>Market read${S.info('d_posture')}</h2></div><p class="muted small">Waiting for enough data.</p>`; return; }
+  const total = sig.reduce((x, y) => x + y.score, 0), key = total >= 3 ? 'constructive' : total <= -2 ? 'cautious' : 'neutral';
   const label = { constructive: 'Constructive', neutral: 'Neutral', cautious: 'Cautious' }[key];
-  // the three bullets: the strongest signals in the direction of the result, then the rest
-  const dir = Math.sign(total);
-  const why = [...sig].sort((x, y) => (dir ? (y.score * dir) - (x.score * dir) : Math.abs(y.score) - Math.abs(x.score))).slice(0, 3);
-  el.innerHTML = `<div class="dc-h"><h2>Market posture${S.info('d_posture')}</h2><span class="ps-score num" title="Sum of ${sig.length} signal scores">${total > 0 ? '+' : ''}${total} / ${sig.length}</span></div>
-    <div class="ps-label ${key}">${label}</div>
-    <ul class="ps-why">${why.map((x) => `<li><span class="sg s${x.score > 0 ? 'p' : x.score < 0 ? 'n' : 'z'}">${x.score > 0 ? '+' : x.score < 0 ? '−' : '0'}</span>${x.text}</li>`).join('')}</ul>
+  const sup = secs.filter((x) => x.v > 0).map((x) => x.phrase), head = secs.filter((x) => x.v < 0).map((x) => x.phrase), neu = secs.filter((x) => x.v === 0 && ['liq', 'lev', 'sent'].includes(x.key)).map((x) => x.phrase);
+  const watch = [...(S.a?.forces || [])].sort((x, y) => (x.rank ?? 99) - (y.rank ?? 99)).find((f) => f.watch)?.watch;
+  const cap = (t) => (t ? t.charAt(0).toUpperCase() + t.slice(1) : t);
+  const conclusion = `${sup.length ? `${cap(joinAnd(sup))}.` : ''} ${head.length ? `${sup.length ? 'Against that, ' : ''}${joinAnd(head)}.` : 'No section reads as a clear headwind.'} ${neu.length ? `${cap(joinAnd(neu))}.` : ''}`.replace(/\s+/g, ' ').trim();
+  el.innerHTML = `<div class="dc-h"><h2>Market read${S.info('d_posture')}</h2><a class="ps-more" href="#overview">Full analysis →</a></div>
+    <div class="ps-top"><div class="ps-label ${key}">${label}</div><span class="ps-score num" title="Sum of ${sig.length} posture rule scores">${total > 0 ? '+' : ''}${total} / ${sig.length}</span>${S.a?.regime?.primary ? `<span class="ps-regime">Regime: ${esc(S.a.regime.primary)}</span>` : ''}</div>
+    <p class="ps-concl">${conclusion}</p>
+    <div class="ps-secs">${secs.map((x) => `<section class="ps-sec"><div class="ps-sh"><span class="ps-st">${x.title}</span><span class="vchip ${VERDICT[x.v][0]}">${VERDICT[x.v][1]}</span></div>${x.lines.map((l) => `<p>${l}</p>`).join('')}</section>`).join('')}</div>
+    ${watch ? `<p class="ps-watch"><span class="k">Watch next</span>${esc(watch)}</p>` : ''}
     <div class="ps-chips">${sig.map((x) => `<span class="sg-chip s${x.score > 0 ? 'p' : x.score < 0 ? 'n' : 'z'}" title="${esc(x.text.replace(/<[^>]+>/g, ''))}">${esc(x.label)} ${x.score > 0 ? '+1' : x.score < 0 ? '−1' : '0'}</span>`).join('')}</div>
-    <details class="ps-rules"><summary>How this is decided</summary><ul>${POSTURE_RULES.map((r) => `<li>${esc(r)}</li>`).join('')}</ul><p>Total ≥ +3 → Constructive · ≤ −2 → Cautious · otherwise Neutral. Signals without current data are left out.</p></details>
+    <details class="ps-rules"><summary>How the label is decided</summary><ul>${POSTURE_RULES.map((r) => `<li>${esc(r)}</li>`).join('')}</ul><p>Total ≥ +3 → Constructive · ≤ −2 → Cautious · otherwise Neutral. Section verdicts use the daily analysis’s force scores (liquidity, leverage, flows, macro) and the same trend rules; signals without current data are left out.</p></details>
     <p class="tr-n">Rules-based summary of data on this page — not investment advice.</p>`;
-}
-
-// ---------- DCA planner ----------
-function dcaHtml() {
-  return `<section class="dcard dca" id="d-dca" aria-label="DCA planner">
-        <div class="dc-h"><h2>DCA planner${S.info('d_dca')}</h2></div>
-        <div class="dca-in">
-          <label><span>Amount (USD)</span><input type="text" inputmode="decimal" id="dca-amt" value="100" autocomplete="off"></label>
-          <label><span>Every</span><select id="dca-freq"><option value="365">day</option><option value="52" selected>week</option><option value="26">2 weeks</option><option value="12">month</option></select></label>
-        </div>
-        <div class="dca-out" id="dca-out"></div>
-        <div class="conv"><div class="bc-h"><span class="k">Quick convert</span>${S.info('d_converter')}</div>
-          <div class="conv-row"><label><span>USD</span><input type="text" inputmode="decimal" id="cv-usd" value="100" autocomplete="off"></label><span class="conv-eq">=</span><label><span>sats</span><input type="text" inputmode="numeric" id="cv-sats" autocomplete="off"></label></div>
-          <div class="conv-s dim" id="cv-note"></div></div>
-        <p class="tr-n">Illustration only — not a recommendation to buy or sell.</p>
-      </section>`;
-}
-function paintDca() {
-  const out = document.getElementById('dca-out'), p = price(); if (!out || !p) return;
-  const amt = +String(document.getElementById('dca-amt')?.value || '').replace(/[^0-9.]/g, ''), per = +document.getElementById('dca-freq')?.value || 52;
-  if (!(amt > 0)) { out.innerHTML = '<p class="muted small">Enter an amount.</p>'; return; }
-  const sats = (amt / p) * 1e8, yr = amt * per;
-  // what the same plan would have bought over the past year at each day's close (historical, factual)
-  let past = '';
-  const rows = S.pi?.rows;
-  if (rows?.length > 370) {
-    const step = Math.round(365 / per), last = rows.length - 1;
-    let btc = 0, spent = 0;
-    for (let i = last - 364; i <= last; i += step) { btc += amt / rows[i][1]; spent += amt; }
-    const val = btc * p, ch = (val / spent - 1) * 100;
-    past = `<div class="dca-past"><span class="k">Same plan over the past year</span><span>${num(spent)} USD → <b class="num">${btc.toFixed(5)} BTC</b> (average price ${usd(spent / btc)}), worth <b class="num">${usd(val)}</b> today <span class="${cls(ch)}">(${pct(ch)})</span></span><span class="dim small">Past results; they say nothing about the future.</span></div>`;
-  }
-  out.innerHTML = `<div class="dca-row"><span>Each purchase at today’s price</span><b class="num">${num(sats)} sats</b></div><div class="dca-row"><span>Per year (${num(per)} purchases)</span><b class="num">${usd(yr)} → ${((yr / p)).toFixed(4)} BTC</b></div><p class="dim small">At a constant ${usd(p)}; real purchases happen at whatever the price is each time.</p>${past}`;
 }
 
 // ---------- latest block strip ----------
@@ -545,13 +581,15 @@ const DEEPER = [
 ];
 export function dashTab({ a, pi, dash, info }) {
   S.a = a; S.pi = pi; S.dash = dash; S.info = (k) => info(k).s;
-  return `${heroHtml()}
-  <div class="dgrid">
-    <div class="dmain">${priceCardHtml(S.info)}${movesHtml()}</div>
-    <aside class="dside">${dcaHtml()}${fngHtml()}${newsHtml()}</aside>
+  return `<div class="dtop">
+    <div class="dcol dleft">${heroHtml()}${priceCardHtml(S.info)}${movesHtml()}</div>
+    <aside class="dcol dright"><section class="dcard posture" id="d-posture" aria-label="Market read"></section>${fngHtml()}${newsHtml()}</aside>
   </div>
   ${pmHtml()}
   ${GROUPS.map((g) => `<section class="mgroup" id="g-${g.id}"><h2>${g.title}</h2>${g.note ? `<p class="gintro">${g.note}</p>` : ''}${g.id === 'network' ? blockStripHtml() : ''}<div class="dkcards">${g.cards.map(cardShell).join('')}</div><p class="gnote" hidden></p></section>${g.id === 'onchain' ? distHtml() : ''}`).join('')}
+  <section class="mgroup" id="g-tools"><h2>Sats converter${S.info('d_converter')}</h2><div class="dcard conv tools-conv">
+    <div class="conv-row"><label><span>USD</span><input type="text" inputmode="decimal" id="cv-usd" value="100" autocomplete="off"></label><span class="conv-eq">=</span><label><span>sats</span><input type="text" inputmode="numeric" id="cv-sats" autocomplete="off"></label></div>
+    <div class="conv-s dim" id="cv-note"></div><p class="tr-n">For a full backtest of regular purchases, open the <a href="#dca">DCA backtest</a>.</p></div></section>
   <section class="deeper"><h2>Go deeper</h2><div class="dlinks">${DEEPER.map(([u, t, d]) => `<a href="${u}"${u.startsWith('http') ? ' target="_blank" rel="noopener"' : ''}><b>${t}</b><span>${d}</span></a>`).join('')}</div></section>
   <details class="about"><summary>About this dashboard</summary>
     <p><b>All data on this page comes from free public sources. We do not paywall any of these metrics. Some advanced on-chain or entity-adjusted metrics require paid providers and are therefore not shown here.</b></p>
@@ -598,9 +636,7 @@ export function mountDash({ dash, getLive }) {
   u?.addEventListener('input', () => { cvSource = 'usd'; paintConverter(true); });
   s?.addEventListener('input', () => { cvSource = 'sats'; paintConverter(true); });
   seedNetwork(dash?.network);
-  paintNews(); paintMoves(); paintMoveStatus(); paintHero(); paintCards(); paintClock(); paintSince(); paintRead(); paintPm(); paintDist(); paintPosture(); paintDca();
-  document.getElementById('dca-amt')?.addEventListener('input', paintDca);
-  document.getElementById('dca-freq')?.addEventListener('change', paintDca);
+  paintNews(); paintMoves(); paintMoveStatus(); paintHero(); paintCards(); paintClock(); paintSince(); paintRead(); paintPm(); paintDist(); paintPosture();
   if (started) return;
   started = true;
   startNetwork({ onUpdate: () => { paintCards(); paintClock(); paintHero(); paintSince(); }, onBlock: toastBlock });
@@ -621,7 +657,7 @@ function refreshSide() {
   const n = document.getElementById('d-news'); if (n) { n.outerHTML = newsHtml(); document.querySelectorAll('[data-nf]').forEach((b) => b.addEventListener('click', () => { S.newsFilter = b.dataset.nf; document.querySelectorAll('[data-nf]').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.nf === S.newsFilter))); paintNews(); })); paintNews(); }
 }
 let readT = 0;
-export function dashLive(live) { S.live = live; paintHero(); paintCards(); paintSince(); if (Date.now() - readT > 60e3) { readT = Date.now(); paintRead(); paintPosture(); paintDca(); } }
+export function dashLive(live) { S.live = live; paintHero(); paintCards(); paintSince(); if (Date.now() - readT > 60e3) { readT = Date.now(); paintRead(); paintPosture(); } }
 // Refresh button: network data, CoinGecko market stats and the 15-minute feed file, now
 export async function refreshDash() {
   const feed = fetch('data/dash.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { S.dash = j; refreshSide(); paintCards(); } }).catch(() => {});

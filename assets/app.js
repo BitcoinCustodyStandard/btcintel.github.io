@@ -6,9 +6,10 @@ import { briefReport } from '../engine/report.js';
 import { brief } from '../engine/brief.js';
 import { ZONES } from '../engine/cycle.js';
 import { explain, EXPLAIN, REMINDER } from '../engine/explain.js';
-import { startLivePrice } from './live.js?v=20261003b';
-import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003b';
-import { dashTab, mountDash, dashLive, refreshDash } from './dash.js?v=20261003b';
+import { startLivePrice } from './live.js?v=20261003c';
+import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003c';
+import { dashTab, mountDash, dashLive, refreshDash } from './dash.js?v=20261003c';
+import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003c';
 import { fmtUsd, fmtUsdSigned, fmtPrice, fmtPct, fmtNum, fmtK, ordinal } from '../engine/util.js';
 
 const state = { a: null, rows: [], runs: [], index: null, snapshot: null, range: 90, pi: null, dash: null, live: null, liveState: 'init' };
@@ -217,7 +218,7 @@ function drawChart(el) {
 }
 function drawCharts(root = document) { root.querySelectorAll('[data-chart],[data-spark]').forEach(drawChart); }
 let resizeT;
-window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { drawCharts(document); if (tabFromHash() === 'dashboard') drawPriceChart($('#pc-chart'), state.pi, state.live); }, 200); });
+window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { drawCharts(document); if (tabFromHash() === 'dashboard') drawPriceChart($('#pc-chart'), state.pi, state.live); if (tabFromHash() === 'dca') redrawDcaChart(); }, 200); });
 document.addEventListener('toggle', (e) => { if (e.target.matches?.('details') && e.target.open) drawCharts(e.target); }, true);
 const chartEl = (key) => h`<div class="chart" data-chart="${key}"></div>`;
 const sparkEl = (key) => h`<div class="chart spark" data-spark="${key}"></div>`;
@@ -226,7 +227,7 @@ const rangeBar = () => h`<div class="range" role="group" aria-label="Chart range
 // ---------- tabs ----------
 // The BTC Dashboard is the landing view; Intelligence (#overview) is the daily 60–90 second
 // read, with research depth in the other tabs. Old section anchors (#forces, #scenarios) still resolve.
-const TABS = ['dashboard', 'overview', 'cycle', 'report', 'liquidity'];
+const TABS = ['dashboard', 'dca', 'overview', 'cycle', 'report', 'liquidity'];
 const LEGACY = { forces: 'overview', scenarios: 'overview', liqmap: 'overview', watch: 'overview', top3: 'overview' };
 const tabFromHash = () => { const k = location.hash.slice(1); return TABS.includes(k) ? k : LEGACY[k] || (k.startsWith('force-') ? 'overview' : 'dashboard'); };
 function showTab(scroll) {
@@ -235,6 +236,7 @@ function showTab(scroll) {
   document.querySelectorAll('[data-tab-link]').forEach((x) => x.setAttribute('aria-current', x.dataset.tabLink === t ? 'page' : 'false'));
   drawCharts($(`[data-tab="${t}"]`) || document);
   if (t === 'dashboard') drawPriceChart($('#pc-chart'), state.pi, state.live);
+  if (t === 'dca') mountDcaPage({ pi: state.pi, getLive: () => state.live });
   if (k.startsWith('force-')) openForce(k);
   else if (LEGACY[k]) document.getElementById(k)?.scrollIntoView();
   else if (scroll) window.scrollTo(0, 0);
@@ -638,6 +640,7 @@ function render() {
   else if (a.kind === 'browser') banners.push(h`<div class="banner">Browser refresh: ${liveN} sources retrieved live. ETF flows, FRED, Yahoo and CFTC data cannot be fetched from a browser and show their last server values. Not saved to the archive.</div>`);
   $('#app').innerHTML = h`${banners}
     <div data-tab="dashboard" hidden>${raw(dashTab({ a, pi: state.pi, dash: state.dash, info }))}</div>
+    <div data-tab="dca" hidden>${raw(dcaPageHtml({ pi: state.pi, info }))}</div>
     <div data-tab="overview" hidden>${overviewTab(b)}</div>
     <div data-tab="cycle" hidden>${cycleTab()}</div>
     <div data-tab="report" hidden>${reportTab()}</div>
@@ -679,6 +682,7 @@ function paintLive() {
     const np = $('#nav-price'); if (np) np.innerHTML = h`${fmtPrice(L.price)} <span class="${cls(ch24)}">${fmtPct(ch24)}</span>`.s;
     if (Date.now() - lastPiDraw > 60e3 && tabFromHash() === 'dashboard') { lastPiDraw = Date.now(); drawPriceChart($('#pc-chart'), state.pi, L); }
     dashLive(L);
+    dcaLive();
   } else if (state.liveState === 'stale') {
     setBadge('stale', `Live price unavailable · server snapshot ${fmtTime(state.a.dataThrough)}`);
   }

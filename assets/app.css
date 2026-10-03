@@ -1028,3 +1028,99 @@ details.more[open] > summary { border-bottom: 1px solid var(--line); }
   .dgrid { grid-template-columns: minmax(0, 1fr) clamp(360px, 24vw, 500px); }
 }
 .dside .dca { padding: 14px 16px 10px; }
+
+/* ── Dashboard top: two independent columns (left: price, chart, large moves; right: market read, F&G, news) ── */
+.dtop { display: grid; grid-template-columns: minmax(0, 1fr) clamp(360px, 27vw, 540px); gap: 14px; margin-top: 16px; align-items: start; }
+.dcol { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+.dcol > .picard { margin-top: 0; }
+@media (max-width: 1100px) { .dtop { grid-template-columns: minmax(0, 1fr) 340px; } }
+/* phones and tablets: one column, market read straight after the price card */
+@media (max-width: 960px) {
+  .dtop { grid-template-columns: 1fr; gap: 12px; }
+  .dcol { display: contents; }
+  .dtop .dh-main { order: 1; } .dtop #d-posture { order: 2; } .dtop .pcard { order: 3; } .dtop #d-moves { order: 4; } .dtop .fng { order: 5; } .dtop #d-news { order: 6; }
+}
+
+/* ── Market read ── */
+.posture { padding: 14px 16px 12px; }
+.ps-more { font-size: 11.5px; }
+.ps-top { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 12px; margin: 2px 0 6px; }
+.ps-top .ps-label { margin: 0; }
+.ps-regime { flex-basis: 100%; font-size: 11.5px; color: var(--muted); }
+.ps-concl { margin: 0 0 10px; font-size: 13.5px; line-height: 1.55; color: var(--text); }
+.ps-secs { display: grid; gap: 0; border-top: 1px solid var(--line); }
+.ps-sec { padding: 8px 0; border-bottom: 1px solid var(--line); }
+.ps-sh { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 3px; }
+.ps-st { font: 600 10.5px/1.3 var(--sans); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.ps-sec p { margin: 2px 0; font-size: 12.5px; line-height: 1.5; color: var(--text2); }
+.vchip { font: 600 9.5px/1 var(--sans); letter-spacing: 0.08em; text-transform: uppercase; padding: 3px 6px; border-radius: 3px; }
+.vchip.supportive { background: var(--chip-up); color: var(--up); } .vchip.headwind { background: rgba(217, 164, 65, 0.14); color: var(--warn); } .vchip.neutral { background: var(--chip-neutral); color: var(--neutral); }
+.ps-watch { margin: 8px 0; font-size: 12.5px; color: var(--text2); }
+.ps-watch .k { display: block; font: 600 9.5px/1.4 var(--sans); letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); }
+.tools-conv { max-width: 560px; padding: 12px 16px; }
+
+/* ── DCA backtest page ── */
+.dcap { margin-top: 16px; }
+.dcap-head { display: flex; justify-content: space-between; align-items: flex-end; gap: 12px; flex-wrap: wrap; margin-bottom: 12px; }
+.dcap-head h1 { margin: 0; font: 600 22px/1.2 var(--sans); display: flex; align-items: center; }
+.dcap-head p { margin: 4px 0 0; color: var(--muted); font-size: 13.5px; max-width: 760px; }
+.dcap-live { display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--muted); }
+.dcap-ctl { padding: 12px 16px; display: grid; gap: 10px; }
+.dcap-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 12px; }
+.dcap-row .k { width: 92px; font: 600 10px/1.3 var(--sans); letter-spacing: 0.1em; text-transform: uppercase; color: var(--muted); }
+.dcap-row .seg button { font-size: 12.5px; padding: 6px 12px; min-height: 34px; }
+.dcap-in { display: inline-flex; align-items: center; gap: 4px; font: 13px var(--mono); color: var(--muted); }
+.dcap-in input { width: 96px; font: 14px var(--mono); padding: 6px 8px; min-height: 34px; background: var(--bg2); color: var(--text); border: 1px solid var(--line2); border-radius: 4px; }
+.dcap-in.date input { width: 150px; color-scheme: dark; }
+:root[data-theme='light'] .dcap-in.date input { color-scheme: light; }
+.dcap-in.date span { font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em; }
+.dcap-sum { margin: 16px 0 10px; font-size: 16px; line-height: 1.5; color: var(--text2); }
+.dcap-sum b { color: var(--text); } .dcap-sum b.up { color: var(--up); } .dcap-sum b.down { color: var(--down); }
+.dcap-score { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.dcap-score .mc-v.up { color: var(--up); } .dcap-score .mc-v.down { color: var(--down); }
+.dcap-chart { margin-top: 12px; padding: 14px 16px 8px; position: relative; }
+#dcp-chart { position: relative; }
+#dcp-chart svg { display: block; width: 100%; height: auto; touch-action: pan-y; }
+#dcp-chart .g { stroke: var(--grid); } #dcp-chart .ax { fill: var(--dim); font: 10.5px var(--mono); } #dcp-chart .axp { fill: var(--dim); opacity: 0.7; }
+#dcp-chart .dp-price { fill: none; stroke: var(--muted); stroke-width: 1; opacity: 0.35; }
+#dcp-chart .dp-area { fill: var(--orange); opacity: 0.12; }
+#dcp-chart .dp-value { fill: none; stroke: var(--orange); stroke-width: 1.8; }
+#dcp-chart .dp-inv { fill: none; stroke: var(--text2); stroke-width: 1.4; stroke-dasharray: 5 3; }
+#dcp-chart .xh { stroke: var(--muted); stroke-dasharray: 3 3; }
+.dcap-leg { display: flex; gap: 14px; flex-wrap: wrap; font-size: 11.5px; color: var(--muted); }
+.dcap-leg i { display: inline-block; width: 14px; height: 3px; margin-right: 5px; vertical-align: 3px; }
+.dcap-leg .li { border-top: 2px dashed var(--text2); height: 0; } .dcap-leg .lv { background: var(--orange); } .dcap-leg .lp { background: var(--muted); opacity: 0.5; }
+.dcap-two { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 12px; margin-top: 12px; }
+.cmp-row { display: grid; grid-template-columns: minmax(0, 1.3fr) minmax(60px, 1fr) auto; gap: 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.cmp-l { display: flex; flex-direction: column; font-size: 13px; } .cmp-l .dim { font-size: 11.5px; }
+.cmp-bar i { display: block; height: 8px; border-radius: 2px; background: var(--orange); opacity: 0.8; }
+.cmp-row.hind .cmp-bar i { background: var(--muted); opacity: 0.5; } .cmp-row.hind b { color: var(--text2); }
+.cmp-v { display: flex; flex-direction: column; align-items: flex-end; font-size: 12px; } .cmp-v b { font-size: 14px; font-weight: 500; }
+.cmp-v .up { color: var(--up); } .cmp-v .down { color: var(--down); }
+.dcap-note { font-size: 12.5px; color: var(--muted); margin: 8px 0 0; }
+.roll-big { font-size: 14px; color: var(--text2); margin: 2px 0 8px; } .roll-big b { font-size: 22px; color: var(--text); margin-right: 4px; }
+.roll-h { display: block; width: 100%; height: 76px; } .roll-h rect.pos { fill: var(--up); opacity: 0.6; } .roll-h rect.neg { fill: var(--down); opacity: 0.6; }
+.roll-h line { stroke: var(--text2); stroke-dasharray: 3 2; } .roll-h text { fill: var(--dim); font: 9px var(--mono); }
+.roll-stats { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted); margin: 8px 0 4px; } .roll-stats b { color: var(--text); font-weight: 500; }
+.roll-stats .up { color: var(--up); } .roll-stats .down { color: var(--down); }
+.fwd-tag { display: inline-block; margin: 0 0 8px; font: 600 10px/1 var(--sans); letter-spacing: 0.08em; text-transform: uppercase; color: var(--warn); background: rgba(217, 164, 65, 0.12); padding: 5px 8px; border-radius: 3px; }
+.fwd-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.fwd-grid > div { display: flex; flex-direction: column; gap: 2px; } .fwd-grid .k { font: 600 9.5px/1.3 var(--sans); letter-spacing: 0.1em; text-transform: uppercase; color: var(--dim); } .fwd-grid b { font-weight: 500; font-size: 14px; } .fwd-grid .dim { font-size: 11.5px; }
+.dcap-twrap { max-height: 340px; overflow: auto; }
+.dcap-foot { margin: 16px 0 8px; font-size: 11.5px; color: var(--dim); max-width: 980px; }
+@media (max-width: 1100px) { .dcap-score { grid-template-columns: repeat(2, minmax(0, 1fr)); } .dcap-two { grid-template-columns: 1fr; } }
+@media (max-width: 600px) {
+  .dcap-row .k { width: 100%; }
+  .dcap-row .seg { flex-wrap: wrap; }
+  .fwd-grid { grid-template-columns: 1fr; }
+  .cmp-row { grid-template-columns: 1fr auto; } .cmp-bar { grid-column: 1 / -1; grid-row: 2; }
+  .dcap-sum { font-size: 14.5px; }
+}
+/* single-column grids must be allowed to shrink below their widest content */
+@media (max-width: 960px) { .dtop { grid-template-columns: minmax(0, 1fr); } .dtop > .dcol > * { min-width: 0; max-width: 100%; } }
+@media (max-width: 1100px) { .dcap-two { grid-template-columns: minmax(0, 1fr); } }
+.dcap-two > * { min-width: 0; }
+.roll-h { height: 60px; }
+.roll-ax { position: relative; display: flex; justify-content: space-between; font: 10px var(--mono); color: var(--dim); margin-top: 2px; }
+.roll-ax span[style] { position: absolute; transform: translateX(-50%); }
+.roll-key { margin: 2px 0 0; }
