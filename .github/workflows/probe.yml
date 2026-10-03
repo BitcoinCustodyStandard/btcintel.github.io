@@ -1,0 +1,36 @@
+name: probe-sources
+# Temporary: checks free ETF data sources from Actions. Will be removed.
+on:
+  push:
+    paths: ['.github/workflows/probe.yml']
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: |
+          cat > p.mjs <<'JS'
+          const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
+          const T = ['IBIT', 'FBTC', 'GBTC', 'BTC', 'BITB', 'ARKB', 'HODL', 'BRRR', 'EZBC', 'BTCO', 'BTCW', 'MSBT', 'DEFI'];
+          // 1. Yahoo with cookie + crumb
+          try {
+            const r1 = await fetch('https://fc.yahoo.com', { headers: { 'user-agent': UA }, redirect: 'manual' });
+            const cookie = (r1.headers.getSetCookie?.() || []).map((c) => c.split(';')[0]).join('; ');
+            console.log('yahoo cookie', r1.status, cookie.slice(0, 40));
+            const cr = await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', { headers: { 'user-agent': UA, cookie } });
+            const crumb = await cr.text(); console.log('crumb', cr.status, crumb.slice(0, 30));
+            const q = await fetch(`https://query2.finance.yahoo.com/v7/finance/quote?symbols=${T.join(',')}&crumb=${encodeURIComponent(crumb)}`, { headers: { 'user-agent': UA, cookie } });
+            const qt = await q.text(); console.log('v7 quote', q.status, qt.slice(0, 200));
+            try { for (const x of JSON.parse(qt).quoteResponse.result) console.log('Y', x.symbol, '| px', x.regularMarketPrice, '| netAssets', x.netAssets, '| sharesOut', x.sharesOutstanding, '| mcap', x.marketCap, '| nav', x.navPrice, '| exp', x.netExpenseRatio, '| vol', x.regularMarketVolume, '| ytd', x.ytdReturn, '| name', x.longName); } catch (e) { console.log('parse', e.message); }
+            const s = await fetch(`https://query2.finance.yahoo.com/v10/finance/quoteSummary/IBIT?modules=summaryDetail,defaultKeyStatistics,fundProfile&crumb=${encodeURIComponent(crumb)}`, { headers: { 'user-agent': UA, cookie } });
+            console.log('quoteSummary', s.status, (await s.text()).slice(0, 700));
+          } catch (e) { console.log('yahoo ERR', e.message); }
+          // 2. stockanalysis
+          for (const t of ['ibit', 'defi', 'msbt']) {
+            try { const r = await fetch(`https://stockanalysis.com/etf/${t}/`, { headers: { 'user-agent': UA } }); const h = await r.text(); const i = h.indexOf('Assets'); console.log('SA', t, r.status, h.length, h.slice(i, i + 220).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')); } catch (e) { console.log('SA ERR', e.message); }
+          }
+          // 3. Farside header: list of funds
+          try { const r = await fetch('https://farside.co.uk/bitcoin-etf-flow-all-data/', { headers: { 'user-agent': UA, accept: 'text/html' } }); const h = await r.text(); const i = h.indexOf('<table'); console.log('FARSIDE', r.status, h.length, h.slice(i, i + 1500).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').slice(0, 600)); } catch (e) { console.log('farside ERR', e.message); }
+          JS
+          node p.mjs
