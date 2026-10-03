@@ -1453,3 +1453,44 @@ a.icomp:hover { background: var(--card2); }
 .tl-key { display: flex; flex-wrap: wrap; gap: 4px 16px; font-size: 12px; color: var(--muted); margin: 4px 0 10px; }
 .tl-key i { display: inline-block; width: 12px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
 @media (max-width: 960px) { .mregime, .as-body, .hist-grid { grid-template-columns: minmax(0, 1fr); } }
+
+/* ---------- back bar (component / indicator pages) ---------- */
+.rback { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 14px; padding: 16px 0 0; font-size: 13px; color: var(--muted); }
+.btn-back { display: inline-flex; align-items: center; gap: 4px; padding: 6px 12px; border: 1px solid var(--line2); border-radius: 4px; color: var(--text); background: var(--card); font-weight: 500; }
+.btn-back:hover { border-color: var(--orange-line); color: var(--orange-ink); text-decoration: none; }
+.rb-sub a { color: var(--text2); }
+
+/* ---------- indicator side panel ---------- */
+html.panel-open { overflow: hidden; }
+.ipanel { position: fixed; inset: 0; z-index: 200; }
+.ipanel[hidden] { display: none; }
+.ip-back { position: absolute; inset: 0; background: rgba(4, 8, 16, 0.55); }
+.ip-box { position: absolute; top: 0; right: 0; bottom: 0; width: min(1000px, 94vw); background: var(--bg); border-left: 1px solid var(--line2); box-shadow: -18px 0 40px -20px rgba(0, 0, 0, 0.6); overflow-y: auto; padding: 0 22px 24px; outline: none; }
+.ip-head { position: sticky; top: 0; z-index: 2; display: flex; justify-content: flex-end; align-items: center; gap: 12px; padding: 10px 0; background: var(--bg); border-bottom: 1px solid var(--line); }
+.ip-full { font-size: 13px; }
+.ip-x { width: 34px; height: 34px; border-radius: 4px; border: 1px solid var(--line2); background: var(--card); color: var(--text); font-size: 15px; cursor: pointer; }
+.ip-x:hover { border-color: var(--orange-line); }
+.ip-box .rhead { padding-top: 12px; }
+.ip-box .rhead h1 { font-size: 23px; }
+.ip-box .dd-grid { grid-template-columns: minmax(0, 1fr); }
+.ip-box .dd-side { position: static; }
+@media (max-width: 700px) { .ip-box { width: 100vw; padding: 0 14px 20px; } }
+
+/* ---------- Analysis ribbon menus ---------- */
+.subnav { position: relative; }
+#subnav [data-sub]:not([data-sub=""]):not([data-sub="liquidity"])::after { content: ' ▾'; font-size: 9px; opacity: 0.6; }
+#subnav [data-sub][aria-expanded="true"] { color: var(--text); border-bottom-color: var(--orange-line); }
+.sn-menu { position: absolute; left: 0; right: 0; top: 100%; z-index: 70; background: var(--bg2); border-bottom: 1px solid var(--line2); box-shadow: 0 16px 30px -18px rgba(0, 0, 0, 0.7); padding-top: 12px !important; padding-bottom: 16px !important; max-height: 70vh; overflow-y: auto; }
+.sn-menu[hidden] { display: none; }
+.snm-h { margin-bottom: 10px; font-size: 13px; }
+.snm-h a { color: var(--orange-ink); }
+.snm-cols { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px 22px; }
+.secnav .sn-menu a { text-transform: none; letter-spacing: 0; padding: 0; border: 0; font-size: 12.5px; white-space: normal; }
+.secnav .sn-menu a.snm-c { display: block; color: var(--text); font-weight: 600; font-size: 13px; padding-bottom: 4px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.secnav .sn-menu a.snm-c:hover { color: var(--orange-ink); }
+.snm-col ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 3px; }
+.secnav .snm-col li a { color: var(--text2); }
+.secnav .snm-col li a.ctx { color: var(--muted); }
+.secnav .snm-col li a:hover { color: var(--orange-ink); }
+.secnav .sn-menu.wrap { display: block; }
+.secnav .sn-menu.wrap[hidden] { display: none; }

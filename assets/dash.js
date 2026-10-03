@@ -4,10 +4,10 @@
 // data/latest.json (agent snapshot) and data/pi_cycle.json. Values that cannot be
 // obtained free are shown as such, never estimated.
 
-import { startNetwork, seedNetwork, refreshNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js?v=20261003m';
-import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js?v=20261003m';
-import { priceCardHtml, envelopeNow } from './pricechart.js?v=20261003m';
-import { marketReadHtml } from './intelui.js?v=20261003m';
+import { startNetwork, seedNetwork, refreshNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js?v=20261003n';
+import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js?v=20261003n';
+import { priceCardHtml, envelopeNow } from './pricechart.js?v=20261003n';
+import { marketReadHtml } from './intelui.js?v=20261003n';
 
 // ---------- formatting ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));

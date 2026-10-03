@@ -6,14 +6,14 @@ import { briefReport } from '../engine/report.js';
 import { brief } from '../engine/brief.js';
 import { ZONES } from '../engine/cycle.js';
 import { explain, EXPLAIN, REMINDER } from '../engine/explain.js';
-import { startLivePrice } from './live.js?v=20261003m';
-import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003m';
-import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261003m';
-import { intelligence } from '../engine/intel.js?v=20261003m';
-import { reportModel } from '../engine/reportmodel.js?v=20261003m';
-import { intelligenceHtml, wireIntel } from './intelui.js?v=20261003m';
-import { analysisRoute } from './research.js?v=20261003m';
-import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003m';
+import { startLivePrice } from './live.js?v=20261003n';
+import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003n';
+import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261003n';
+import { intelligence } from '../engine/intel.js?v=20261003n';
+import { reportModel } from '../engine/reportmodel.js?v=20261003n';
+import { intelligenceHtml, wireIntel } from './intelui.js?v=20261003n';
+import { analysisRoute, indicatorPanel, idFromHref, ribbonMenu } from './research.js?v=20261003n';
+import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003n';
 import { fmtUsd, fmtUsdSigned, fmtPrice, fmtPct, fmtNum, fmtK, ordinal } from '../engine/util.js';
 
 const state = { a: null, rows: [], runs: [], index: null, snapshot: null, range: 90, pi: null, dash: null, live: null, liveState: 'init' };
@@ -248,7 +248,10 @@ function showTab(scroll) {
   else if (LEGACY[k]) document.getElementById(k)?.scrollIntoView();
   else if (scroll) window.scrollTo(0, 0);
 }
-window.addEventListener('hashchange', () => { if (state.a) showTab(true); });
+// remember where each view was scrolled, so coming back to a parent view restores the place
+const scrollMem = new Map();
+let prevKey = null;
+window.addEventListener('hashchange', (e) => { const old = new URL(e.oldURL).hash.slice(1); scrollMem.set(old, window.scrollY); prevKey = old; closePanel(); closeMenu(); if (state.a) showTab(true); });
 // in-page jumps that must not change the route
 document.addEventListener('click', (e) => { const a = e.target.closest('[data-jump]'); if (!a) return; e.preventDefault(); document.getElementById(a.dataset.jump)?.scrollIntoView({ behavior: 'smooth' }); });
 // Analysis: landing, domain pages, component pages and indicator deep dives (assets/research.js)
@@ -260,9 +263,75 @@ function renderAnalysis(scroll) {
   analysisKey = k;
   const v = analysisRoute(k.split('/'), state.intel, { wireChart, a: state.a, extras: { marketLiquidity: () => `<section class="block" id="mkt-liquidity">${liquidityTab().s}</section>` } });
   el.innerHTML = v.html;
-  if (v.scrollTo) setTimeout(() => document.getElementById(v.scrollTo)?.scrollIntoView(), 50); else if (scroll) window.scrollTo(0, 0);
-  v.after(el);
+  // returning from a child view (an indicator or sub-section of this page): restore the old position
+  const back = prevKey && prevKey.startsWith(k + '/') && scrollMem.has(k) ? scrollMem.get(k) : null;
+  if (back !== null) window.scrollTo(0, back);
+  else if (v.scrollTo) setTimeout(() => document.getElementById(v.scrollTo)?.scrollIntoView(), 50); else if (scroll) window.scrollTo(0, 0);
+  Promise.resolve(v.after(el)).then(() => { if (back !== null && Math.abs(window.scrollY - back) > 4) window.scrollTo(0, back); });
 }
+
+// "← Back to …": a real browser back when the previous view was that parent page (keeps the
+// scroll position); otherwise an ordinary link to it
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('[data-back]'); if (!a || e.metaKey || e.ctrlKey || e.shiftKey) return;
+  if (prevKey === a.getAttribute('href').slice(1) && history.length > 1) { e.preventDefault(); history.back(); }
+});
+
+// Indicator side panel: any link to an indicator deep dive opens over the current page;
+// "Open full page" (or a modified click) still goes to the full page.
+let panelEl = null, panelFocus = null;
+function ensurePanel() {
+  if (panelEl) return panelEl;
+  panelEl = document.createElement('div');
+  panelEl.className = 'ipanel'; panelEl.hidden = true;
+  panelEl.innerHTML = '<div class="ip-back" data-panel-close></div><aside class="ip-box" role="dialog" aria-modal="true" aria-label="Indicator detail" tabindex="-1"><div class="ip-body"></div></aside>';
+  document.body.appendChild(panelEl);
+  panelEl.addEventListener('click', (e) => { if (e.target.closest('[data-panel-close]')) closePanel(); });
+  return panelEl;
+}
+function openPanel(id) {
+  if (!state.intel) return false;
+  const P = ensurePanel(), body = P.querySelector('.ip-body');
+  const v = indicatorPanel(state.intel, id, { wireChart, a: state.a });
+  if (P.hidden) panelFocus = document.activeElement;
+  body.innerHTML = v.html; P.hidden = false; document.documentElement.classList.add('panel-open');
+  P.querySelector('.ip-box').scrollTop = 0; P.querySelector('.ip-box').focus({ preventScroll: true });
+  setTimeout(() => v.after(body), 30);
+  return true;
+}
+function closePanel() {
+  if (!panelEl || panelEl.hidden) return;
+  panelEl.hidden = true; document.documentElement.classList.remove('panel-open');
+  panelFocus?.focus?.({ preventScroll: true });
+}
+document.addEventListener('click', (e) => {
+  const a = e.target.closest('a[href^="#analysis/"]'); if (!a || a.hasAttribute('data-full') || e.metaKey || e.ctrlKey || e.shiftKey || e.button) return;
+  const id = idFromHref(a.getAttribute('href')); if (!id) return;
+  if (openPanel(id)) { e.preventDefault(); closeMenu(); }
+});
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closePanel(); closeMenu(); } });
+
+// Analysis ribbon: a menu of each domain's sub-sections and indicators (hover on desktop,
+// first tap on touch screens opens it, second tap follows the link)
+let menuFor = null, menuT = null;
+function closeMenu() { const m = $('#sn-menu'); if (m) m.hidden = true; menuFor = null; document.querySelectorAll('#subnav [data-sub]').forEach((x) => x.removeAttribute('aria-expanded')); }
+function openMenu(a) {
+  const html = ribbonMenu(a.dataset.sub), m = $('#sn-menu'); if (!m || !html) { closeMenu(); return; }
+  clearTimeout(menuT);
+  if (menuFor !== a.dataset.sub) { m.innerHTML = html; menuFor = a.dataset.sub; }
+  m.hidden = false;
+  document.querySelectorAll('#subnav [data-sub]').forEach((x) => (x === a ? x.setAttribute('aria-expanded', 'true') : x.removeAttribute('aria-expanded')));
+}
+(() => {
+  const sub = $('#subnav'); if (!sub) return;
+  const fine = matchMedia('(hover: hover) and (pointer: fine)').matches;
+  sub.querySelectorAll('[data-sub]').forEach((a) => {
+    if (fine) a.addEventListener('mouseenter', () => openMenu(a));
+    a.addEventListener('click', (e) => { if (!fine && ribbonMenu(a.dataset.sub) && menuFor !== a.dataset.sub) { e.preventDefault(); openMenu(a); } });
+  });
+  if (fine) { sub.addEventListener('mouseleave', () => { menuT = setTimeout(closeMenu, 220); }); sub.addEventListener('mouseenter', () => clearTimeout(menuT)); }
+  document.addEventListener('click', (e) => { if (menuFor && !e.target.closest('#subnav')) closeMenu(); });
+})();
 function openForce(id) {
   const d = document.getElementById(id);
   if (!d) return;

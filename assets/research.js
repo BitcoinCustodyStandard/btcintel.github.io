@@ -7,9 +7,9 @@
 // shows the same value the dashboard and Intelligence use. Heavy history work is deferred
 // until after the page skeleton is on screen.
 
-import { DOMAIN_META, DOMAIN_SLUG, SLUG_DOMAIN, DEF_BY_ID, indicatorsOf, indSlug, compSlug, indicatorHistory, domHistory, compHistory, regimeTimeline, similarConditions, withArticle } from '../engine/intel.js?v=20261003m';
-import { ZONES } from '../engine/cycle.js?v=20261003m';
-import { DOMAIN_DOCS, COMP_DOCS, IND_DOCS } from '../engine/indicator_docs.js?v=20261003m';
+import { DOMAIN_META, DOMAIN_SLUG, SLUG_DOMAIN, DEF_BY_ID, indicatorsOf, indSlug, compSlug, indicatorHistory, domHistory, compHistory, regimeTimeline, similarConditions, withArticle } from '../engine/intel.js?v=20261003n';
+import { ZONES } from '../engine/cycle.js?v=20261003n';
+import { DOMAIN_DOCS, COMP_DOCS, IND_DOCS } from '../engine/indicator_docs.js?v=20261003n';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ok = (v) => v !== null && v !== undefined && Number.isFinite(v);
@@ -106,6 +106,9 @@ function wireRanges(root, wireChart) {
 const chartBlock = (key, pts, opts, def) => { CHART_STORE.set(key, { pts, opts }); return rangedChart(key, pts, opts, def); };
 
 // ---------------------------------------------------------------- shared bits
+// back bar for component and indicator pages; the app turns it into a real "back" when the
+// previous view was this parent, so the scroll position comes back too
+const backBar = (href, label, extra = '') => `<div class="rback"><a class="btn-back" href="${href}" data-back>← Back to ${esc(label)}</a>${extra}</div>`;
 const crumbs = (items) => `<nav class="crumbs" aria-label="Breadcrumb">${items.map(([href, t], i) => (i < items.length - 1 ? `<a href="${href}">${esc(t)}</a><span>›</span>` : `<b>${esc(t)}</b>`)).join('')}</nav>`;
 const statusNote = (I) => `<p class="xs dim rnote">Data as of ${esc(I.asOf)}. Observed values carry their source and date; states, zones and interpretation are BTCIntel’s analysis. Not investment advice and not a forecast.</p>`;
 function regimeLine(b, fmt) {
@@ -254,8 +257,7 @@ function landing(I, ctx) {
 
 // Liquidity Detail: the in-market liquidity research (order books, impact, expiries, band map)
 function liquidityPage(I, ctx) {
-  return `${crumbs([['#analysis', 'Analysis'], ['#analysis/liquidity', 'Liquidity Detail']])}
-    <section class="rhead dd"><div><h1>Liquidity Detail</h1><p class="rq">“Where is liquidity in the Bitcoin market, and how much flow can it absorb?”</p><p>Resting order-book liquidity, the estimated impact of large orders, depth by venue, options expiries and a map of where forced or hedging flows could sit around the price. The high-level liquidity conclusions are on <a href="#analysis">Analysis</a>; the external liquidity backdrop (central banks, M2, net liquidity, stablecoins) is on <a href="${DSL('macro')}">Macro &amp; Liquidity</a>.</p></div></section>
+  return `<section class="rhead dd"><div><h1>Liquidity Detail</h1><p class="rq">“Where is liquidity in the Bitcoin market, and how much flow can it absorb?”</p><p>Resting order-book liquidity, the estimated impact of large orders, depth by venue, options expiries and a map of where forced or hedging flows could sit around the price. The high-level liquidity conclusions are on <a href="#analysis">Analysis</a>; the external liquidity backdrop (central banks, M2, net liquidity, stablecoins) is on <a href="${DSL('macro')}">Macro &amp; Liquidity</a>.</p></div></section>
     <div class="hsums">${compLine(I, 'mkt', 'Spot demand')}${compLine(I, 'mkt', 'Leverage')}${compLine(I, 'macro', 'Liquidity', 'External liquidity')}</div>
     ${ctx.extras?.marketLiquidity?.() || ''}
     ${statusNote(I)}`;
@@ -272,8 +274,7 @@ function domainPage(I, dk, ctx) {
   const others = I.domains.filter((x) => x.key !== dk);
   const div = I.confirmation.diverge.filter((x) => (x.a === d.name || x.b === d.name));
   const extra = dk === 'mkt' ? `<section class="block"><div class="bh"><h2>Market liquidity</h2></div><p>Order-book depth, the impact of large orders, depth by venue, options expiries and the $5K band map are on <a href="#analysis/liquidity">Liquidity Detail →</a></p></section>` : '';
-  return `${crumbs([['#analysis', 'Analysis'], [DSL(dk), SHORT[dk]]])}
-    <section class="rhead"><div><h1>${esc(SHORT[dk])}</h1><p class="rq">“${esc(d.question)}”</p><p>${esc(doc.overview)}</p><p class="small muted">${esc(doc.role)}</p></div>
+  return `<section class="rhead"><div><h1>${esc(SHORT[dk])}</h1><p class="rq">“${esc(d.question)}”</p><p>${esc(doc.overview)}</p><p class="small muted">${esc(doc.role)}</p></div>
       <div class="rstate"><span class="k">Current read</span><div class="ir-state t-${tone(d.state, d.score)}">${esc(d.state)}</div><div>${d.arrow} ${sbar(d.score)} ${conf(d.confidence.level)}</div><p class="xs dim">${d.n} scored indicators · ${Math.round(d.confidence.coverage * 100)}% coverage · ${Math.round(d.confidence.agree * 100)}% agreement${d.notes.length ? `<br>${d.notes.map(esc).join(' ')}` : ''}</p></div></section>
 
     <section class="block"><div class="bh"><h2>Current state</h2><p class="aside">Components of the domain read · click any for its page</p></div>
@@ -309,24 +310,27 @@ function domainPage(I, dk, ctx) {
 // ---------------------------------------------------------------- component page
 function compPage(I, dk, comp) {
   const d = I.domains.find((x) => x.key === dk), c = d.comps.find((x) => x.name === comp);
-  return `${crumbs([['#analysis', 'Analysis'], [DSL(dk), SHORT[dk]], [CLINK(dk, comp), comp]])}
-    <section class="rhead"><div><h1>${esc(comp)}</h1><p class="rq">Component of ${esc(SHORT[dk])}</p><p>${esc(COMP_DOCS[comp] || '')}</p></div>
+  const charts = c.indicators.filter((r) => r.s !== null);
+  return `${backBar(DSL(dk), SHORT[dk])}
+    <section class="rhead"><div><h1>${esc(comp)}</h1><p class="rq">${c.indicators.length} indicators · ${c.n} scored · click any indicator to open its chart</p><p>${esc(COMP_DOCS[comp] || '')}</p></div>
       <div class="rstate"><span class="k">Current read</span><div class="ir-state t-${tone(null, c.score)}">${esc(c.word)}</div><div>${sbar(c.score)} <span class="small muted">${ok(c.score) ? scoreFmt(c.score) : '—'} on −1…+1</span></div><p class="xs dim">${c.n} scored of ${c.indicators.length} indicators · weight ${c.W} in the domain</p></div></section>
     <section class="block"><div class="bh"><h2>Component read over time</h2><p class="aside">Weighted reading of its indicators with stored history</p></div><div data-compchart="${dk}|${esc(comp)}"><p class="small muted">Computing…</p></div></section>
     <section class="block"><div class="bh"><h2>Indicators</h2></div>
       <div class="tbl-wrap"><table class="itbl"><tbody>${c.indicators.map((r) => `<tr class="${r.s === null ? 'ctx' : ''}"><td data-k="Indicator"><a href="${ILINK(r.id)}"><b>${esc(r.name)}</b></a><div class="xs dim">${esc(HZ[r.horizon])} · weight ${r.w}</div></td><td data-k="Reading" class="num">${esc(r.disp)}</td><td data-k="Read">${pill(r.state || (r.s === null ? 'Context' : 'Neutral'), r.s)}${r.s !== null ? sbar(r.s) : ''}</td><td data-k="Why">${esc(r.why)}<div class="xs dim">${esc(r.src)} · as of ${esc(r.asOf)}</div></td></tr>`).join('')}</tbody></table></div>
       <p class="xs dim">Indicators combine only inside their component, weighted and down-weighted when delayed; context indicators are shown but not scored.</p></section>
+    ${charts.length ? `<section class="block"><div class="bh"><h2>All charts</h2><p class="aside">Full history of every scored indicator in ${esc(comp.toLowerCase())} · shaded band = 10th–90th percentile</p></div>
+      <div class="rcharts">${charts.map((r) => `<div class="rchart"><h3><a href="${ILINK(r.id)}">${esc(r.name)} →</a></h3><div data-indchart="${r.id}"><p class="small muted">Computing history…</p></div></div>`).join('')}</div></section>` : ''}
     ${statusNote(I)}`;
 }
 
 // ---------------------------------------------------------------- indicator deep dive
-function indPage(I, id) {
+function indPage(I, id, panel = false) {
   const def = DEF_BY_ID[id], doc = IND_DOCS[id] || {}, r = I.readings[id], dk = def.domain;
   const dom = I.domains.find((x) => x.key === dk);
   const siblings = indicatorsOf(dk).filter((x) => x.comp === def.comp && x.id !== id).map((x) => x.id);
   const related = [...new Set([...(doc.related || []), ...siblings])].slice(0, 10);
-  return `${crumbs([['#analysis', 'Analysis'], [DSL(dk), SHORT[dk]], [CLINK(dk, def.comp), def.comp], [ILINK(id), def.name]])}
-    <section class="rhead dd"><div><h1>${esc(def.name)}</h1><p class="rq">${esc(SHORT[dk])} · ${esc(def.comp)} · ${esc(HZ[def.horizon])}</p></div></section>
+  return `${panel ? '' : backBar(DSL(dk), SHORT[dk], `<span class="rb-sub">in <a href="${CLINK(dk, def.comp)}">${esc(def.comp)}</a></span>`)}
+    <section class="rhead dd"><div><h1>${esc(def.name)}</h1><p class="rq">${panel ? `${esc(SHORT[dk])} · ` : ''}<a href="${CLINK(dk, def.comp)}">${esc(def.comp)}</a> · ${esc(HZ[def.horizon])}</p></div></section>
     <div class="dd-grid">
       <section class="dd-main">
         <div class="dd-cur"><span class="k">Current</span>${r ? `<div class="dd-v num">${esc(String(r.disp))}</div><div>${pill(r.state || (r.s === null ? 'Context' : 'Neutral'), r.s)}${r.s !== null ? sbar(r.s) : ''}<span class="xs dim"> ${esc(def.src)} · as of ${esc(r.asOf)} · ${esc(r.fresh)}</span></div>` : `<div class="dd-v muted">Unavailable</div><p class="xs dim">No current reading from the free sources (source: ${esc(def.src)}). Nothing is filled in.</p>`}</div>
@@ -349,7 +353,26 @@ function indPage(I, id) {
         <h3>Related indicators</h3><ul class="dd-rel">${related.map((x) => `<li><a href="${ILINK(x)}">${esc(DEF_BY_ID[x]?.name || x)}</a></li>`).join('')}<li><a href="${CLINK(dk, def.comp)}">${esc(def.comp)} (component)</a></li><li><a href="${DSL(dk)}">${esc(SHORT[dk])}</a></li></ul>
       </aside>
     </div>
-    ${statusNote(I)}`;
+    ${panel ? '' : statusNote(I)}`;
+}
+
+// ---------------------------------------------------------------- side panel + ribbon menus
+// "#analysis/<domain>/<indicator>" → indicator id (null for domains, components, other routes)
+export function idFromHref(href) {
+  const m = /^#analysis\/([^/]+)\/([^/#?]+)$/.exec(href || ''); if (!m) return null;
+  const dk = SLUG_DOMAIN[m[1]]; if (!dk || m[2].startsWith('c-')) return null;
+  return indicatorsOf(dk).find((x) => indSlug(x.id) === m[2])?.id || null;
+}
+export function indicatorPanel(I, id, ctx) {
+  const def = DEF_BY_ID[id];
+  return { html: `<div class="ip-head"><a class="ip-full" href="${ILINK(id)}" data-full>Open full page ↗</a><button type="button" class="ip-x" data-panel-close aria-label="Close">✕</button></div>${indPage(I, id, true)}`, title: def.name, after: (root) => fill(root, I, ctx) };
+}
+// mega-menu for a domain in the Analysis ribbon: its sub-sections and their indicators
+export function ribbonMenu(dslug) {
+  const dk = SLUG_DOMAIN[dslug]; if (!dk) return '';
+  const meta = DOMAIN_META.find((x) => x.key === dk), inds = indicatorsOf(dk);
+  return `<div class="snm-h"><a href="${DSL(dk)}"><b>${esc(SHORT[dk])}</b> — overview of all sub-sections →</a></div>
+    <div class="snm-cols">${Object.keys(meta.comps).map((c) => `<div class="snm-col"><a class="snm-c" href="${CLINK(dk, c)}">${esc(c)}</a><ul>${inds.filter((x) => x.comp === c).map((x) => `<li><a href="${ILINK(x.id)}"${x.w ? '' : ' class="ctx"'}>${esc(x.name)}</a></li>`).join('')}</ul></div>`).join('')}</div>`;
 }
 
 // ---------------------------------------------------------------- deferred fills
@@ -420,7 +443,8 @@ async function fill(root, I, ctx) {
   });
   for (const el of root.querySelectorAll('[data-ddchart]')) await defer(() => {
     const id = el.dataset.ddchart, def = DEF_BY_ID[id], h = indicatorHistory(X, id), b = h.base, fmt = fmtFor(id), r = I.readings[id];
-    el.innerHTML = chartBlock('dd-' + id, h.pts.map((p) => [p[0], p[1]]), { fmt, base: b, h: 360, label: def.name }, 0) + `<p class="xs dim">Every point is the engine’s own calculation for that date (daily for the last year, weekly before). Shaded band: 10th–90th percentile of the full history; dashed lines: 2.5th, 10th, median, 90th and 97.5th percentiles.</p>`;
+    const inPanel = !!el.closest('.ip-box'), pw = inPanel ? { w: Math.max(560, Math.min(1000, el.clientWidth || 900)), h: 330 } : {};
+    el.innerHTML = chartBlock('dd-' + id, h.pts.map((p) => [p[0], p[1]]), { fmt, base: b, h: 360, label: def.name, ...pw }, 0) + `<p class="xs dim">Every point is the engine’s own calculation for that date (daily for the last year, weekly before). Shaded band: 10th–90th percentile of the full history; dashed lines: 2.5th, 10th, median, 90th and 97.5th percentiles.</p>`;
     wireRanges(el, wc);
     const pos = root.querySelector(`[data-ddpos="${id}"]`);
     if (pos) pos.innerHTML = `<div><span class="k">Historical position</span>${b.enough ? `<b>${ord(b.pct)}</b> percentile` : '<span class="muted">not enough history</span>'}</div><div><span class="k">Historical zone</span>${b.enough ? `<b>${esc(b.zone)}</b>` : '—'}</div><div><span class="k">Engine reading</span>${r ? pill(r.state || (r.s === null ? 'Context' : 'Neutral'), r.s) : '—'}</div><div><span class="k">30-day direction</span>${b.dir ? esc(b.dir) : '—'}</div><div><span class="k">Time in zone</span>${b.enough ? esc(dayWord(Math.max(1, Math.round((Date.parse(b.last) - Date.parse(b.since)) / 864e5) + 1))) : '—'}</div><div><span class="k">Horizon</span>${esc(HZ[def.horizon])}</div>`;
