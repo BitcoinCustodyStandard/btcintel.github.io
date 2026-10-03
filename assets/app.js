@@ -6,10 +6,10 @@ import { briefReport } from '../engine/report.js';
 import { brief } from '../engine/brief.js';
 import { ZONES } from '../engine/cycle.js';
 import { explain, EXPLAIN, REMINDER } from '../engine/explain.js';
-import { startLivePrice } from './live.js?v=20261003f';
-import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003f';
-import { dashTab, mountDash, dashLive, refreshDash } from './dash.js?v=20261003f';
-import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003f';
+import { startLivePrice } from './live.js?v=20261003g';
+import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003g';
+import { dashTab, mountDash, dashLive, refreshDash } from './dash.js?v=20261003g';
+import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003g';
 import { fmtUsd, fmtUsdSigned, fmtPrice, fmtPct, fmtNum, fmtK, ordinal } from '../engine/util.js';
 
 const state = { a: null, rows: [], runs: [], index: null, snapshot: null, range: 90, pi: null, dash: null, live: null, liveState: 'init' };

@@ -4,9 +4,9 @@
 // data/latest.json (agent snapshot) and data/pi_cycle.json. Values that cannot be
 // obtained free are shown as such, never estimated.
 
-import { startNetwork, seedNetwork, refreshNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js?v=20261003f';
-import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js?v=20261003f';
-import { priceCardHtml, envelopeNow } from './pricechart.js?v=20261003f';
+import { startNetwork, seedNetwork, refreshNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js?v=20261003g';
+import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js?v=20261003g';
+import { priceCardHtml, envelopeNow } from './pricechart.js?v=20261003g';
 
 // ---------- formatting ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -64,6 +64,10 @@ const cohortCard = (k, label, info, key, who) => ({ k, label, info, get: () => {
   const v = rows.at(-1)[1], x = (price() / v - 1) * 100;
   return { v: usd(v), sub: `price <span class="${cls(x)}">${pct(x)}</span> ${x >= 0 ? 'above' : 'below'} · ${who} · value for ${dShort(rows.at(-1)[0])} (free tier is delayed)`, spark: lastN(rows, 180), sfmt: (y) => usd(y), src: 'BGeometrics free API', at: rows.at(-1)[0], max: 12 * DAY };
 } });
+// display order: market-facing sections first (they corroborate the Market read),
+// network fundamentals after, address distribution last
+const GROUP_ORDER = ['sentiment', 'market', 'onchain', 'derivs', 'holders', 'corr', 'network', 'fees', 'mining', 'supply'];
+const FUNDAMENTALS_FROM = 'network';
 const GROUPS = [
   { id: 'market', title: 'Price & market', cards: [
     { k: 'price', label: 'Price', info: 'd_price', get: () => S.live ? { v: usd(S.live.price), sub: `<span class="${cls(S.live.ch24)}">${pct(S.live.ch24, 2)}</span> 24h`, src: `${S.live.source}${S.live.note ? ' (USDT)' : ''} · live`, at: S.live.at, max: 60e3 } : { v: usd(S.a?.metrics.price.spot), sub: 'server snapshot', src: 'CoinGecko', at: srcQ('coingecko')?.asOf, max: 2 * H } },
@@ -627,7 +631,8 @@ export function dashTab({ a, pi, dash, info }) {
     <aside class="dcol dright"><section class="dcard posture" id="d-posture" aria-label="Market read"></section>${fngHtml()}${newsHtml()}</aside>
   </div>
   ${pmHtml()}
-  ${GROUPS.map((g) => `<section class="mgroup" id="g-${g.id}"><h2>${g.title}</h2>${g.note ? `<p class="gintro">${g.note}</p>` : ''}${g.id === 'network' ? blockStripHtml() : ''}<div class="dkcards">${g.cards.map(cardShell).join('')}</div><p class="gnote" hidden></p></section>${g.id === 'onchain' ? distHtml() : ''}`).join('')}
+  ${GROUP_ORDER.map((id) => GROUPS.find((g) => g.id === id)).map((g) => `${g.id === FUNDAMENTALS_FROM ? '<div class="gdivider"><span>Network fundamentals</span><p>Chain, fee, mining and supply data. These describe the network itself rather than market positioning.</p></div>' : ''}<section class="mgroup" id="g-${g.id}"><h2>${g.title}</h2>${g.note ? `<p class="gintro">${g.note}</p>` : ''}${g.id === 'network' ? blockStripHtml() : ''}<div class="dkcards">${g.cards.map(cardShell).join('')}</div><p class="gnote" hidden></p></section>`).join('')}
+  ${distHtml()}
   <section class="mgroup" id="g-tools"><h2>Sats converter${S.info('d_converter')}</h2><div class="dcard conv tools-conv">
     <div class="conv-row"><label><span>USD</span><input type="text" inputmode="decimal" id="cv-usd" value="100" autocomplete="off"></label><span class="conv-eq">=</span><label><span>sats</span><input type="text" inputmode="numeric" id="cv-sats" autocomplete="off"></label></div>
     <div class="conv-s dim" id="cv-note"></div><p class="tr-n">For a full backtest of regular purchases, open the <a href="#dca">DCA backtest</a>.</p></div></section>

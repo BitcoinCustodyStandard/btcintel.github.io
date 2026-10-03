@@ -894,6 +894,9 @@ details.more[open] > summary { border-bottom: 1px solid var(--line); }
 .tr-n { margin: 4px 0 0; font-size: 11px; color: var(--dim); }
 
 /* ── group intro / hidden-card note ── */
+.gdivider { margin: 44px 0 0; padding-top: 14px; border-top: 2px solid var(--line); }
+.gdivider span { font: 600 13px/1.3 var(--sans); letter-spacing: 0.18em; text-transform: uppercase; color: var(--text); }
+.gdivider p { margin: 4px 0 0; font-size: 12.5px; color: var(--muted); max-width: 900px; }
 .gintro { margin: -4px 0 10px; font-size: 12.5px; color: var(--muted); max-width: 900px; }
 .gnote { margin: 8px 0 0; font-size: 11.5px; color: var(--dim); }
 .gnote b { font-weight: 600; color: var(--muted); }
