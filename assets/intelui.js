@@ -3,7 +3,7 @@
 //   intelligenceHtml — Intelligence tab: what matters now and why, valuation, cycle, risk
 // All text comes from the engine's evidence; nothing here adds figures of its own.
 
-import { DOMAIN_SLUG, DEF_BY_ID, indSlug } from '../engine/intel.js?v=20261003i';
+import { DOMAIN_SLUG, DEF_BY_ID, indSlug } from '../engine/intel.js?v=20261003j';
 
 const DLINK = (k) => `#analysis/${DOMAIN_SLUG[k]}`;
 const ILINK = (id) => (DEF_BY_ID[id] ? `${DLINK(DEF_BY_ID[id].domain)}/${indSlug(id)}` : '#analysis');

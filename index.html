@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@400;500&display=swap" rel="stylesheet">
 <!-- bump ?v= here and on the assets/*.js imports together when CSS or page modules change -->
-<link rel="stylesheet" href="assets/app.css?v=20261003i">
+<link rel="stylesheet" href="assets/app.css?v=20261003j">
 <script>
   try { const t = localStorage.getItem('bmi-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
 </script>
@@ -44,6 +44,16 @@
       <span class="nav-price mono" id="nav-price"></span>
     </div>
   </div>
+  <div class="subnav" id="subnav" hidden>
+    <div class="wrap navlinks" aria-label="Analysis domains">
+      <a href="#analysis" data-sub="">Overview</a>
+      <a href="#analysis/technical" data-sub="technical">Technical Analysis</a>
+      <a href="#analysis/on-chain" data-sub="on-chain">On-Chain Analysis</a>
+      <a href="#analysis/market-structure" data-sub="market-structure">Market Structure</a>
+      <a href="#analysis/sentiment" data-sub="sentiment">Sentiment</a>
+      <a href="#analysis/macro-liquidity" data-sub="macro-liquidity">Macro &amp; Liquidity</a>
+    </div>
+  </div>
 </nav>
 <main class="wrap" id="app">
   <div class="empty-state" id="loading">Loading market state…</div>
@@ -54,6 +64,6 @@
     <p><a href="/">BTC Intel</a> · <a href="data/index.json">Report archive (JSON)</a> · <a href="data/timeseries.json">Daily timeseries (JSON)</a> · <a href="https://github.com/BitcoinCustodyStandard/btcintel.github.io/blob/main/README.md" target="_blank" rel="noopener">Methodology &amp; operations</a></p>
   </div>
 </footer>
-<script type="module" src="assets/app.js?v=20261003i"></script>
+<script type="module" src="assets/app.js?v=20261003j"></script>
 </body>
 </html>

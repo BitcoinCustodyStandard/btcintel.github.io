@@ -6,14 +6,14 @@ import { briefReport } from '../engine/report.js';
 import { brief } from '../engine/brief.js';
 import { ZONES } from '../engine/cycle.js';
 import { explain, EXPLAIN, REMINDER } from '../engine/explain.js';
-import { startLivePrice } from './live.js?v=20261003i';
-import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003i';
-import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261003i';
-import { intelligence } from '../engine/intel.js?v=20261003i';
-import { reportModel } from '../engine/reportmodel.js?v=20261003i';
-import { intelligenceHtml, wireIntel } from './intelui.js?v=20261003i';
-import { analysisRoute } from './research.js?v=20261003i';
-import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003i';
+import { startLivePrice } from './live.js?v=20261003j';
+import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003j';
+import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261003j';
+import { intelligence } from '../engine/intel.js?v=20261003j';
+import { reportModel } from '../engine/reportmodel.js?v=20261003j';
+import { intelligenceHtml, wireIntel } from './intelui.js?v=20261003j';
+import { analysisRoute } from './research.js?v=20261003j';
+import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003j';
 import { fmtUsd, fmtUsdSigned, fmtPrice, fmtPct, fmtNum, fmtK, ordinal } from '../engine/util.js';
 
 const state = { a: null, rows: [], runs: [], index: null, snapshot: null, range: 90, pi: null, dash: null, live: null, liveState: 'init' };
@@ -241,6 +241,8 @@ function showTab(scroll) {
   if (MOVED[location.hash.slice(1)]) { location.replace('#' + MOVED[location.hash.slice(1)]); return; }
   const t = tabFromHash(), k = location.hash.slice(1);
   if (t === 'analysis') { renderAnalysis(scroll); }
+  // second ribbon with the five domains, shown inside Analysis
+  const sub = $('#subnav'); if (sub) { sub.hidden = t !== 'analysis'; const ds = k.split('/')[1] || ''; sub.querySelectorAll('[data-sub]').forEach((a) => a.setAttribute('aria-current', a.dataset.sub === ds ? 'page' : 'false')); }
   document.querySelectorAll('[data-tab]').forEach((s) => { s.hidden = s.dataset.tab !== t; });
   document.querySelectorAll('[data-tab-link]').forEach((x) => x.setAttribute('aria-current', x.dataset.tabLink === t ? 'page' : 'false'));
   drawCharts($(`[data-tab="${t}"]`) || document);

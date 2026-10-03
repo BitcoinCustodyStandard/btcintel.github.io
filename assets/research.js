@@ -7,8 +7,8 @@
 // shows the same value the dashboard and Intelligence use. Heavy history work is deferred
 // until after the page skeleton is on screen.
 
-import { DOMAIN_META, DOMAIN_SLUG, SLUG_DOMAIN, DEF_BY_ID, indicatorsOf, indSlug, compSlug, indicatorHistory, domHistory, compHistory } from '../engine/intel.js?v=20261003i';
-import { DOMAIN_DOCS, COMP_DOCS, IND_DOCS } from '../engine/indicator_docs.js?v=20261003i';
+import { DOMAIN_META, DOMAIN_SLUG, SLUG_DOMAIN, DEF_BY_ID, indicatorsOf, indSlug, compSlug, indicatorHistory, domHistory, compHistory } from '../engine/intel.js?v=20261003j';
+import { DOMAIN_DOCS, COMP_DOCS, IND_DOCS } from '../engine/indicator_docs.js?v=20261003j';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ok = (v) => v !== null && v !== undefined && Number.isFinite(v);
@@ -123,6 +123,33 @@ function fwdBlock(b) {
     <p class="xs dim">Weeks when this indicator sat between the ${ord(F.band[0])} and ${ord(F.band[1])} percentile, as now. Historical observation only: windows overlap, samples are small and Bitcoin’s past cycles may not repeat. This is not a forecast.</p>`;
 }
 
+// ---------------------------------------------------------------- full domain blocks (landing)
+function indicatorRow(r) {
+  const st = r.state || (r.s === null ? 'Context' : 'Neutral');
+  return `<tr class="${r.s === null ? 'ctx' : ''}">
+    <td data-k="Indicator"><a href="${ILINK(r.id)}"><b>${esc(r.name)}</b></a><div class="xs dim">${esc(HZ[r.horizon] || '')}${r.fresh === 'delayed' ? ' · delayed' : ''}</div></td>
+    <td data-k="Reading" class="num">${esc(r.disp)}</td>
+    <td data-k="Read">${pill(st, r.s)}${r.s !== null ? sbar(r.s) : ''}</td>
+    <td data-k="Why">${esc(r.why)}<div class="xs dim">${esc(r.src)} · as of ${esc(r.asOf)}</div></td>
+  </tr>`;
+}
+function domainBlock(d) {
+  return `<details class="idom" id="dom-${d.key}" open>
+    <summary>
+      <span class="idom-n">${esc(SHORT[d.key])}</span>
+      <span class="idom-q">${esc(d.question)}</span>
+      <span class="idom-s">${pill(d.state, d.score)}<span class="ia">${d.arrow}</span>${sbar(d.score)}${conf(d.confidence.level)}</span>
+    </summary>
+    <div class="idom-b">
+      <div class="icomps">${d.comps.map((c) => `<a class="icomp" href="${CLINK(d.key, c.name)}"><span class="cn">${esc(c.name)}</span><span class="cw t-${tone(null, c.score)}">${esc(c.word)}</span>${sbar(c.score)}<span class="cc xs dim">${c.n} scored</span></a>`).join('')}</div>
+      ${d.notes.length ? `<p class="inote">${d.notes.map(esc).join(' ')}</p>` : ''}
+      <p class="xs dim">Confidence ${esc(d.confidence.level.toLowerCase())}: ${Math.round(d.confidence.coverage * 100)}% of the domain’s indicator weight has data, ${Math.round(d.confidence.fresh * 100)}% freshness, ${Math.round(d.confidence.agree * 100)}% agreement with the domain’s direction. <a href="${DSL(d.key)}">Open the ${esc(SHORT[d.key])} research page →</a></p>
+      ${d.comps.map((c) => (c.indicators.length ? `<h4 class="ich"><a href="${CLINK(d.key, c.name)}">${esc(c.name)}</a> <span>${esc(c.word)}</span></h4><div class="tbl-wrap"><table class="itbl"><tbody>${c.indicators.map(indicatorRow).join('')}</tbody></table></div>` : '')).join('')}
+      ${d.unavailable?.length ? `<p class="iun"><span class="k">Not available from free sources</span>${d.unavailable.map(esc).join(' · ')}</p>` : ''}
+    </div>
+  </details>`;
+}
+
 // ---------------------------------------------------------------- landing
 function landing(I) {
   const D = (k) => I.domains.find((x) => x.key === k);
@@ -141,6 +168,14 @@ function landing(I) {
   return `<section class="ihead"><div><h1>Analysis</h1><p class="muted">Five analytical domains are the inputs to BTCIntel’s market intelligence. Each tile shows the current read; open a domain for its full research page, and any indicator for its deep dive. Cycle and valuation are conclusions drawn from all five, on the <a href="#overview">Intelligence</a> and <a href="#cycle">On-chain Cycle</a> pages.</p></div>
       <div class="ihead-r">${pill(I.state)}<span class="muted small">${I.breadth.n} of ${I.breadth.of} domains supportive · Fair Grade <b class="num">${I.grade.value}</b>/100</span></div></section>
     <div class="atiles">${DOMAIN_META.map(tile).join('')}</div>
+    <section class="block"><div class="bh"><h2>Full analysis by domain</h2><p class="aside">${Object.values(I.readings).length} indicators from free public sources, ${Object.values(I.readings).filter((r) => r.s !== null).length} scored, the rest shown as context · click a name for its deep dive</p></div>
+      ${I.domains.map(domainBlock).join('')}
+      <details class="about imethod"><summary>How the engine reads indicators</summary>
+        <p><b>Layer 1–2.</b> Raw data (prices, flows, on-chain series, macro series) becomes indicators: moving averages, RSI, MACD, Bollinger Bands, MVRV, cost bases, ETF flow sums, funding, yields and so on.</p>
+        <p><b>Layer 3.</b> Each indicator is interpreted on its own scale from −1 to +1 against fixed thresholds and its own history: <i>supportive</i> (+0.2 or more), <i>neutral</i>, <i>cautionary</i> (−0.2 or less) or <i>deteriorating</i> (cautionary and worse than a week ago, or deeply negative). Context indicators are shown but not scored. Readings older than their normal update interval are down-weighted; very old ones are dropped.</p>
+        <p><b>Layer 4.</b> Indicators combine only with like indicators inside a component (Trend, Momentum, Valuation, Leverage…). Components combine into the domain by fixed weights, adjusted for coverage, with explicit override rules (a negative long-term trend caps Technical; elevated leverage caps Market structure; extreme greed overrides the other sentiment inputs). Nothing is averaged across domains.</p>
+        <p>Interpretation depends on context: extreme greed is read as crowding, not strength; negative funding as squeeze fuel, not weakness; low volatility as a pending move of unknown direction.</p>
+      </details></section>
     <section class="block"><div class="bh"><h2>How the pieces fit</h2></div>
       <ol class="flow"><li><b>Raw data</b><span>Free public sources, each with its source, date and update interval</span></li><li><b>Indicators</b><span>About 95 measures, each read on its own scale against its history</span></li><li><b>Five domains</b><span>Technical · On-chain · Market structure · Sentiment · Macro & liquidity</span></li><li><b>Cross-domain forces</b><span>Patterns detected across indicators and domains</span></li><li><b>Intelligence → Market read</b><span>What matters now, breadth, Fair Grade</span></li><li><b>Cycle + valuation</b><span>Where all of this leaves Bitcoin</span></li></ol></section>
     ${statusNote(I)}`;
