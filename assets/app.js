@@ -6,14 +6,14 @@ import { briefReport } from '../engine/report.js';
 import { brief } from '../engine/brief.js';
 import { ZONES } from '../engine/cycle.js';
 import { explain, EXPLAIN, REMINDER } from '../engine/explain.js';
-import { startLivePrice } from './live.js?v=20261003o';
-import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003o';
-import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261003o';
-import { intelligence } from '../engine/intel.js?v=20261003o';
-import { reportModel } from '../engine/reportmodel.js?v=20261003o';
-import { intelligenceHtml, wireIntel } from './intelui.js?v=20261003o';
-import { analysisRoute, indicatorPanel, idFromHref, ribbonMenu } from './research.js?v=20261003o';
-import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003o';
+import { startLivePrice } from './live.js?v=20261003p';
+import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003p';
+import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261003p';
+import { intelligence } from '../engine/intel.js?v=20261003p';
+import { reportModel } from '../engine/reportmodel.js?v=20261003p';
+import { intelligenceHtml, wireIntel } from './intelui.js?v=20261003p';
+import { analysisRoute, indicatorPanel, idFromHref, ribbonMenu } from './research.js?v=20261003p';
+import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003p';
 import { fmtUsd, fmtUsdSigned, fmtPrice, fmtPct, fmtNum, fmtK, ordinal } from '../engine/util.js';
 
 const state = { a: null, rows: [], runs: [], index: null, snapshot: null, range: 90, pi: null, dash: null, live: null, liveState: 'init' };
@@ -315,22 +315,34 @@ document.addEventListener('keydown', (e) => { if (e.key === 'Escape') { closePan
 // first tap on touch screens opens it, second tap follows the link)
 let menuFor = null, menuT = null;
 function closeMenu() { const m = $('#sn-menu'); if (m) m.hidden = true; menuFor = null; document.querySelectorAll('#subnav [data-sub]').forEach((x) => x.removeAttribute('aria-expanded')); }
-function openMenu(a) {
+let openMenu = function (a) {
   const html = ribbonMenu(a.dataset.sub), m = $('#sn-menu'); if (!m || !html) { closeMenu(); return; }
   clearTimeout(menuT);
   if (menuFor !== a.dataset.sub) { m.innerHTML = html; menuFor = a.dataset.sub; }
   m.hidden = false;
   document.querySelectorAll('#subnav [data-sub]').forEach((x) => (x === a ? x.setAttribute('aria-expanded', 'true') : x.removeAttribute('aria-expanded')));
-}
+};
 (() => {
-  const sub = $('#subnav'); if (!sub) return;
-  const fine = matchMedia('(hover: hover) and (pointer: fine)').matches;
+  const sub = $('#subnav'), menu = $('#sn-menu'); if (!sub || !menu) return;
+  // decide per interaction: a real mouse hovers, a finger or pen taps (never guess from the device)
+  let lastPointer = 'mouse', openedAtY = 0;
   sub.querySelectorAll('[data-sub]').forEach((a) => {
-    if (fine) a.addEventListener('mouseenter', () => openMenu(a));
-    a.addEventListener('click', (e) => { if (!fine && ribbonMenu(a.dataset.sub) && menuFor !== a.dataset.sub) { e.preventDefault(); openMenu(a); } });
+    a.addEventListener('pointerenter', (e) => { lastPointer = e.pointerType; if (e.pointerType === 'mouse') openMenu(a); });
+    a.addEventListener('pointerdown', (e) => { lastPointer = e.pointerType; });
+    a.addEventListener('click', (e) => {
+      if (lastPointer === 'mouse' || !ribbonMenu(a.dataset.sub)) return;
+      // touch: first tap opens the menu, a second tap on the same tab follows the link
+      if (menuFor !== a.dataset.sub) { e.preventDefault(); openMenu(a); openedAtY = window.scrollY; }
+    });
   });
-  if (fine) { sub.addEventListener('mouseleave', () => { menuT = setTimeout(closeMenu, 220); }); sub.addEventListener('mouseenter', () => clearTimeout(menuT)); }
-  document.addEventListener('click', (e) => { if (menuFor && !e.target.closest('#subnav')) closeMenu(); });
+  sub.addEventListener('pointerleave', (e) => { if (e.pointerType === 'mouse') menuT = setTimeout(closeMenu, 220); });
+  sub.addEventListener('pointerenter', (e) => { if (e.pointerType === 'mouse') clearTimeout(menuT); });
+  menu.addEventListener('click', (e) => { if (e.target.closest('[data-menu-close]')) { e.preventDefault(); closeMenu(); } });
+  // any tap outside the open menu (including the ribbon's empty space) closes it
+  document.addEventListener('pointerdown', (e) => { if (menuFor && !e.target.closest('#sn-menu') && !e.target.closest('#subnav [data-sub]')) closeMenu(); }, true);
+  // scrolling the page closes it too, so it never sits over what you are reading
+  window.addEventListener('scroll', () => { if (menuFor && Math.abs(window.scrollY - openedAtY) > 24) closeMenu(); }, { passive: true });
+  const _open = openMenu; openMenu = (a) => { _open(a); openedAtY = window.scrollY; };
 })();
 function openForce(id) {
   const d = document.getElementById(id);

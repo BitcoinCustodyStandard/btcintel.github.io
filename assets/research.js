@@ -7,9 +7,9 @@
 // shows the same value the dashboard and Intelligence use. Heavy history work is deferred
 // until after the page skeleton is on screen.
 
-import { DOMAIN_META, DOMAIN_SLUG, SLUG_DOMAIN, DEF_BY_ID, indicatorsOf, indSlug, compSlug, indicatorHistory, domHistory, compHistory, regimeTimeline, similarConditions, withArticle } from '../engine/intel.js?v=20261003o';
-import { ZONES } from '../engine/cycle.js?v=20261003o';
-import { DOMAIN_DOCS, COMP_DOCS, IND_DOCS } from '../engine/indicator_docs.js?v=20261003o';
+import { DOMAIN_META, DOMAIN_SLUG, SLUG_DOMAIN, DEF_BY_ID, indicatorsOf, indSlug, compSlug, indicatorHistory, domHistory, compHistory, regimeTimeline, similarConditions, withArticle } from '../engine/intel.js?v=20261003p';
+import { ZONES } from '../engine/cycle.js?v=20261003p';
+import { DOMAIN_DOCS, COMP_DOCS, IND_DOCS } from '../engine/indicator_docs.js?v=20261003p';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ok = (v) => v !== null && v !== undefined && Number.isFinite(v);
@@ -371,7 +371,7 @@ export function indicatorPanel(I, id, ctx) {
 export function ribbonMenu(dslug) {
   const dk = SLUG_DOMAIN[dslug]; if (!dk) return '';
   const meta = DOMAIN_META.find((x) => x.key === dk), inds = indicatorsOf(dk);
-  return `<div class="snm-h"><a href="${DSL(dk)}"><b>${esc(SHORT[dk])}</b> — overview of all sub-sections →</a></div>
+  return `<div class="snm-h"><a href="${DSL(dk)}"><b>${esc(SHORT[dk])}</b> — overview of all sub-sections →</a><button type="button" class="snm-x" data-menu-close aria-label="Close menu">✕</button></div>
     <div class="snm-cols">${Object.keys(meta.comps).map((c) => `<div class="snm-col"><a class="snm-c" href="${CLINK(dk, c)}">${esc(c)}</a><ul>${inds.filter((x) => x.comp === c).map((x) => `<li><a href="${ILINK(x.id)}"${x.w ? '' : ' class="ctx"'}>${esc(x.name)}</a></li>`).join('')}</ul></div>`).join('')}</div>`;
 }
 

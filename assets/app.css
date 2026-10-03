@@ -1494,3 +1494,7 @@ html.panel-open { overflow: hidden; }
 .secnav .snm-col li a:hover { color: var(--orange-ink); }
 .secnav .sn-menu.wrap { display: block; }
 .secnav .sn-menu.wrap[hidden] { display: none; }
+.snm-h { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.snm-x { flex: none; width: 32px; height: 32px; border-radius: 4px; border: 1px solid var(--line2); background: var(--card); color: var(--text); font-size: 14px; cursor: pointer; }
+.snm-x:hover { border-color: var(--orange-line); }
+@media (max-width: 700px) { .sn-menu { max-height: 58vh; } }
