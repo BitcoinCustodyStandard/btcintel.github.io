@@ -7,8 +7,9 @@
 // shows the same value the dashboard and Intelligence use. Heavy history work is deferred
 // until after the page skeleton is on screen.
 
-import { DOMAIN_META, DOMAIN_SLUG, SLUG_DOMAIN, DEF_BY_ID, indicatorsOf, indSlug, compSlug, indicatorHistory, domHistory, compHistory } from '../engine/intel.js?v=20261003j';
-import { DOMAIN_DOCS, COMP_DOCS, IND_DOCS } from '../engine/indicator_docs.js?v=20261003j';
+import { DOMAIN_META, DOMAIN_SLUG, SLUG_DOMAIN, DEF_BY_ID, indicatorsOf, indSlug, compSlug, indicatorHistory, domHistory, compHistory, regimeTimeline, similarConditions, withArticle } from '../engine/intel.js?v=20261003m';
+import { ZONES } from '../engine/cycle.js?v=20261003m';
+import { DOMAIN_DOCS, COMP_DOCS, IND_DOCS } from '../engine/indicator_docs.js?v=20261003m';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ok = (v) => v !== null && v !== undefined && Number.isFinite(v);
@@ -33,6 +34,7 @@ function fmtFor(id) {
   if (PCT.includes(id)) return (v) => `${sg(v)}${n(v, Math.abs(v) < 10 ? 2 : 1)}%`;
   if (BP.includes(id)) return (v) => `${sg(v)}${n(v * 100, 0)} bp`;
   if (['c_realized'].includes(id)) return (v) => `$${n(v, 0)}`;
+  if (id === 's_fng') return (v) => n(v, 0);
   if (['c_rcap'].includes(id)) return (v) => `$${n(v / 1e9, 0)}B`;
   if (/^m_etf/.test(id) || id === 'm_cftcam') return (v) => `${sg(v)}${n(v, 0)}${/^m_etf/.test(id) ? ' US$m' : ''}`;
   if (['c_exnet'].includes(id)) return (v) => `${sg(v)}${n(v, 0)} BTC`;
@@ -49,7 +51,7 @@ function niceTicks(lo, hi, n = 5) {
   return out;
 }
 const T = (d) => Date.parse(d + 'T00:00:00Z');
-export function histSvg(pts, { fmt = (v) => String(v), base = null, w = typeof innerWidth === 'undefined' ? 1000 : innerWidth < 700 ? 560 : Math.min(1500, Math.max(900, innerWidth - 120)), h = 320, refs = true, zero = false, label = 'history', guides = null } = {}) {
+export function histSvg(pts, { bands = null, fmt = (v) => String(v), base = null, w = typeof innerWidth === 'undefined' ? 1000 : innerWidth < 700 ? 560 : Math.min(1500, Math.max(900, innerWidth - 120)), h = 320, refs = true, zero = false, label = 'history', guides = null } = {}) {
   if (!pts || pts.length < 2) return `<div class="hc-empty">Not enough stored history to chart yet${pts?.length ? ` (${pts.length} observation)` : ''}. History accumulates with each daily run.</div>`;
   const P = { l: w < 700 ? 56 : 70, r: w < 700 ? 74 : 96, t: 12, b: 28 };
   const xs = pts.map((p) => T(p[0])), ys = pts.map((p) => p[1]);
@@ -65,6 +67,7 @@ export function histSvg(pts, { fmt = (v) => String(v), base = null, w = typeof i
   if (span > 600) { for (let y = y0d.getUTCFullYear() + 1; y <= y1d.getUTCFullYear(); y++) xt.push([Date.UTC(y, 0, 1), String(y)]); if (xt.length > 9) for (let i = xt.length - 1; i >= 0; i--) if (i % 2) xt.splice(i, 1); }
   else { const mo = span > 200 ? 3 : 1; const d = new Date(Date.UTC(y0d.getUTCFullYear(), y0d.getUTCMonth() + 1, 1)); while (d.getTime() <= x1) { if (d.getUTCMonth() % mo === 0) xt.push([d.getTime(), d.toLocaleString('en-US', { month: 'short', timeZone: 'UTC' }) + (d.getUTCMonth() === 0 ? ' ' + d.getUTCFullYear() : '')]); d.setUTCMonth(d.getUTCMonth() + 1); } }
   const xl = xt.map(([t, l]) => `<line class="gridl v" x1="${X(t).toFixed(1)}" x2="${X(t).toFixed(1)}" y1="${P.t}" y2="${h - P.b}"/><text class="axis" x="${X(t).toFixed(1)}" y="${h - 8}" text-anchor="middle">${esc(l)}</text>`).join('');
+  const zones = (bands || []).map((b) => { const lo = Math.max(y0, b.lo), hi = Math.min(y1, b.hi); return hi > lo ? `<rect class="hc-zone z-${b.tone}" x="${P.l}" width="${w - P.l - P.r}" y="${Y(hi).toFixed(1)}" height="${(Y(lo) - Y(hi)).toFixed(1)}"><title>${esc(b.label)}</title></rect><text class="hc-zl" x="${P.l + 6}" y="${(Y(hi) + 13).toFixed(1)}">${esc(b.label)}</text>` : ''; }).join('');
   const band = base?.enough && refs ? `<rect class="hc-band" x="${P.l}" width="${w - P.l - P.r}" y="${Y(base.p90).toFixed(1)}" height="${Math.max(0, Y(base.p10) - Y(base.p90)).toFixed(1)}"><title>10th–90th percentile of history (normal range)</title></rect>` : '';
   const ref = lines.map(([n, v]) => `<line class="hc-ref${n === 'Median' ? ' mid' : ''}" x1="${P.l}" x2="${w - P.r}" y1="${Y(v).toFixed(1)}" y2="${Y(v).toFixed(1)}"/><text class="hc-rl" x="${w - P.r + 6}" y="${(Y(v) + 4).toFixed(1)}">${guides && !refs ? n : `${n} ${esc(fmt(v))}`}</text>`).join('');
   const zl = zero && y0 < 0 && y1 > 0 ? `<line class="hc-zero" x1="${P.l}" x2="${w - P.r}" y1="${Y(0).toFixed(1)}" y2="${Y(0).toFixed(1)}"/>` : '';
@@ -72,7 +75,7 @@ export function histSvg(pts, { fmt = (v) => String(v), base = null, w = typeof i
   const step = Math.max(1, Math.ceil(pts.length / 500));
   const data = esc(JSON.stringify(pts.filter((_, i) => i % step === 0 || i === pts.length - 1).map((p) => [+X(T(p[0])).toFixed(1), +Y(p[1]).toFixed(1), p[0], fmt(p[1])])));
   const end = `<circle class="enddot" cx="${X(xs.at(-1)).toFixed(1)}" cy="${Y(ys.at(-1)).toFixed(1)}" r="4"/>`;
-  return `<div class="chart hc"><svg viewBox="0 0 ${w} ${h}" data-w="${w}" data-h="${h}" data-line="${data}" role="img" aria-label="${esc(label)}">${band}${grid}${xl}${zl}${ref}<path class="ln" d="${path}"/>${end}<line class="xh" y1="${P.t}" y2="${h - P.b}" style="display:none"/><circle class="dot" r="4" style="display:none"/></svg></div>`;
+  return `<div class="chart hc"><svg viewBox="0 0 ${w} ${h}" data-w="${w}" data-h="${h}" data-line="${data}" role="img" aria-label="${esc(label)}">${zones}${band}${grid}${xl}${zl}${ref}<path class="ln" d="${path}"/>${end}<line class="xh" y1="${P.t}" y2="${h - P.b}" style="display:none"/><circle class="dot" r="4" style="display:none"/></svg></div>`;
 }
 function sparkSvg(pts, w = 240, h = 46) {
   if (!pts || pts.length < 2) return '<span class="xs dim">no history yet</span>';
@@ -151,7 +154,16 @@ function domainBlock(d) {
 }
 
 // ---------------------------------------------------------------- landing
-function landing(I) {
+const RTONE = { Bullish: 'up', Neutral: 'neu', Bearish: 'warn' };
+const rd = (I, id) => I.readings[id];
+const val = (r) => (r ? esc(String(r.disp)) : '<span class="muted">unavailable</span>');
+// one evidence row: label · reading · engine read · link
+const evRow = (I, id, label) => { const r = rd(I, id); if (!r) return ''; return `<tr><td data-k="Evidence"><a href="${ILINK(id)}"><b>${esc(label || r.name)}</b></a><div class="xs dim">${esc(r.src)} · ${esc(r.asOf)}</div></td><td data-k="Reading" class="num">${val(r)}</td><td data-k="Read">${pill(r.state || (r.s === null ? 'Context' : 'Neutral'), r.s)}</td><td data-k="Meaning" class="small">${esc(r.why)}</td></tr>`; };
+const evTable = (I, rows) => `<div class="tbl-wrap"><table class="itbl ev4"><tbody>${rows.map(([id, l]) => evRow(I, id, l)).join('')}</tbody></table></div>`;
+const compLine = (I, dk, comp, title) => { const d = I.domains.find((x) => x.key === dk), c = d?.comps.find((x) => x.name === comp); if (!c) return ''; return `<a class="hsum" href="${CLINK(dk, comp)}"><span class="hs-n">${esc(title || comp)}</span><span class="hs-w t-${tone(null, c.score)}">${esc(c.word)}</span>${sbar(c.score)}</a>`; };
+const sectionHead = (id, title, aside, more) => `<div class="bh" id="${id}"><h2>${title}</h2><p class="aside">${aside}${more ? ` · ${more}` : ''}</p></div>`;
+
+function landing(I, ctx) {
   const D = (k) => I.domains.find((x) => x.key === k);
   const tile = (meta) => {
     const d = D(meta.key);
@@ -159,25 +171,93 @@ function landing(I) {
     return `<a class="atile t-${tone(d.state, d.score)}" href="${DSL(meta.key)}">
       <div class="at-h"><h2>${esc(SHORT[meta.key])}</h2>${pill(d.state, d.score)}</div>
       <p class="at-q">“${esc(meta.question)}”</p>
-      <p class="at-d">${esc(DOMAIN_DOCS[meta.key].overview.split('. ')[0])}.</p>
       <div class="at-prev" data-domspark="${meta.key}"><span class="xs dim">Loading domain history…</span></div>
       <ul class="at-k">${key.map((r) => `<li><span>${esc(r.name)}</span><b class="num">${esc(String(r.disp).split(' (')[0].split(' ·')[0])}</b></li>`).join('')}</ul>
       <div class="at-f"><span>${d.arrow} ${conf(d.confidence.level)}</span><span class="at-go">Open research page →</span></div>
     </a>`;
   };
-  return `<section class="ihead"><div><h1>Analysis</h1><p class="muted">Five analytical domains are the inputs to BTCIntel’s market intelligence. Each tile shows the current read; open a domain for its full research page, and any indicator for its deep dive. Cycle and valuation are conclusions drawn from all five, on the <a href="#overview">Intelligence</a> and <a href="#cycle">On-chain Cycle</a> pages.</p></div>
-      <div class="ihead-r">${pill(I.state)}<span class="muted small">${I.breadth.n} of ${I.breadth.of} domains supportive · Fair Grade <b class="num">${I.grade.value}</b>/100</span></div></section>
+  const G = I.regime, C = I.cycle, A = I.assessment, a = ctx?.a;
+  const cyM = (id) => a?.cycle?.metrics?.find((x) => x.id === id);
+  const zoneTxt = (id) => { const m = cyM(id); return m?.zone ? `${esc(m.zone.label.replace(' / mid-cycle', ''))}${m.move?.length ? `<div class="xs dim">Changes zone ${esc(m.move.join(' · '))}</div>` : ''}` : '—'; };
+  const lev = I.forces.find((f) => f.id === 'leverage'), stress = I.forces.find((f) => f.id === 'stress');
+  const thr = (id, unit = '') => ZONES[id].map((z, i, t) => `${i === 0 ? '< ' + t[1].min : i === t.length - 1 ? '≥ ' + z.min : z.min + '–' + t[i + 1].min}${unit} ${z.label}`).join(' · ');
+  return `<section class="ihead"><div><h1>Analysis</h1><p class="muted">The analytical centre of BTCIntel: what market regime current conditions are consistent with, the evidence from market structure, liquidity, on-chain positioning and derivatives, historical context, and the overall assessment. Every reading links to its research page.</p></div>
+      <div class="ihead-r"><span class="muted small">Data as of ${esc(I.asOf)} · Fair Grade <b class="num">${I.grade.value}</b>/100 · ${I.breadth.n} of ${I.breadth.of} domains supportive</span></div></section>
+
+    ${G ? `<section class="mregime t-${RTONE[G.label]}" id="regime">
+      <div class="rg-l"><span class="k">Market regime</span><div class="rg-label">${esc(G.label)}</div><p class="rg-c">${C ? `Conditions are most consistent with <b>${esc(withArticle(C.phase))}</b>${C.transitional && C.runnerUp ? `, bordering on ${esc(withArticle(C.runnerUp.phase))}` : ''}.` : ''}</p>${conf(G.confidence)}</div>
+      <div class="rg-r"><p>${esc(G.why)}</p>
+        <div class="rg-ev">${G.evidence.map((e) => `<a class="hsum" href="${e.comp ? CLINK(e.dk, e.comp) : DSL(e.dk)}"><span class="hs-n">${esc(e.name)}</span><span class="hs-w t-${tone(null, e.score)}">${esc(e.word)}</span>${sbar(e.score)}</a>`).join('')}</div>
+        ${C ? `<details class="rg-more"><summary>What the regime description is based on</summary><div class="icyc"><div><h3>Consistent</h3><ul class="ichk">${C.met.map((m) => `<li class="y">${esc(m)}</li>`).join('') || '<li>—</li>'}</ul></div><div><h3>Not consistent</h3><ul class="ichk">${C.unmet.map((m) => `<li class="n">${esc(m)}</li>`).join('') || '<li class="muted">None</li>'}</ul></div></div><p class="xs dim">${esc(C.desc)} The regime is classified from structural, medium- and long-horizon evidence across all five domains (weights: trend 30%, holder positioning and liquidity 15% each, price structure, on-chain flows and institutional demand 10% each, leverage and valuation room 5% each). It is not derived from time since the halving or any cycle clock.</p></details>` : ''}
+      </div></section>` : ''}
+
     <div class="atiles">${DOMAIN_META.map(tile).join('')}</div>
-    <section class="block"><div class="bh"><h2>Full analysis by domain</h2><p class="aside">${Object.values(I.readings).length} indicators from free public sources, ${Object.values(I.readings).filter((r) => r.s !== null).length} scored, the rest shown as context · click a name for its deep dive</p></div>
-      ${I.domains.map(domainBlock).join('')}
+
+    <section class="block">${sectionHead('structure', 'Market structure', 'Trend, momentum, price structure, breadth and spot demand', `<a href="${DSL('tech')}">Technical Analysis →</a>`)}
+      <div class="hsums">${compLine(I, 'tech', 'Trend')}${compLine(I, 'tech', 'Momentum')}${compLine(I, 'tech', 'Structure', 'Price structure')}${compLine(I, 'tech', 'Extension')}${compLine(I, 'mkt', 'Spot demand')}${compLine(I, 'mkt', 'Crypto market structure', 'Breadth & dominance')}</div>
+      ${evTable(I, [['t_ma200'], ['t_ma50_200'], ['t_rsi'], ['t_hhhl'], ['t_dd', 'Distance from all-time high'], ['t_levels'], ['m_cbp'], ['m_dom'], ['m_breadth']])}</section>
+
+    <section class="block">${sectionHead('liquidity', 'Liquidity', 'External liquidity and in-market depth — conclusions only', `<a href="#analysis/liquidity">Liquidity Detail →</a>`)}
+      <div class="hsums">${compLine(I, 'macro', 'Liquidity', 'Central-bank & dollar liquidity')}${compLine(I, 'chain', 'On-chain liquidity', 'Stablecoin liquidity')}${compLine(I, 'macro', 'Financial conditions')}</div>
+      ${evTable(I, [['x_netliq4'], ['x_g3'], ['x_m2'], ['c_stab30'], ['m_depth', 'Order-book depth within ±1%']])}
+      <p class="small">The order-book liquidity map (resting liquidity by $5K band, order impact, depth by venue, options expiries) is on <a href="#analysis/liquidity">Liquidity Detail</a>; rates, the dollar and central banks are on <a href="${DSL('macro')}">Macro &amp; Liquidity</a>.</p></section>
+
+    <section class="block">${sectionHead('onchain', 'On-chain positioning', 'Holder cost bases, realised value, profit-taking, exchange flows and miners', `<a href="${DSL('chain')}">On-Chain Analysis →</a>`)}
+      <div class="hsums">${compLine(I, 'chain', 'Valuation', 'Realised valuation')}${compLine(I, 'chain', 'Holder behaviour')}${compLine(I, 'chain', 'Exchange behaviour')}${compLine(I, 'chain', 'Supply dynamics')}${compLine(I, 'chain', 'Network activity', 'Network & miners')}</div>
+      <div class="tbl-wrap"><table class="itbl ev4"><thead><tr><th>Evidence</th><th>Reading</th><th>Historical zone</th><th>Engine read</th></tr></thead><tbody>
+        ${[['c_mvrv', 'mvrv'], ['c_mvrvz'], ['c_mvrvtr'], ['c_realized'], ['c_rcap'], ['c_nupl', 'nupl'], ['c_sopr', 'sopr'], ['c_profit', 'profit'], ['c_sth'], ['c_lth'], ['c_exnet'], ['c_exbal'], ['c_puell', 'puell'], ['c_ribbons'], ['c_hashprice']].map(([id, z]) => { const r = rd(I, id); if (!r) return ''; return `<tr><td data-k="Evidence"><a href="${ILINK(id)}"><b>${esc(r.name)}</b></a><div class="xs dim">${esc(r.src)} · ${esc(r.asOf)}</div></td><td data-k="Reading" class="num">${val(r)}</td><td data-k="Historical zone" class="small">${z ? zoneTxt(z) : '<span class="xs dim">see deep dive</span>'}</td><td data-k="Engine read">${pill(r.state || (r.s === null ? 'Context' : 'Neutral'), r.s)}</td></tr>`; }).join('')}
+      </tbody></table></div>
+      ${I.valuation ? `<p class="small"><b>Valuation conclusion: ${esc(I.valuation.state)}.</b> ${esc(I.valuation.context)} <a href="#overview">Valuation evidence on Intelligence →</a></p>` : ''}
+      <details class="about"><summary>On-chain zones, formulas and sources</summary>
+        <ul class="clean small">
+          <li><b>MVRV</b> = market cap ÷ realised cap (Coin Metrics). Zones: ${thr('mvrv')}.</li>
+          <li><b>NUPL</b> = 1 − 1/MVRV (context, not scored twice): ${thr('nupl')}.</li>
+          <li><b>MVRV Z-Score</b> = (market cap − realised cap) ÷ σ(market cap over all history), from Coin Metrics supply, price and MVRV.</li>
+          <li><b>Mayer Multiple</b> = price ÷ 200-day average: ${thr('mayer')}.</li>
+          <li><b>Puell Multiple</b> = daily issuance × price ÷ its 365-day average: ${thr('puell')}.</li>
+          <li><b>SOPR</b> (7-day, BGeometrics): ${thr('sopr')}. <b>Supply in profit</b>: ${thr('profit', '%')}.</li>
+          <li><b>Hash Ribbons</b> = 30-day ÷ 60-day average hash rate; recovery = the 30-day back above the 60-day after ≥10 days below.</li>
+        </ul>
+        <p class="small muted">Zones are set from where these metrics sat at past cycle lows and highs (2011–2025); recent peaks have been lower than early ones, so the upper zones sit below early extremes. They describe history, not what happens next. The engine’s valuation conclusion weights MVRV, the Mayer Multiple, the 200-week average, Puell, supply in profit and the holder cost bases instead of averaging zone scores. Sources: Coin Metrics Community (daily, ~1 day behind), BGeometrics free tier (refreshed at most every 20 hours; the latest ~7 days are sometimes withheld). No paid on-chain data is used.</p></details></section>
+
+    <section class="block">${sectionHead('derivatives', 'Derivatives & positioning', 'Leverage, the futures curve, options and positioning', `<a href="${DSL('mkt')}">Market Structure →</a>`)}
+      <div class="hsums">${compLine(I, 'mkt', 'Leverage')}${compLine(I, 'mkt', 'Derivatives', 'Futures & options')}${compLine(I, 'mkt', 'Market positioning')}${compLine(I, 'mkt', 'Institutional demand')}</div>
+      ${evTable(I, [['m_funding'], ['m_oigrowth'], ['m_oimcap'], ['m_basis'], ['m_skew'], ['m_dvol'], ['m_pcr'], ['m_ls'], ['m_cftcam'], ['m_etf5'], ['m_liq']])}
+      ${lev || stress ? `<p class="small">${[lev, stress].filter(Boolean).map((f) => `<b>${esc(f.name)}</b> (${esc(f.strengthWord.toLowerCase())}, ${esc(f.horizon)} term): ${esc(f.text)}`).join(' ')}</p>` : '<p class="small muted">No leverage or derivatives-stress force is active.</p>'}</section>
+
+    <section class="block">${sectionHead('history', 'Historical context', 'Prior Bitcoin regimes and comparable conditions — context, not prediction')}
+      <div class="hist-grid">
+        <div><h3 class="rh3">MVRV since 2011, with historical zones</h3><div data-mvrvzones><p class="small muted">Loading…</p></div></div>
+        <div><h3 class="rh3">Where today sits in history</h3><div data-histpos><p class="small muted">Computing…</p></div></div>
+      </div>
+      <h3 class="rh3">Long-run regimes</h3><div data-timeline><p class="small muted">Computing…</p></div>
+      <h3 class="rh3">Similar conditions in the past</h3><div data-similar><p class="small muted">Computing…</p></div>
+      <p class="xs dim">Bitcoin has gone through several bull and bear regimes; their depth and length have varied widely. These comparisons show where current readings sit relative to that history. Small samples, overlapping windows and a changing market structure (ETFs, derivatives, institutional ownership) mean past outcomes do not predict future ones.</p></section>
+
+    ${A ? `<section class="block assess t-${RTONE[A.label]}" id="assessment">${sectionHead('assess-h', 'Overall assessment', 'All five domains, all horizons', `<a href="#overview">Full reasoning on Intelligence →</a>`)}
+      <div class="as-body"><div class="as-l"><div class="rg-label">${esc(A.label)}</div><span class="small muted">Market read ${esc(A.state.toLowerCase())} · Fair Grade ${I.grade.value}/100 · ${conf(I.confidence.level)}</span></div>
+        <div class="as-r"><p>${esc(A.why)}</p>
+          <div class="ir-cols"><div><h3>Principal supports</h3><ul class="ir-f">${I.drivers.slice(0, 4).map((f) => `<li><span class="fdot t-up"></span><b>${esc(f.name)}</b><span class="fmeta">${esc(f.text)}</span></li>`).join('') || '<li class="muted">None strong</li>'}</ul></div>
+          <div><h3>Principal offsets</h3><ul class="ir-f">${I.offsets.slice(0, 4).map((f) => `<li><span class="fdot t-down"></span><b>${esc(f.name)}</b><span class="fmeta">${esc(f.text)}</span></li>`).join('') || '<li class="muted">None strong</li>'}</ul></div></div>
+        </div></div>
+      <p class="xs dim">Bullish / Neutral / Bearish summarises the engine’s market read (Strong or Constructive → Bullish; Neutral or Mixed → Neutral; Cautious or Weak → Bearish). It describes current conditions and is not a forecast or advice.</p></section>` : ''}
+
+    <section class="block"><div class="bh"><h2>Full analysis by domain</h2><p class="aside">${Object.values(I.readings).length} indicators, ${Object.values(I.readings).filter((r) => r.s !== null).length} scored · expand a domain</p></div>
+      ${I.domains.map((d) => domainBlock(d).replace('<details class="idom" id="dom-' + d.key + '" open>', '<details class="idom" id="dom-' + d.key + '">')).join('')}
       <details class="about imethod"><summary>How the engine reads indicators</summary>
-        <p><b>Layer 1–2.</b> Raw data (prices, flows, on-chain series, macro series) becomes indicators: moving averages, RSI, MACD, Bollinger Bands, MVRV, cost bases, ETF flow sums, funding, yields and so on.</p>
-        <p><b>Layer 3.</b> Each indicator is interpreted on its own scale from −1 to +1 against fixed thresholds and its own history: <i>supportive</i> (+0.2 or more), <i>neutral</i>, <i>cautionary</i> (−0.2 or less) or <i>deteriorating</i> (cautionary and worse than a week ago, or deeply negative). Context indicators are shown but not scored. Readings older than their normal update interval are down-weighted; very old ones are dropped.</p>
-        <p><b>Layer 4.</b> Indicators combine only with like indicators inside a component (Trend, Momentum, Valuation, Leverage…). Components combine into the domain by fixed weights, adjusted for coverage, with explicit override rules (a negative long-term trend caps Technical; elevated leverage caps Market structure; extreme greed overrides the other sentiment inputs). Nothing is averaged across domains.</p>
-        <p>Interpretation depends on context: extreme greed is read as crowding, not strength; negative funding as squeeze fuel, not weakness; low volatility as a pending move of unknown direction.</p>
+        <p><b>Indicators.</b> Each is interpreted on its own −1…+1 scale against fixed thresholds and its own history: supportive (+0.2 or more), neutral, cautionary (−0.2 or less) or deteriorating. Context indicators are shown but not scored; delayed readings are down-weighted.</p>
+        <p><b>Domains.</b> Indicators combine only inside a component; components combine into a domain by fixed weights with explicit override rules. Nothing is averaged across domains.</p>
+        <p><b>Conclusions.</b> The market regime uses structural evidence; valuation weighs several on-chain and price measures; the overall assessment summarises the market read across all horizons.</p>
       </details></section>
-    <section class="block"><div class="bh"><h2>How the pieces fit</h2></div>
-      <ol class="flow"><li><b>Raw data</b><span>Free public sources, each with its source, date and update interval</span></li><li><b>Indicators</b><span>About 95 measures, each read on its own scale against its history</span></li><li><b>Five domains</b><span>Technical · On-chain · Market structure · Sentiment · Macro & liquidity</span></li><li><b>Cross-domain forces</b><span>Patterns detected across indicators and domains</span></li><li><b>Intelligence → Market read</b><span>What matters now, breadth, Fair Grade</span></li><li><b>Cycle + valuation</b><span>Where all of this leaves Bitcoin</span></li></ol></section>
+    ${statusNote(I)}`;
+}
+
+// Liquidity Detail: the in-market liquidity research (order books, impact, expiries, band map)
+function liquidityPage(I, ctx) {
+  return `${crumbs([['#analysis', 'Analysis'], ['#analysis/liquidity', 'Liquidity Detail']])}
+    <section class="rhead dd"><div><h1>Liquidity Detail</h1><p class="rq">“Where is liquidity in the Bitcoin market, and how much flow can it absorb?”</p><p>Resting order-book liquidity, the estimated impact of large orders, depth by venue, options expiries and a map of where forced or hedging flows could sit around the price. The high-level liquidity conclusions are on <a href="#analysis">Analysis</a>; the external liquidity backdrop (central banks, M2, net liquidity, stablecoins) is on <a href="${DSL('macro')}">Macro &amp; Liquidity</a>.</p></div></section>
+    <div class="hsums">${compLine(I, 'mkt', 'Spot demand')}${compLine(I, 'mkt', 'Leverage')}${compLine(I, 'macro', 'Liquidity', 'External liquidity')}</div>
+    ${ctx.extras?.marketLiquidity?.() || ''}
     ${statusNote(I)}`;
 }
 
@@ -191,7 +271,7 @@ function domainPage(I, dk, ctx) {
   const hz = ['short', 'medium', 'long'].map((h) => { const r = scored.filter((x) => x.horizon === h); const m = r.length ? r.reduce((a, x) => a + x.s, 0) / r.length : null; return { h, m, n: r.length }; });
   const others = I.domains.filter((x) => x.key !== dk);
   const div = I.confirmation.diverge.filter((x) => (x.a === d.name || x.b === d.name));
-  const extra = dk === 'mkt' ? ctx.extras?.marketLiquidity?.() || '' : '';
+  const extra = dk === 'mkt' ? `<section class="block"><div class="bh"><h2>Market liquidity</h2></div><p>Order-book depth, the impact of large orders, depth by venue, options expiries and the $5K band map are on <a href="#analysis/liquidity">Liquidity Detail →</a></p></section>` : '';
   return `${crumbs([['#analysis', 'Analysis'], [DSL(dk), SHORT[dk]]])}
     <section class="rhead"><div><h1>${esc(SHORT[dk])}</h1><p class="rq">“${esc(d.question)}”</p><p>${esc(doc.overview)}</p><p class="small muted">${esc(doc.role)}</p></div>
       <div class="rstate"><span class="k">Current read</span><div class="ir-state t-${tone(d.state, d.score)}">${esc(d.state)}</div><div>${d.arrow} ${sbar(d.score)} ${conf(d.confidence.level)}</div><p class="xs dim">${d.n} scored indicators · ${Math.round(d.confidence.coverage * 100)}% coverage · ${Math.round(d.confidence.agree * 100)}% agreement${d.notes.length ? `<br>${d.notes.map(esc).join(' ')}` : ''}</p></div></section>
@@ -220,8 +300,8 @@ function domainPage(I, dk, ctx) {
     <section class="block"><div class="bh"><h2>All indicators</h2><p class="aside">Every input with its reading, engine interpretation, source and date · click a name for the deep dive</p></div>
       ${d.comps.map((c) => (c.indicators.length ? `<h4 class="ich"><a href="${CLINK(dk, c.name)}">${esc(c.name)}</a> <span>${esc(c.word)}</span></h4><div class="tbl-wrap"><table class="itbl"><tbody>${c.indicators.map((r) => `<tr class="${r.s === null ? 'ctx' : ''}"><td data-k="Indicator"><a href="${ILINK(r.id)}"><b>${esc(r.name)}</b></a><div class="xs dim">${esc(HZ[r.horizon])}${r.fresh === 'delayed' ? ' · delayed' : ''}</div></td><td data-k="Reading" class="num">${esc(r.disp)}</td><td data-k="Read">${pill(r.state || (r.s === null ? 'Context' : 'Neutral'), r.s)}${r.s !== null ? sbar(r.s) : ''}</td><td data-k="Why">${esc(r.why)}<div class="xs dim">${esc(r.src)} · as of ${esc(r.asOf)}</div></td></tr>`).join('')}</tbody></table></div>` : '')).join('')}
       ${d.unavailable?.length ? `<p class="iun"><span class="k">Not shown: no reliable free source</span>${d.unavailable.map(esc).join(' · ')}</p>` : ''}</section>
-    ${dk === 'chain' ? `<section class="block"><div class="bh"><h2>Cycle context</h2></div><p>On-chain valuation feeds the cycle conclusion, but the cycle is a synthesis of all five domains. See <a href="#cycle">On-chain Cycle</a> for the on-chain valuation cycle and the engine’s phase read.</p></section>` : ''}
-    ${dk === 'macro' ? `<section class="block"><div class="bh"><h2>Where the liquidity research lives</h2></div><p class="small">External liquidity (central banks, M2, net liquidity, stablecoins as dollar liquidity) is on this page. In-market liquidity — order-book depth, order impact, options expiries and the liquidation map — describes the Bitcoin market itself and is on <a href="${DSL('mkt')}/liquidity">Market Structure</a>.</p></section>` : ''}
+    ${dk === 'chain' ? `<section class="block"><div class="bh"><h2>Regime context</h2></div><p>On-chain positioning is one strand of evidence for the market regime. The regime, on-chain zone thresholds and historical context are on <a href="#analysis/regime">Analysis</a>.</p></section>` : ''}
+    ${dk === 'macro' ? `<section class="block"><div class="bh"><h2>Where the liquidity research lives</h2></div><p class="small">External liquidity (central banks, M2, net liquidity, stablecoins as dollar liquidity) is on this page. In-market liquidity — order-book depth, order impact, options expiries and the liquidation map — describes the Bitcoin market itself and is on <a href="#analysis/liquidity">Liquidity Detail</a>.</p></section>` : ''}
     ${extra}
     ${statusNote(I)}`;
 }
@@ -277,6 +357,35 @@ const defer = (fn) => new Promise((res) => setTimeout(() => { try { fn(); } catc
 async function fill(root, I, ctx) {
   const X = I.inputs, wc = ctx.wireChart;
   for (const el of root.querySelectorAll('[data-domspark]')) await defer(() => { const h = domHistory(X, el.dataset.domspark); el.innerHTML = `${sparkSvg(h.pts.slice(-365))}<span class="xs dim">domain read, past year</span>`; });
+  for (const el of root.querySelectorAll('[data-mvrvzones]')) await defer(() => {
+    const pts = indicatorHistory(X, 'c_mvrv').pts.map((p) => [p[0], p[1]]), Z = ZONES.mvrv, tones = { bull: 'up', neu: 'neu', warn: 'warn', bear: 'down' };
+    const bands = Z.map((z, i) => ({ lo: i ? z.min : -10, hi: i < Z.length - 1 ? Z[i + 1].min : 100, label: z.label, tone: tones[z.tone] }));
+    el.innerHTML = chartBlock('mvrv-zones', pts, { fmt: (v) => v.toFixed(2), bands, refs: false, label: 'MVRV with zones', h: 340 }, 0) + `<p class="xs dim">Coin Metrics MVRV, weekly before the last year. Bands are the historical zones listed under On-chain positioning.</p>`;
+    wireRanges(el, wc);
+  });
+  for (const el of root.querySelectorAll('[data-histpos]')) await defer(() => {
+    const rows = [['c_mvrv', 'MVRV'], ['t_mayer', 'Mayer Multiple'], ['t_ma200', 'Price vs 200-day average'], ['t_dd', 'Drawdown from all-time high'], ['c_puell', 'Puell Multiple'], ['s_fng', 'Fear & Greed']].map(([id, l]) => { const h = indicatorHistory(X, id), b = h.base, f = fmtFor(id); return b.enough ? `<tr><td><a href="${ILINK(id)}">${esc(l)}</a></td><td class="num">${esc(f(b.now))}</td><td class="num">${ord(b.pct)}</td><td>${esc(b.zone)}</td><td class="xs dim">since ${esc(b.first.slice(0, 4))}</td></tr>` : ''; }).join('');
+    el.innerHTML = `<div class="tbl-wrap"><table class="btbl wide"><thead><tr><th>Measure</th><th>Now</th><th>Percentile</th><th>Historical zone</th><th>History</th></tr></thead><tbody>${rows}</tbody></table></div><p class="xs dim">Percentiles against each measure’s full available history (weekly samples).</p>`;
+  });
+  for (const el of root.querySelectorAll('[data-timeline]')) await defer(() => {
+    const T = regimeTimeline(X); if (!T.weeks.length) { el.innerHTML = '<p class="small muted">Not enough price history.</p>'; return; }
+    const t0 = Date.parse(T.weeks[0][0]), t1 = Date.parse(T.weeks.at(-1)[0]), x = (d) => ((Date.parse(d) - t0) / (t1 - t0 || 1)) * 100;
+    const strip = T.episodes.map((e) => `<i class="tl-${RTONE[e.label]}" style="left:${x(e.start).toFixed(2)}%;width:${Math.max(0.3, x(e.end) - x(e.start) + 0.25).toFixed(2)}%" title="${esc(`${e.label}: ${e.start} → ${e.end} (${e.weeks} weeks)`)}"></i>`).join('');
+    const yrs = []; for (let y = new Date(t0).getUTCFullYear() + 1; y <= new Date(t1).getUTCFullYear(); y++) yrs.push(`<span style="left:${x(`${y}-01-01`).toFixed(2)}%">${y}</span>`);
+    const recent = T.episodes.filter((e) => e.weeks >= 4).slice(-10).reverse();
+    el.innerHTML = `<div class="tl"><div class="tl-strip">${strip}</div><div class="tl-years">${yrs.join('')}</div></div>
+      <div class="tl-key"><span><i class="tl-up"></i>Bullish: above a rising 200-day average</span><span><i class="tl-neu"></i>Neutral / transition</span><span><i class="tl-warn"></i>Bearish: below a falling 200-day average</span></div>
+      <div class="tbl-wrap"><table class="btbl wide"><thead><tr><th>Regime</th><th>From</th><th>To</th><th>Length</th><th>BTC over the period</th></tr></thead><tbody>${recent.map((e) => `<tr><td>${pill(e.label, e.label === 'Bullish' ? 1 : e.label === 'Bearish' ? -0.5 : 0)}</td><td class="num">${esc(e.start)}</td><td class="num">${e === T.episodes.at(-1) ? 'now' : esc(e.end)}</td><td class="num">${e.weeks} weeks</td><td class="num">${ok(e.change) ? `${e.change >= 0 ? '+' : '−'}${Math.abs(e.change).toFixed(0)}%` : '—'}</td></tr>`).join('')}</tbody></table></div>
+      <p class="xs dim">The long-run classification uses only inputs with history since 2011 (price versus its 200-day average and that average’s slope), so it is simpler than today’s full regime read above. Runs shorter than four weeks are folded into their neighbours.</p>`;
+  });
+  for (const el of root.querySelectorAll('[data-similar]')) await defer(() => {
+    const S = similarConditions(X, I);
+    if (!S || !S.episodes.length) { el.innerHTML = `<p class="small muted">No earlier periods matched today’s combination of readings${S ? ` (${esc(S.criteria)})` : ''}.</p>`; return; }
+    const pf = (v) => (ok(v) ? `${v >= 0 ? '+' : '−'}${Math.abs(v).toFixed(0)}%` : '—');
+    el.innerHTML = `<p class="small">Weeks when ${esc(S.criteria)}: ${S.weeks} weeks in ${S.episodes.length} separate period${S.episodes.length === 1 ? '' : 's'}.</p>
+      <div class="tbl-wrap"><table class="btbl wide"><thead><tr><th>Period</th><th>Weeks</th><th>MVRV then</th><th>BTC 90 days later</th><th>BTC 180 days later</th></tr></thead><tbody>${S.episodes.map((e) => `<tr><td class="num">${esc(e.start)}${e.end !== e.start ? ` → ${esc(e.end)}` : ''}</td><td class="num">${e.n}</td><td class="num">${ok(e.mvrv) ? e.mvrv.toFixed(2) : '—'}</td><td class="num">${pf(e.f90)}</td><td class="num">${pf(e.f180)}</td></tr>`).join('')}</tbody></table></div>
+      <p class="xs dim">Context only: a handful of past periods in different market structures. What followed then is not a forecast of what follows now.</p>`;
+  });
   for (const el of root.querySelectorAll('[data-domchart]')) await defer(() => {
     const h = domHistory(X, el.dataset.domchart);
     el.innerHTML = chartBlock('dom-' + el.dataset.domchart, h.pts, { fmt: scoreFmt, refs: false, zero: true, label: 'domain score history', base: null, guides: [['Supportive', 0.4], ['Constructive', 0.15], ['Cautionary', -0.15], ['Adverse', -0.4]] }, 1095);
@@ -334,11 +443,13 @@ async function fill(root, I, ctx) {
 export function analysisRoute(parts, I, ctx) {
   if (!I) return { html: '<div class="empty-state"><p>The analysis needs the published data files; it will appear once they load.</p></div>', after: () => {} };
   const [, dslug, sub] = parts, dk = SLUG_DOMAIN[dslug];
-  let html;
-  if (!dk) html = landing(I);
-  else if (!sub || sub === 'liquidity') html = domainPage(I, dk, ctx);
+  let html, scrollTo = null;
+  const ANCHORS = { regime: 'regime', history: 'history', assessment: 'assessment', onchain: 'onchain', derivatives: 'derivatives', structure: 'structure' };
+  if (dslug === 'liquidity') html = liquidityPage(I, ctx);
+  else if (!dk) { html = landing(I, ctx); scrollTo = ANCHORS[dslug] || null; }
+  else if (!sub) html = domainPage(I, dk, ctx);
   else if (sub.startsWith('c-')) { const comp = DOMAIN_META.find((x) => x.key === dk) && Object.keys(DOMAIN_META.find((x) => x.key === dk).comps).find((c) => compSlug(c) === sub); html = comp ? compPage(I, dk, comp) : domainPage(I, dk, ctx); }
   else { const id = indicatorsOf(dk).find((x) => indSlug(x.id) === sub)?.id; html = id ? indPage(I, id) : domainPage(I, dk, ctx); }
-  return { html, scrollTo: sub === 'liquidity' ? 'mkt-liquidity' : null, after: (root) => fill(root, I, ctx) };
+  return { html, scrollTo, after: (root) => fill(root, I, ctx) };
 }
 export const ANALYSIS_TITLE = (parts) => { const dk = SLUG_DOMAIN[parts[1]]; return dk ? SHORT[dk] : 'Analysis'; };

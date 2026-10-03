@@ -138,7 +138,7 @@ async function main() {
     const priceFull0 = snap.onchain?.coinmetrics?.priceFull;
     const piNow = priceFull0?.length > 400 ? { rows: priceFull0 } : readJSON(path.join(DATA, 'pi_cycle.json'));
     const I = intelligence({ a, rows, pi: piNow, dash: readJSON(path.join(DATA, 'dash.json')), etf: readJSON(path.join(DATA, 'etf_flows.json')), long: readJSON(path.join(DATA, 'longhist.json')), nowIso: a.dataThrough });
-    a.intel = { version: I.version, asOf: I.asOf, headline: I.headline, state: I.state, grade: I.grade.value, breadth: I.breadth, confidence: I.confidence.level, valuation: I.valuation?.state ?? null, cycle: I.cycle?.phase ?? null, risk: I.risk.level, domains: I.domains.map((d) => ({ key: d.key, state: d.state, score: d.score })), drivers: I.drivers.slice(0, 5).map((f) => f.name), offsets: I.offsets.slice(0, 5).map((f) => f.name) };
+    a.intel = { version: I.version, asOf: I.asOf, headline: I.headline, state: I.state, grade: I.grade.value, breadth: I.breadth, confidence: I.confidence.level, valuation: I.valuation?.state ?? null, cycle: I.cycle?.phase ?? null, regime: I.regime?.label ?? null, assessment: I.assessment?.label ?? null, risk: I.risk.level, domains: I.domains.map((d) => ({ key: d.key, state: d.state, score: d.score })), drivers: I.drivers.slice(0, 5).map((f) => f.name), offsets: I.offsets.slice(0, 5).map((f) => f.name) };
     Object.assign(a.row, { intelState: I.state, intelGrade: I.grade.value, ...Object.fromEntries(I.domains.map((d) => ['dom_' + d.key, d.score === null ? null : +d.score.toFixed(3)])) });
     log(`Intelligence: ${I.headline}; valuation ${a.intel.valuation}, cycle ${a.intel.cycle}, risk ${a.intel.risk}.`);
   } catch (e) { log('Intelligence engine skipped:', e.message); }

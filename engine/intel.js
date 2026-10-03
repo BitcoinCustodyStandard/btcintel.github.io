@@ -199,7 +199,7 @@ const VOCAB = {
 // gaps we will not paper over: listed on the Analysis page
 export const UNAVAILABLE = {
   tech: [],
-  chain: ['NVT and NVT Signal (transfer value is not on the Coin Metrics free tier)', 'Adjusted SOPR, RHODL, HODL waves, dormancy, coin days destroyed', 'Long-/short-term holder supply (only their cost bases are free)', 'Stablecoin exchange balances and netflows', 'Miner selling pressure'],
+  chain: ['NVT and NVT Signal (transfer value is not on the Coin Metrics free tier)', 'Adjusted SOPR, RHODL, Reserve Risk, Liveliness, HODL waves, dormancy, coin days destroyed (need coin-days-destroyed history beyond free tiers)', 'Real-time SOPR and supply in profit for the latest ~7 days (withheld by the BGeometrics free tier)', 'Long-/short-term holder supply (only their cost bases are free)', 'Stablecoin exchange balances and netflows', 'Miner selling pressure'],
   mkt: ['Spot CVD across venues', 'Dealer gamma positioning (modelled only on the Liquidity page)', 'Options term structure beyond Deribit'],
   sent: ['Search interest: Google Trends has no free API (Wikipedia pageviews are used as the retail-attention proxy)', 'Social sentiment: Reddit and X have no reliable free source'],
   macro: ['PMI (ISM data is not free)', 'Global M2 (US M2 and the Fed/ECB/BoJ balance sheets are used instead)', 'Fed-funds futures (the 2-year yield is used as the rate-expectations proxy)'],
@@ -247,6 +247,9 @@ def('c_realized', 'Realised price (average cost basis)', 'chain', 'Valuation', '
 def('c_nupl', 'NUPL (net unrealised profit/loss)', 'chain', 'Valuation', 'long', 0, 2, SRC.cm, (X, d) => { const r = sAt(X, 'mvrv', d, 10); if (!r) return null; const v = 1 - 1 / r[1]; return { v, disp: `${f(v, 2)} (${v < 0 ? 'capitulation' : v < 0.25 ? 'hope / fear' : v < 0.5 ? 'optimism / anxiety' : v < 0.75 ? 'belief / denial' : 'euphoria / greed'})`, s: null, why: 'Derived exactly from MVRV, so shown for context and not scored twice.', asOf: r[0] }; });
 def('c_mvrvz', 'MVRV Z-Score', 'chain', 'Valuation', 'long', 0.5, 2, SRC.cm, (X, d) => { const z = mvrvZ(X, d); if (!z) return null; return { v: z.z, disp: f(z.z, 2), s: interp([[-0.5, 1], [0.5, 0.6], [1.5, 0.2], [3, -0.2], [5, -0.6], [7, -1]], z.z), why: z.z < 0.5 ? 'Market value sits close to or below realised value relative to its historical swings: historically cheap.' : z.z > 5 ? 'Market value is far above realised value by historical standards.' : 'Market value is within its usual distance from realised value.', asOf: z.at }; });
 def('c_rcap', 'Realised capitalisation', 'chain', 'Valuation', 'long', 0, 2, SRC.cm, (X, d) => { const z = mvrvZ(X, d); if (!z) return null; return { v: z.rc, disp: `${big(z.rc)} (market cap ${big(z.mc)})`, s: null, why: 'The value of all coins at the price they last moved: the network’s aggregate cost basis (context).', asOf: z.at }; });
+const winVals = (s, d, days) => { if (!s?.length) return []; const i = idx(s, d), from = shiftDate(d, -days), out = []; for (let k = i; k >= 0 && s[k][0] > from; k--) out.push(s[k][1]); return out; };
+def('c_mvrvtr', 'MVRV vs its 365-day average', 'chain', 'Valuation', 'medium', 0.4, 2, SRC.cm, (X, d) => { const r = sAt(X, 'mvrv', d, 10); if (!r) return null; const w = winVals(X.mvrv, r[0], 365); if (w.length < 40) return null; const avg = mean(w), x = (r[1] / avg - 1) * 100; return { v: x, disp: `${pc(x, 0)} (${f(r[1], 2)} vs ${f(avg, 2)})`, s: ramp(x, 15) * 0.6, why: x > 0 ? 'Unrealised profit is rising relative to the past year: holder positioning is improving.' : 'Unrealised profit is below its past-year average: holder positioning is deteriorating.', asOf: r[0] }; });
+def('c_ribbons', 'Hash Ribbons (30-day vs 60-day hash rate)', 'chain', 'Network activity', 'medium', 0.5, 2, SRC.cm, (X, d) => { const r = pt(X.hash, d); if (!r || dd(r[0], d) > 5) return null; const a30 = winVals(X.hash, r[0], 30), a60 = winVals(X.hash, r[0], 60); if (a30.length < 20 || a60.length < 40) return null; const x = mean(a30) / mean(a60); let below = 0; for (let k = 1; k <= 20; k++) { const q = pt(X.hash, shiftDate(r[0], -k)); if (!q) break; const b30 = winVals(X.hash, q[0], 30), b60 = winVals(X.hash, q[0], 60); if (b30.length && b60.length && mean(b30) / mean(b60) < 1) below++; } const recovery = x >= 1 && below >= 10; return { v: x, disp: `${f(x, 3)}${x < 1 ? ' (30-day below 60-day: miner stress)' : recovery ? ' (recovery cross)' : ''}`, s: recovery ? 0.5 : x < 0.97 ? -0.5 : clamp((x - 1) / 0.05, -1, 1) * 0.3, why: recovery ? 'Hash rate has recovered above its 60-day average after miner stress: historically a sign capitulation is ending.' : x < 1 ? 'Hash rate is below its 60-day average: some miners are switching off (miner stress).' : 'Hash rate is above its 60-day average: miners are healthy.', asOf: r[0] }; });
 def('c_puell', 'Puell Multiple', 'chain', 'Valuation', 'long', 0.7, 3, SRC.cyc, (X, d) => { const r = sAt(X, 'puell', d, 10); if (!r) return null; return { v: r[1], disp: f(r[1], 2), s: interp([[0.5, 0.8], [0.8, 0.3], [1.2, 0], [1.6, -0.3], [2.5, -0.8], [3.5, -1]], r[1]), why: r[1] < 0.8 ? 'Miner revenue is low versus its yearly average (historically cheap).' : r[1] > 1.6 ? 'Miner revenue is high versus its yearly average.' : 'Miner revenue is near its yearly average.', asOf: r[0] }; });
 def('c_sth', 'Price vs short-term holder cost basis', 'chain', 'Holder behaviour', 'medium', 1.2, 7, SRC.bg, (X, d) => { const r = sAt(X, 'sth', d, 14), p = pAt(X, d); if (!r || !p) return null; const x = (p / r[1] - 1) * 100; return { v: x, disp: `${pc(x, 0)} (STH realised ${usd(r[1])})`, s: interp([[-20, -1], [-5, -0.4], [0, 0], [8, 0.5], [30, 0.6], [60, -0.2]], x), why: x >= 0 ? 'Recent buyers are in profit on average, so dips tend to meet support near their cost.' : 'Recent buyers are underwater on average, so rallies meet break-even selling.', asOf: r[0] }; });
 def('c_lth', 'Price vs long-term holder cost basis', 'chain', 'Holder behaviour', 'long', 0.6, 7, SRC.bg, (X, d) => { const r = sAt(X, 'lth', d, 14), p = pAt(X, d); if (!r || !p) return null; const x = p / r[1]; return { v: x, disp: `${f(x, 2)}× (LTH realised ${usd(r[1])})`, s: interp([[0.8, 1], [1, 0.8], [1.5, 0.4], [2.5, 0.1], [4, -0.5], [6, -1]], x), why: x < 1.5 ? 'Long-term holders sit on small gains: little incentive to distribute.' : x > 3 ? 'Long-term holders sit on large gains: historically when they distribute.' : 'Long-term holders sit on moderate gains.', asOf: r[0] }; });
@@ -504,26 +507,52 @@ function valuation(X, d, R, Dm) {
   return { state, index: idxV, confidence: conf, evidence: ev.sort((a, b) => b.w - a.w), context, mvrvPctile: mv?.pctile ?? null };
 }
 
-const HALVINGS = ['2012-11-28', '2016-07-09', '2020-05-11', '2024-04-20'];
 function cycle(X, d, R, Dm, V) {
   const t = techAt(X, d); if (!t?.ma200) return null;
   const slope = R.t_slope200?.value ?? null, val = V?.state, fng = R.s_fng?.value, fund = R.m_funding?.value, sth = R.c_sth?.value, mvrv = R.c_mvrv?.value, mom = comp(Dm, 'tech', 'Momentum');
   const above = t.p > t.ma200, gold = t.ma50 > t.ma200, draw = t.dd ?? 0;
   const C = (c) => (c === null || c === undefined ? null : c ? 1 : 0);
   const PH = [
-    { name: 'Capitulation', desc: 'Forced selling near the bottom of a bear market: price below the average holder cost, extreme fear.', c: [[3, C(ok(mvrv) ? mvrv < 1 : null), 'MVRV below 1'], [1, C(draw < -50), 'Drawdown deeper than 50%'], [1, C(ok(fng) ? fng <= 25 : null), 'Extreme fear'], [1, C(!above), 'Below the 200-day average'], [1, C(ok(R.c_sopr?.value) ? R.c_sopr.value < 0.98 : null), 'Coins selling at a loss (SOPR < 0.98)']] },
-    { name: 'Contraction', desc: 'A bear market: falling long-term trend, recent buyers underwater.', c: [[2, C(!above), 'Below the 200-day average'], [2, C(ok(slope) ? slope < -0.5 : null), '200-day average falling'], [1.5, C(ok(sth) ? sth < 0 : null), 'Price below short-term holder cost'], [1, C(draw < -30), 'Drawdown deeper than 30%'], [1, C(!gold), '50-day below 200-day']] },
-    { name: 'Accumulation', desc: 'Base-building after a decline: cheap valuations, flat long-term trend.', c: [[2, C(val ? ['Depressed', 'Attractive'].includes(val) : null), 'Valuation attractive or depressed'], [1, C(draw < -30), 'Drawdown deeper than 30%'], [1.5, C(Math.abs(t.p / t.ma200 - 1) < 0.1), 'Price near the 200-day average'], [1, C(ok(slope) ? Math.abs(slope) < 1.5 : null), '200-day average flat'], [0.5, C(ok(fng) ? fng < 50 : null), 'Sentiment below neutral']] },
-    { name: 'Early expansion', desc: 'A new uptrend forming from a reset: trend turning up, valuation still moderate, price well below the old high.', c: [[2, C(above), 'Above the 200-day average'], [1.5, C(ok(slope) ? slope > 0 : null), '200-day average rising'], [1.5, C(val ? ['Fair', 'Attractive', 'Depressed'].includes(val) : null), 'Valuation fair or cheaper'], [1, C(draw < -20), 'More than 20% below the all-time high'], [1, C(ok(sth) ? sth > 0 : null), 'Recent buyers in profit']] },
-    { name: 'Expansion', desc: 'An established uptrend: rising averages, recent buyers in profit, price close to its highs.', c: [[2, C(above), 'Above the 200-day average'], [1.5, C(gold), '50-day above 200-day'], [1.5, C(ok(slope) ? slope > 1 : null), '200-day average rising more than 1% a month'], [1, C(val ? ['Fair', 'Elevated'].includes(val) : null), 'Valuation fair to elevated'], [1, C(ok(sth) ? sth > 0 : null), 'Recent buyers in profit'], [1, C(draw > -20), 'Within 20% of the all-time high']] },
-    { name: 'Late expansion', desc: 'A mature uptrend running hot: rich valuations, crowded sentiment and leverage.', c: [[2.5, C(val ? ['Elevated', 'Extreme'].includes(val) : null), 'Valuation elevated or extreme'], [1, C(above), 'Above the 200-day average'], [1, C(ok(fng) ? fng >= 75 : null), 'Greed'], [1, C(ok(fund) ? fund > 20 : null), 'Funding above 20% a year'], [1, C(t.p / t.ma200 > 1.8), 'Mayer Multiple above 1.8']] },
-    { name: 'Distribution', desc: 'Topping behaviour: rich valuations with weakening momentum while still above the long-term trend.', c: [[2, C(val ? ['Elevated', 'Extreme'].includes(val) : null), 'Valuation elevated or extreme'], [1.5, C(t.p < t.ma50), 'Below the 50-day average'], [1, C(ok(mom) ? mom < -0.2 : null), 'Momentum negative'], [1, C(ok(R.c_profit?.value) ? R.c_profit.value > 85 : null), 'More than 85% of supply in profit'], [1, C(above), 'Still above the 200-day average']] },
-    { name: 'Mid-cycle correction', desc: 'A pullback inside an intact long-term uptrend.', c: [[1.5, C(above), 'Above the 200-day average'], [1.5, C(t.p < t.ma50), 'Below the 50-day average'], [1.5, C(val === 'Fair'), 'Valuation fair'], [1, C(draw < -15 && draw > -40), '15–40% below the all-time high']] },
+    { name: 'Capitulation', desc: 'Forced selling with price below the average holder cost basis and extreme fear.', c: [[3, C(ok(mvrv) ? mvrv < 1 : null), 'MVRV below 1'], [1, C(draw < -50), 'Drawdown deeper than 50%'], [1, C(ok(fng) ? fng <= 25 : null), 'Extreme fear'], [1, C(!above), 'Below the 200-day average'], [1, C(ok(R.c_sopr?.value) ? R.c_sopr.value < 0.98 : null), 'Coins selling at a loss (SOPR < 0.98)']] },
+    { name: 'Bear-market conditions', desc: 'A falling long-term trend with recent buyers underwater.', c: [[2, C(!above), 'Below the 200-day average'], [2, C(ok(slope) ? slope < -0.5 : null), '200-day average falling'], [1.5, C(ok(sth) ? sth < 0 : null), 'Price below short-term holder cost'], [1, C(draw < -30), 'Drawdown deeper than 30%'], [1, C(!gold), '50-day below 200-day']] },
+    { name: 'Base-building', desc: 'Stabilisation after a decline: cheap valuations and a flattening long-term trend.', c: [[2, C(val ? ['Depressed', 'Attractive'].includes(val) : null), 'Valuation attractive or depressed'], [1, C(draw < -30), 'Drawdown deeper than 30%'], [1.5, C(Math.abs(t.p / t.ma200 - 1) < 0.1), 'Price near the 200-day average'], [1, C(ok(slope) ? Math.abs(slope) < 1.5 : null), '200-day average flat'], [0.5, C(ok(fng) ? fng < 50 : null), 'Sentiment below neutral']] },
+    { name: 'Early uptrend', desc: 'A new uptrend forming after a reset: the long-term trend is turning up, valuation is still moderate and price is well below its prior high.', c: [[2, C(above), 'Above the 200-day average'], [1.5, C(ok(slope) ? slope > 0 : null), '200-day average rising'], [1.5, C(val ? ['Fair', 'Attractive', 'Depressed'].includes(val) : null), 'Valuation fair or cheaper'], [1, C(draw < -20), 'More than 20% below the all-time high'], [1, C(ok(sth) ? sth > 0 : null), 'Recent buyers in profit']] },
+    { name: 'Established uptrend', desc: 'Rising averages, recent buyers in profit and price close to its highs.', c: [[2, C(above), 'Above the 200-day average'], [1.5, C(gold), '50-day above 200-day'], [1.5, C(ok(slope) ? slope > 1 : null), '200-day average rising more than 1% a month'], [1, C(val ? ['Fair', 'Elevated'].includes(val) : null), 'Valuation fair to elevated'], [1, C(ok(sth) ? sth > 0 : null), 'Recent buyers in profit'], [1, C(draw > -20), 'Within 20% of the all-time high']] },
+    { name: 'Overheated uptrend', desc: 'A mature uptrend running hot: rich valuations, crowded sentiment and leverage.', c: [[2.5, C(val ? ['Elevated', 'Extreme'].includes(val) : null), 'Valuation elevated or extreme'], [1, C(above), 'Above the 200-day average'], [1, C(ok(fng) ? fng >= 75 : null), 'Greed'], [1, C(ok(fund) ? fund > 20 : null), 'Funding above 20% a year'], [1, C(t.p / t.ma200 > 1.8), 'Mayer Multiple above 1.8']] },
+    { name: 'Topping / distribution', desc: 'Rich valuations with weakening momentum while still above the long-term trend.', c: [[2, C(val ? ['Elevated', 'Extreme'].includes(val) : null), 'Valuation elevated or extreme'], [1.5, C(t.p < t.ma50), 'Below the 50-day average'], [1, C(ok(mom) ? mom < -0.2 : null), 'Momentum negative'], [1, C(ok(R.c_profit?.value) ? R.c_profit.value > 85 : null), 'More than 85% of supply in profit'], [1, C(above), 'Still above the 200-day average']] },
+    { name: 'Correction within an uptrend', desc: 'A pullback inside an intact long-term uptrend.', c: [[1.5, C(above), 'Above the 200-day average'], [1.5, C(t.p < t.ma50), 'Below the 50-day average'], [1.5, C(val === 'Fair'), 'Valuation fair'], [1, C(draw < -15 && draw > -40), '15–40% below the all-time high']] },
   ];
   const scored = PH.map((p) => { const ev = p.c.filter((c) => c[1] !== null), w = ev.reduce((a, c) => a + c[0], 0), all = p.c.reduce((a, c) => a + c[0], 0); const m = w ? ev.reduce((a, c) => a + c[0] * c[1], 0) / w : 0; return { ...p, match: m * Math.min(1, w / (all * 0.7)), met: ev.filter((c) => c[1]).map((c) => c[2]), unmet: ev.filter((c) => !c[1]).map((c) => c[2]) }; }).sort((a, b) => b.match - a.match);
   const best = scored[0], second = scored[1];
-  const last = HALVINGS.filter((h) => h <= d).at(-1), days = last ? dd(last, d) : null;
-  return { phase: best.name, desc: best.desc, match: best.match, met: best.met, unmet: best.unmet, runnerUp: second.match >= best.match - 0.1 ? { phase: second.name, match: second.match } : null, transitional: second.match >= best.match - 0.1, halving: last ? { date: last, days, note: `${days} days since the ${last.slice(0, 4)} halving. Shown for context; it does not set the phase.` } : null, confidence: best.match >= 0.85 && !(second.match >= best.match - 0.1) ? 'High' : best.match >= 0.7 ? 'Moderate' : 'Low' };
+  return { phase: best.name, desc: best.desc, match: best.match, met: best.met, unmet: best.unmet, runnerUp: second.match >= best.match - 0.1 ? { phase: second.name, match: second.match } : null, transitional: second.match >= best.match - 0.1, confidence: best.match >= 0.85 && !(second.match >= best.match - 0.1) ? 'High' : best.match >= 0.7 ? 'Moderate' : 'Low' };
+}
+
+// MARKET REGIME: which regime current conditions are consistent with, from structural
+// (medium/long-horizon) evidence across domains — never from a cycle clock.
+// "an early uptrend", "bear-market conditions", "capitulation"
+export const withArticle = (p) => (/conditions$|^capitulation|^base-building|^topping/i.test(p) ? p.toLowerCase() : `${/^[aeiou]/i.test(p) ? 'an' : 'a'} ${p.toLowerCase()}`);
+const REGIME_EVIDENCE = [
+  ['Trend', 'tech', 'Trend', 0.3], ['Price structure', 'tech', 'Structure', 0.1], ['Holder positioning', 'chain', 'Holder behaviour', 0.15],
+  ['On-chain flows', 'chain', 'Exchange behaviour', 0.1], ['Institutional demand', 'mkt', 'Institutional demand', 0.1], ['Liquidity backdrop', 'macro', null, 0.15],
+  ['Leverage health', 'mkt', 'Leverage', 0.05], ['Valuation room', 'chain', 'Valuation', 0.05],
+];
+function marketRegime(Dm, C) {
+  const ev = REGIME_EVIDENCE.map(([name, dk, cn, w]) => { const v = cn ? comp(Dm, dk, cn) : Dm.find((x) => x.key === dk)?.score ?? null; return { name, dk, comp: cn, w, score: v }; }).filter((x) => ok(x.score));
+  if (!ev.length) return null;
+  const W = ev.reduce((a, x) => a + x.w, 0), score = ev.reduce((a, x) => a + x.w * x.score, 0) / W;
+  const label = score >= 0.2 ? 'Bullish' : score <= -0.2 ? 'Bearish' : 'Neutral';
+  const sup = ev.filter((x) => x.score >= 0.15).sort((a, b) => b.w * b.score - a.w * a.score), opp = ev.filter((x) => x.score <= -0.15).sort((a, b) => a.w * a.score - b.w * b.score);
+  const cov = W / REGIME_EVIDENCE.reduce((a, x) => a + x[3], 0), agree = label === 'Neutral' ? 0.6 : (label === 'Bullish' ? sup : opp).reduce((a, x) => a + x.w, 0) / W;
+  const confidence = cov >= 0.85 && agree >= 0.55 && Math.abs(score) >= 0.3 ? 'High' : cov >= 0.6 && agree >= 0.4 ? 'Moderate' : 'Low';
+  const nm = (xs) => joinAnd(xs.slice(0, 3).map((x) => x.name.toLowerCase()));
+  const why = `${label === 'Neutral' ? 'Structural evidence is balanced' : `Structural evidence leans ${label.toLowerCase()}`}: ${sup.length ? `${nm(sup)} ${sup.length > 1 ? 'are' : 'is'} supportive` : 'nothing is clearly supportive'}${opp.length ? `, while ${nm(opp)} ${opp.length > 1 ? 'point' : 'points'} the other way` : ''}.${C ? ` The combination is most consistent with ${withArticle(C.phase)}${C.transitional && C.runnerUp ? ` (bordering on ${withArticle(C.runnerUp.phase)})` : ''}.` : ''}`;
+  return { label, score, confidence, evidence: ev.map((x) => ({ ...x, word: x.score >= 0.15 ? 'Supportive' : x.score <= -0.15 ? 'Against' : 'Neutral' })), why, character: C };
+}
+function overallAssessment(state, overall, drivers, offsets, regime) {
+  const label = ['Strong', 'Constructive'].includes(state) ? 'Bullish' : ['Cautious', 'Weak'].includes(state) ? 'Bearish' : 'Neutral';
+  const f = (xs) => xs.slice(0, 3).map((x) => x.name);
+  return { label, state, score: overall, drivers: f(drivers), offsets: f(offsets),
+    why: `${label} on balance (market read ${state.toLowerCase()}). ${drivers.length ? `Principal supports: ${joinAnd(f(drivers).map((x) => x.toLowerCase()))}.` : 'No strong supportive force.'} ${offsets.length ? `Principal offsets: ${joinAnd(f(offsets).map((x) => x.toLowerCase()))}.` : 'No strong offsetting force.'}${regime && regime.label !== label ? ` The structural regime reads ${regime.label.toLowerCase()}: shorter-horizon factors (positioning, sentiment, near-term macro) explain the difference.` : ''}` };
 }
 
 function riskRegime(R, Dm, V, divergences) {
@@ -670,17 +699,19 @@ export function intelligence(input) {
     changes['d' + h] = { h, label, text: cap(text), stateNow: A.state, stateThen: B.state, gradeNow: A.grade.value, gradeThen: B.grade.value, domains: doms, movers: { up: pos, down: neg }, n: common.size, of: Object.values(R).filter((r) => r.s !== null).length };
   }
   const C = cycle(X, d, R, S.Dm, S.V);
+  const REG = marketRegime(S.Dm, C);
   const out = {
     version: INTEL_VERSION, asOf: d, generatedAt: X.nowIso,
     state: S.state, overall: S.overall, breadth: S.breadth, grade: S.grade,
     confidence: (() => { const l = S.Dm.filter((x) => x.score !== null).map((x) => x.confidence.score); const m = mean(l) ?? 0; return { level: m >= 0.72 ? 'High' : m >= 0.5 ? 'Moderate' : 'Low', score: m }; })(),
     domains: S.Dm.map((x) => ({ ...x, comps: x.comps.map((c) => ({ ...c, indicators: c.indicators.map((i) => R[i.id] || i) })) })),
     forces, drivers, offsets, watch,
-    confirmation: S.cross, changes, valuation: S.V, cycle: C, risk: S.risk,
+    confirmation: S.cross, changes, valuation: S.V, cycle: C, regime: REG, risk: S.risk,
     readings: R,
   };
   out.horizons = ['short', 'medium', 'long'].map((h) => { const r = Object.values(R).filter((x) => x.horizon === h && x.s !== null); const m = r.length ? mean(r.map((x) => x.s)) : null; return { h, label: { short: 'Short term (days)', medium: 'Medium term (weeks)', long: 'Long term (months+)' }[h], score: m, state: m === null ? 'No data' : LBL(m, false), n: r.length, sup: r.filter((x) => x.s >= 0.2).length, cau: r.filter((x) => x.s <= -0.2).length }; });
   Object.defineProperty(out, 'inputs', { value: X, enumerable: false });
+  out.assessment = overallAssessment(out.state, out.overall, drivers, offsets, REG);
   out.narrative = narrative(out);
   out.headline = `${out.state} · Fair Grade ${out.grade.value}/100 · ${out.breadth.n} of ${out.breadth.of} domains supportive`;
   return out;
@@ -690,7 +721,7 @@ export function intelligence(input) {
 function narrative(I) {
   const P = [], D = (k) => I.domains.find((x) => x.key === k);
   const sup = I.domains.filter((x) => x.score >= 0.15).map((x) => x.name.toLowerCase()), neg = I.domains.filter((x) => x.score !== null && x.score <= -0.15).map((x) => x.name.toLowerCase());
-  P.push(`Bitcoin’s overall market configuration reads <b>${I.state.toLowerCase()}</b>, with a Fair Grade of ${I.grade.value} out of 100. ${I.breadth.n} of the ${I.breadth.of} analytical domains are supportive${sup.length ? ` (${joinAnd(sup)})` : ''}${neg.length ? `, while ${joinAnd(neg)} ${neg.length > 1 ? 'lean' : 'leans'} against it` : ''}. ${I.cycle ? `Taken together, the evidence places the market in <b>${I.cycle.phase.toLowerCase()}</b>${I.cycle.transitional && I.cycle.runnerUp ? ` (bordering on ${I.cycle.runnerUp.phase.toLowerCase()})` : ''}` : ''}${I.valuation ? `${I.cycle ? ', with valuation' : 'Valuation is'} <b>${I.valuation.state.toLowerCase()}</b>` : ''}.`);
+  P.push(`Bitcoin’s overall market configuration reads <b>${I.state.toLowerCase()}</b>, with a Fair Grade of ${I.grade.value} out of 100. ${I.breadth.n} of the ${I.breadth.of} analytical domains are supportive${sup.length ? ` (${joinAnd(sup)})` : ''}${neg.length ? `, while ${joinAnd(neg)} ${neg.length > 1 ? 'lean' : 'leans'} against it` : ''}. ${I.regime ? `Structurally, conditions are consistent with a <b>${I.regime.label.toLowerCase()} regime</b>${I.cycle ? ` resembling ${withArticle(I.cycle.phase)}` : ''}` : ''}${I.valuation ? `${I.regime ? ', with valuation' : 'Valuation is'} <b>${I.valuation.state.toLowerCase()}</b>` : ''}.`);
   if (I.drivers.length) P.push(`The strongest supports right now: ${I.drivers.slice(0, 3).map((x) => `<b>${x.name.toLowerCase()}</b> — ${x.text.replace(/\.$/, '')}`).join('; ')}.${I.drivers[0].persistence >= 7 ? ` The lead support has held for ${I.drivers[0].persistence >= 30 ? 'at least 30' : I.drivers[0].persistence} days, so it is not a one-day blip.` : ''}`);
   if (I.offsets.length) P.push(`Holding it back: ${I.offsets.slice(0, 3).map((x) => `<b>${x.name.toLowerCase()}</b> — ${x.text.replace(/\.$/, '')}`).join('; ')}.${I.offsets.some((x) => x.horizon === 'short') && I.drivers.some((x) => x.horizon !== 'short') ? ' Some of these offsets are short-term in nature, while the main supports work over weeks to months; the engine weighs them accordingly.' : ''}`);
   const cr = I.confirmation;
@@ -765,4 +796,38 @@ export function compHistory(X, dk, comp) {
 export function domHistory(X, dk) {
   const pts = domainHistory(X).map((p) => [p.d, p.dom[dk]]).filter((p) => ok(p[1]));
   return { pts, base: pts.length ? baseline(pts, X) : { n: 0, enough: false } };
+}
+
+// HISTORICAL CONTEXT: prior Bitcoin regimes and similar past conditions, as context only.
+// Long-run regimes use the inputs that have full history (price vs its 200-day average and
+// that average's slope); recent regimes use the full engine.
+export function regimeTimeline(X) {
+  if (X._c.rt) return X._c.rt;
+  const a = new Map(indicatorHistory(X, 't_ma200').pts.map((p) => [p[0], p[1]])), b = indicatorHistory(X, 't_slope200').pts;
+  const wk = []; let lastW = null;
+  for (const [d, sl] of b) { const w = Math.floor(Date.parse(d) / (7 * DAYMS)); if (w === lastW || !a.has(d)) continue; lastW = w; const m = a.get(d); wk.push([d, m > 0 && sl > 0.5 ? 'Bullish' : m < 0 && sl < -0.5 ? 'Bearish' : 'Neutral']); }
+  const runs = [];
+  for (const [d, l] of wk) { const r = runs.at(-1); if (r && r.label === l) r.end = d; else runs.push({ label: l, start: d, end: d }); }
+  // fold runs shorter than 4 weeks into their neighbours (noise around the average)
+  const merged = [];
+  runs.forEach((r, i) => { const wks = dd(r.start, r.end) / 7 + 1, prev = merged.at(-1), current = i === runs.length - 1; if (prev && (prev.label === r.label || (wks < 4 && !current))) prev.end = r.end; else merged.push({ ...r }); });
+  for (const r of merged) { const p0 = pt(X.close, r.start)?.[1], p1 = pt(X.close, r.end)?.[1]; r.weeks = Math.round(dd(r.start, r.end) / 7) + 1; r.change = ok(p0) && ok(p1) ? pct(p1, p0) : null; }
+  return (X._c.rt = { weeks: wk, episodes: merged });
+}
+export function similarConditions(X, I) {
+  const R = I.readings, cur = { m: R.t_ma200?.value, v: R.c_mvrv?.value, dd: R.t_dd?.value };
+  if (!ok(cur.m) || !ok(cur.dd)) return null;
+  const H = (id) => new Map(indicatorHistory(X, id).pts.map((p) => [p[0], p[1]]));
+  const m = H('t_ma200'), v = H('c_mvrv'), dr = H('t_dd'), cut = shiftDate(X.today, -180);
+  const hits = []; let lastW = null;
+  for (const [d, mv] of m) {
+    if (d > cut) break; const w = Math.floor(Date.parse(d) / (7 * DAYMS)); if (w === lastW) continue; lastW = w;
+    const vv = v.get(d), ddv = dr.get(d);
+    if (Math.abs(mv - cur.m) <= 8 && ok(ddv) && Math.abs(ddv - cur.dd) <= 12 && (!ok(cur.v) || (ok(vv) && Math.abs(vv - cur.v) <= 0.25))) hits.push(d);
+  }
+  const eps = [];
+  for (const d of hits) { const e = eps.at(-1); if (e && dd(e.end, d) <= 28) { e.end = d; e.n++; } else eps.push({ start: d, end: d, n: 1 }); }
+  const fwd = (d, n) => { const a = pt(X.close, d), b = pt(X.close, shiftDate(d, n)); return a && b && dd(b[0], shiftDate(d, n)) <= 3 ? pct(b[1], a[1]) : null; };
+  for (const e of eps) { e.mvrv = v.get(e.start) ?? null; e.f90 = fwd(e.start, 90); e.f180 = fwd(e.start, 180); }
+  return { criteria: `price within ±8 points of today’s distance from the 200-day average (${pc(cur.m, 0)}), drawdown within ±12 points (${pc(cur.dd, 0)})${ok(cur.v) ? `, MVRV within ±0.25 (${f(cur.v, 2)})` : ''}`, weeks: hits.length, episodes: eps };
 }

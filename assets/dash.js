@@ -4,10 +4,10 @@
 // data/latest.json (agent snapshot) and data/pi_cycle.json. Values that cannot be
 // obtained free are shown as such, never estimated.
 
-import { startNetwork, seedNetwork, refreshNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js?v=20261003j';
-import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js?v=20261003j';
-import { priceCardHtml, envelopeNow } from './pricechart.js?v=20261003j';
-import { marketReadHtml } from './intelui.js?v=20261003j';
+import { startNetwork, seedNetwork, refreshNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js?v=20261003m';
+import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js?v=20261003m';
+import { priceCardHtml, envelopeNow } from './pricechart.js?v=20261003m';
+import { marketReadHtml } from './intelui.js?v=20261003m';
 
 // ---------- formatting ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -514,8 +514,8 @@ function paintSince() {
 // ---------- page ----------
 const DEEPER = [
   ['#overview', 'Intelligence', 'Daily forces, regime, scenarios and what changed'],
-  ['#cycle', 'On-chain cycle', 'MVRV, NUPL, SOPR and the cycle composite in depth'],
-  ['#analysis/market-structure/liquidity', 'Market liquidity', 'Order-book depth, liquidation map and options levels (Market Structure)'],
+  ['#analysis/regime', 'Market regime', 'Regime, on-chain positioning and historical context on Analysis'],
+  ['#analysis/liquidity', 'Liquidity Detail', 'Order-book depth, liquidation map and options levels'],
   ['#analysis/macro-liquidity', 'Macro & Liquidity', 'Central banks, M2, rates, dollar, financial conditions'],
   ['#reports', 'Reports', 'The 07:00 morning report and the archive'],
   ['https://mempool.space', 'mempool.space ↗', 'Blocks, fees and mining, live'],

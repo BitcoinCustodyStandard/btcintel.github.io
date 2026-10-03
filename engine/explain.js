@@ -159,8 +159,8 @@ export const EXPLAIN = {
     caveat: () => 'The classification uses fixed, published rules, not judgement calls.',
   },
   cyclebadge: {
-    title: 'On-chain cycle badge',
-    what: 'A short summary of where bitcoin sits in its long-term valuation cycle, based on blockchain data (open the On-chain cycle tab for the full picture).',
+    title: 'On-chain valuation badge',
+    what: 'A short summary of where bitcoin sits in its long-term valuation cycle, based on blockchain data (open On-chain positioning on the Analysis page for the full picture).',
     why: 'Cycles describe slow-moving shifts in how much profit holders are sitting on — useful context for the daily moves on this page.',
     now: (a) => { const c = a.cycle; return c?.valuation?.zone ? `Today: “${c.phase?.label}” phase, valuation “${c.valuation.zone.label}”, momentum ${String(c.momentum?.label).toLowerCase()}.` : null; },
     reminder: true,

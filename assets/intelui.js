@@ -1,9 +1,9 @@
 // Views for the Market Intelligence Engine (engine/intel.js):
 //   marketReadHtml  — the dashboard's ten-second Market read
-//   intelligenceHtml — Intelligence tab: what matters now and why, valuation, cycle, risk
+//   intelligenceHtml — Intelligence tab: what matters now and why, valuation, market regime, risk
 // All text comes from the engine's evidence; nothing here adds figures of its own.
 
-import { DOMAIN_SLUG, DEF_BY_ID, indSlug } from '../engine/intel.js?v=20261003j';
+import { DOMAIN_SLUG, DEF_BY_ID, indSlug } from '../engine/intel.js?v=20261003m';
 
 const DLINK = (k) => `#analysis/${DOMAIN_SLUG[k]}`;
 const ILINK = (id) => (DEF_BY_ID[id] ? `${DLINK(DEF_BY_ID[id].domain)}/${indSlug(id)}` : '#analysis');
@@ -39,7 +39,7 @@ export function marketReadHtml(I, info = () => '') {
     ${c2 ? `<p class="ir-chg"><span class="k">What changed${info('i_changes')}</span><span class="ir-hz">${[['2d', I.changes.d2], ['7d', I.changes.d7], ['30d', I.changes.d30]].map(([l, c]) => (c?.domains ? `<span title="${esc(c.text)}"><i>${l}</i>${pill(c.label, c.label === 'Improving' ? 1 : c.label === 'Deteriorating' ? -0.5 : 0)}</span>` : '')).join('')}</span>${esc(c2.text)}</p>` : ''}
     <div class="ir-concl">
       ${I.valuation ? `<span><span class="k">Valuation${info('i_valuation')}</span><b>${esc(I.valuation.state)}</b></span>` : ''}
-      ${I.cycle ? `<span><span class="k">Cycle${info('i_cycle')}</span><b>${esc(I.cycle.phase)}</b></span>` : ''}
+      ${I.regime ? `<span><span class="k">Market regime${info('i_cycle')}</span><b><a href="#analysis/regime">${esc(I.regime.label)}</a></b></span>` : ''}
       <span><span class="k">Risk regime${info('i_risk')}</span><b>${esc(I.risk.level)}</b></span>
     </div>
     <p class="tr-n">Rules-based synthesis of free public data across five domains — not investment advice and not a forecast.</p>`;
@@ -82,7 +82,7 @@ export function intelligenceHtml(I, info = () => '') {
         <span class="k">Market intelligence · current read${info('i_read')}</span>
         <div class="ir-state big t-${toneOf(I.state)}">${esc(I.state)}</div>
         <p class="ir-sub">Fair Grade <b class="num">${I.grade.value}</b> / 100 (${gradeWord(I.grade.value)}) · ${I.breadth.n} of ${I.breadth.of} domains supportive · ${conf(I.confidence.level)}</p>
-        <div class="ir-concl">${V ? `<span><span class="k">Valuation</span><b>${esc(V.state)}</b></span>` : ''}${C ? `<span><span class="k">Cycle</span><b>${esc(C.phase)}</b></span>` : ''}<span><span class="k">Risk regime</span><b>${esc(K.level)}</b></span></div>
+        <div class="ir-concl">${V ? `<span><span class="k">Valuation</span><b>${esc(V.state)}</b></span>` : ''}${I.regime ? `<span><span class="k">Market regime</span><b>${esc(I.regime.label)}</b></span>` : ''}<span><span class="k">Risk regime</span><b>${esc(K.level)}</b></span></div>
       </div>
       <div class="ihero-r"><p class="xs dim" style="margin:0 0 6px">The five analytical domains — open one for its research page:</p><div class="imatrix sm">${I.domains.map((d) => `<a href="${DLINK(d.key)}" class="imx t-${toneOf(d.state, d.score)}"><span class="n">${esc(d.name)}</span><b>${d.arrow} ${esc(d.state)}</b></a>`).join('')}</div></div>
     </section>
@@ -122,14 +122,12 @@ export function intelligenceHtml(I, info = () => '') {
       ${V ? `<div class="iconc"><div class="iconc-h"><div class="ir-state t-${V.state === 'Fair' ? 'neu' : ['Depressed', 'Attractive'].includes(V.state) ? 'up' : 'warn'}">${esc(V.state)}</div>${conf(V.confidence)}<span class="vscale">${['Depressed', 'Attractive', 'Fair', 'Elevated', 'Extreme'].map((s) => `<i class="${s === V.state ? 'on' : ''}">${s}</i>`).join('')}</span></div>
         <p>${esc(V.context)}</p>
         <div class="tbl-wrap"><table class="itbl"><thead><tr><th>Evidence</th><th>Reading</th><th>Reads as</th><th>Weight</th></tr></thead><tbody>${V.evidence.map((e) => `<tr><td data-k="Evidence"><b>${esc(e.name)}</b><div class="xs dim">${esc(e.src)} · ${esc(ago(e.asOf))}</div></td><td data-k="Reading" class="num">${esc(e.disp)}</td><td data-k="Reads as">${pill(e.zone, e.score / 2)}</td><td data-k="Weight" class="num">${e.w}</td></tr>`).join('')}</tbody></table></div>
-        <p class="xs dim">Each input is placed on a cheap-to-rich scale against its own historical zones; the weighted reading sets the state (MVRV carries the most weight; NUPL and realised price repeat MVRV and are not counted twice). NVT and MVRV Z-Score are not available from free sources.</p></div>` : '<p class="muted">Valuation inputs unavailable.</p>'}</section>
+        <p class="xs dim">Each input is placed on a cheap-to-rich scale against its own historical zones; the weighted reading sets the state (MVRV carries the most weight; NUPL and realised price repeat MVRV and are not counted twice). MVRV Z-Score is shown on the Analysis pages; NVT is not available from free sources.</p></div>` : '<p class="muted">Valuation inputs unavailable.</p>'}</section>
 
-    <section class="block"><div class="bh"><h2>Cycle${info('i_cycle')}</h2><p class="aside">Price structure, valuation, holders, positioning and sentiment together</p></div>
-      ${C ? `<div class="iconc"><div class="iconc-h"><div class="ir-state t-neu">${esc(C.phase)}</div>${conf(C.confidence)}${C.transitional && C.runnerUp ? `<span class="small muted">Bordering on ${esc(C.runnerUp.phase.toLowerCase())}</span>` : ''}</div>
-        <p>${esc(C.desc)}</p>
-        <div class="icyc"><div><h3>Conditions met</h3><ul class="ichk">${C.met.map((m) => `<li class="y">${esc(m)}</li>`).join('') || '<li>—</li>'}</ul></div><div><h3>Not met</h3><ul class="ichk">${C.unmet.map((m) => `<li class="n">${esc(m)}</li>`).join('') || '<li class="muted">None</li>'}</ul></div></div>
-        ${C.halving ? `<p class="xs dim">${esc(C.halving.note)}</p>` : ''}
-        <p class="xs dim">Phases are scored by how many of their defining conditions hold, weighted; the best match is shown, with the runner-up when it is close. Time since the halving is never used to decide the phase.</p></div>` : '<p class="muted">Not enough price history.</p>'}</section>
+    <section class="block"><div class="bh"><h2>Market regime${info('i_cycle')}</h2><p class="aside">What regime current conditions are consistent with · <a href="#analysis/regime">evidence and historical context on Analysis →</a></p></div>
+      ${I.regime ? `<div class="iconc"><div class="iconc-h"><div class="ir-state t-${{ Bullish: 'up', Neutral: 'neu', Bearish: 'warn' }[I.regime.label]}">${esc(I.regime.label)}</div>${conf(I.regime.confidence)}${C ? `<span class="small muted">Most consistent with ${esc(C.phase.toLowerCase())}${C.transitional && C.runnerUp ? `, bordering on ${esc(C.runnerUp.phase.toLowerCase())}` : ''}</span>` : ''}</div>
+        <p>${esc(I.regime.why)}</p>
+        <p class="xs dim">Classified from structural evidence across all five domains (trend, price structure, holder positioning, on-chain flows, institutional demand, liquidity, leverage, valuation room) — not from a cycle clock or time since the halving.</p></div>` : '<p class="muted">Not enough data.</p>'}</section>
 
     <section class="block"><div class="bh"><h2>Risk regime${info('i_risk')}</h2><p class="aside">How fragile current conditions are, in either direction</p></div>
       <div class="iconc"><div class="iconc-h"><div class="ir-state t-${{ Low: 'up', Moderate: 'neu', Elevated: 'warn', High: 'down' }[K.level]}">${esc(K.level)}</div><span class="small muted">${K.points} stress point${K.points === 1 ? '' : 's'}</span></div>

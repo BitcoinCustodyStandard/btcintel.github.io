@@ -106,7 +106,7 @@ export function briefReport(a, opts = {}) {
   L.push(`**${b.priceLine}**  `);
   L.push(`**Regime:** ${b.regime.text}  `);
   L.push(`_Data through ${a.dataThrough.slice(0, 16).replace('T', ' ')} UTC · ${b.sources.text}_`);
-  if (b.cycle) L.push(`**On-chain cycle:** ${b.cycle.phase ? b.cycle.phase + ' · ' : ''}${b.cycle.zone}${b.cycle.momentum ? ` · momentum ${b.cycle.momentum.toLowerCase()}` : ''}  `);
+  if (b.cycle) L.push(`**On-chain valuation:** ${b.cycle.phase ? b.cycle.phase + ' · ' : ''}${b.cycle.zone}${b.cycle.momentum ? ` · momentum ${b.cycle.momentum.toLowerCase()}` : ''}  `);
   if (b.notable.length) L.push('', `**What changed (≥1.5σ):** ${b.notable.map((n) => `${n.label} ${n.from} → ${n.to} (${fmtNum(n.z, 1)}σ, ${n.horizon})`).join('; ')}.`);
   L.push('', '## Today’s three most important variables', '');
   b.top.forEach((t, i) => L.push(`${i + 1}. **${t.name} — ${t.dirNote}.** ${t.summary} _Watch:_ ${t.watch}`));
@@ -123,9 +123,9 @@ export function briefReport(a, opts = {}) {
   });
   const cy = a.cycle;
   if (cy && !cy.error) {
-    L.push('## On-chain cycle & momentum', '', `**${cy.headline}.** ${cy.valuation.leaning || ''}`, '');
+    L.push('## On-chain valuation & momentum', '', `**${cy.headline}.** ${cy.valuation.leaning || ''}`, '');
     cy.bullets.forEach((x) => L.push(`- ${x}`));
-    L.push('', '_Historical regimes only — not predictive. Full metric cards and thresholds on the On-chain cycle tab._', '');
+    L.push('', '_Historical zones only — not predictive. On-chain evidence, zone thresholds and historical context are on the Analysis page (btcintel.org/#analysis/onchain)._', '');
   }
   L.push('## Three things to watch', '');
   b.watch.forEach((w) => L.push(`- **${w.what}** — ${w.why}`));

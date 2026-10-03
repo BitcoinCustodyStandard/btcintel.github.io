@@ -210,11 +210,11 @@ function watch24(a) {
   const g = byGamma(m.options)[0];
   if (x && x.days <= 1.5) out.push({ what: `${dayLabel(x.expiry)} 08:00 UTC Deribit expiry`, why: `${fmtUsd(x.notionalUsd)} notional, max pain ${fmtK(x.maxPain)}.${g ? ` Watch for pin or break around ${fmtK(g.strike)}.` : ''}`, link: '#liquidity', key: 'w:expiry' });
   if (m.etf) out.push({ what: "Tonight's Farside ETF print", why: `Does the 5-day net stay ${m.etf.s5 >= 0 ? 'constructive or roll over' : 'negative or turn'}?`, link: '#force-etf', key: 'w:etf' });
-  for (const w of a.cycle?.watch || []) out.push({ what: w.what, why: w.why, link: '#cycle', key: 'w:cycle' });
+  for (const w of a.cycle?.watch || []) out.push({ what: w.what, why: w.why, link: '#analysis/onchain', key: 'w:cycle' });
   const rank = (id) => a.forces.find((f) => f.id === id)?.rank ?? 99;
   const rest = [];
-  if (m.onchain?.stables30d !== null && m.onchain?.stables30d !== undefined) rest.push({ id: 'onchain', what: 'Stablecoin flow', why: m.onchain.stables30d > 0 ? `Supply ${fmtUsdSigned(m.onchain.stables7d, 1)} this week — continued expansion or pause?` : 'Continued contraction or stabilisation?', link: '#cycle' });
-  if (m.depth) rest.push({ id: 'depth', what: 'Depth during US hours', why: 'Does bid-side hold or withdraw on any dip?', link: '#analysis/market-structure/liquidity' });
+  if (m.onchain?.stables30d !== null && m.onchain?.stables30d !== undefined) rest.push({ id: 'onchain', what: 'Stablecoin flow', why: m.onchain.stables30d > 0 ? `Supply ${fmtUsdSigned(m.onchain.stables7d, 1)} this week — continued expansion or pause?` : 'Continued contraction or stabilisation?', link: '#analysis/onchain' });
+  if (m.depth) rest.push({ id: 'depth', what: 'Depth during US hours', why: 'Does bid-side hold or withdraw on any dip?', link: '#analysis/liquidity' });
   if (m.derivs) rest.push({ id: 'leverage', what: 'Open interest and funding', why: 'Is leverage being rebuilt into the move?', link: '#force-leverage' });
   rest.sort((p, q) => (p.id === 'onchain' ? -1 : q.id === 'onchain' ? 1 : rank(p.id) - rank(q.id)));
   for (const r of rest) out.push({ what: r.what, why: r.why, link: r.link, key: { onchain: 'w:stables', depth: 'w:depth', leverage: 'w:leverage' }[r.id] });

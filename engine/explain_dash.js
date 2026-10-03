@@ -369,10 +369,10 @@ export const DASH_EXPLAIN = {
     caveat: () => 'Historical context, not a prediction. NVT and MVRV Z-Score are not available from free sources and are not used.',
   },
   i_cycle: {
-    title: 'Cycle position',
-    what: 'The market phase that best fits the evidence: capitulation, contraction, accumulation, early expansion, expansion, late expansion, distribution or a mid-cycle correction.',
-    why: 'Each phase has defining conditions across price structure, the long-term trend, valuation, holder cost bases, sentiment and leverage. The engine scores how many hold and shows which are met and which are not.',
-    caveat: () => 'Time since the halving is shown for context only and never decides the phase. Phases are descriptions, not forecasts.',
+    title: 'Market regime',
+    what: 'Which market regime current conditions are consistent with — Bullish, Neutral or Bearish — with a description such as “an early uptrend” or “bear-market conditions”.',
+    why: 'It is built from structural, medium- and long-horizon evidence across all five domains: the trend, price structure, holder positioning, on-chain flows, institutional demand, the liquidity backdrop, leverage and valuation room. The page lists which conditions are consistent with the description and which are not.',
+    caveat: () => 'Time since the halving is never used. Regimes describe current conditions; they are not forecasts.',
   },
   i_risk: {
     title: 'Risk regime',

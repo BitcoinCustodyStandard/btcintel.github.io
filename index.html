@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>BTC Dashboard · BTC Intel</title>
+<title>BTCIntel</title>
 <meta name="description" content="A free Bitcoin dashboard: live price, network, fees, mining, supply, on-chain valuation, derivatives, ETF flows, news and large moves — every figure from free public sources, with source and timestamp.">
 <meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#0a1220">
@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@400;500&display=swap" rel="stylesheet">
 <!-- bump ?v= here and on the assets/*.js imports together when CSS or page modules change -->
-<link rel="stylesheet" href="assets/app.css?v=20261003j">
+<link rel="stylesheet" href="assets/app.css?v=20261003m">
 <script>
   try { const t = localStorage.getItem('bmi-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
 </script>
@@ -36,7 +36,6 @@
       <a href="#analysis" data-tab-link="analysis">Analysis</a>
       <a href="#overview" data-tab-link="overview">Intelligence</a>
       <a href="#dca" data-tab-link="dca">DCA backtest</a>
-      <a href="#cycle" data-tab-link="cycle">On-chain Cycle</a>
       <a href="#reports" data-tab-link="reports">Reports</a>
       <a href="battlefield/" class="nav-bf">Battlefield ↗</a>
     </div>
@@ -52,6 +51,7 @@
       <a href="#analysis/market-structure" data-sub="market-structure">Market Structure</a>
       <a href="#analysis/sentiment" data-sub="sentiment">Sentiment</a>
       <a href="#analysis/macro-liquidity" data-sub="macro-liquidity">Macro &amp; Liquidity</a>
+      <a href="#analysis/liquidity" data-sub="liquidity">Liquidity Detail</a>
     </div>
   </div>
 </nav>
@@ -64,7 +64,7 @@
     <p><a href="/">BTC Intel</a> · <a href="data/index.json">Report archive (JSON)</a> · <a href="data/timeseries.json">Daily timeseries (JSON)</a> · <a href="https://github.com/BitcoinCustodyStandard/btcintel.github.io/blob/main/README.md" target="_blank" rel="noopener">Methodology &amp; operations</a></p>
   </div>
 </footer>
-<script type="module" src="assets/app.js?v=20261003j"></script>
+<script type="module" src="assets/app.js?v=20261003m"></script>
 <!-- GoatCounter (privacy-friendly, no cookies). Shares the bcs.goatcounter.com account;
      every path is prefixed "btcintel.org" so this site's traffic stays separate there.
      Hash routes (#analysis/…, #reports…) are counted as their own page views. -->

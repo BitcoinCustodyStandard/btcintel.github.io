@@ -1,7 +1,7 @@
 // Offline checks for the Market Intelligence Engine (engine/intel.js).
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { intelligence, indicatorHistory, domHistory, INDICATORS, DOMAIN_SLUG, indSlug } from '../../engine/intel.js';
+import { intelligence, indicatorHistory, domHistory, INDICATORS, DOMAIN_SLUG, indSlug, regimeTimeline, similarConditions } from '../../engine/intel.js';
 import { IND_DOCS, COMP_DOCS, DOMAIN_DOCS } from '../../engine/indicator_docs.js';
 import { compact } from '../../engine/longhist.js';
 import { reportModel } from '../../engine/reportmodel.js';
@@ -27,7 +27,10 @@ assert.ok(up.grade.value >= 0 && up.grade.value <= 100);
 assert.equal(up.domains.length, 5);
 assert.ok(!JSON.stringify({ g: up.grade, d: up.domains.map((d) => d.score), f: up.forces }).includes('NaN'));
 assert.ok(up.narrative.length >= 3 && up.narrative.every((p) => typeof p === 'string' && p.length > 20));
-assert.ok(['Early expansion', 'Expansion', 'Late expansion', 'Mid-cycle correction'].includes(up.cycle.phase), `uptrend phase (${up.cycle.phase})`);
+assert.ok(['Early uptrend', 'Established uptrend', 'Overheated uptrend', 'Correction within an uptrend'].includes(up.cycle.phase), `uptrend regime description (${up.cycle.phase})`);
+assert.equal(up.regime.label, 'Bullish', 'structural evidence in a rising market reads bullish');
+assert.ok(!('halving' in up.cycle), 'no halving clock in the regime');
+assert.ok(['Bullish', 'Neutral', 'Bearish'].includes(up.assessment.label) && up.assessment.why.length > 20);
 assert.ok(up.valuation && ['Depressed', 'Attractive', 'Fair', 'Elevated', 'Extreme'].includes(up.valuation.state));
 // persistence: the trend has held for the whole 30-day look-back
 assert.equal(up.drivers.find((f) => f.id === 'trend').persistence, 30);
@@ -41,6 +44,7 @@ assert.ok(t2.score < -0.15, `technical should be cautionary in a downtrend (${t2
 assert.ok(m2.score < 0, `macro should lean negative with a rising dollar and real yields (${m2.score})`);
 assert.ok(dn.grade.value < up.grade.value, 'grade lower in the weak world');
 assert.ok(dn.offsets.some((f) => f.id === 'trend'), 'downtrend force detected');
+assert.equal(dn.regime.label, 'Bearish', 'structural evidence in a falling market reads bearish');
 assert.ok(dn.drivers.some((f) => f.id === 'heat'), 'extreme fear read as contrarian support');
 assert.ok(['Depressed', 'Attractive'].includes(dn.valuation.state), `MVRV 0.9 reads cheap (${dn.valuation.state})`);
 
@@ -83,6 +87,9 @@ if (latest?.metrics) {
   // every indicator has research notes, a slug and a domain route
   for (const i of INDICATORS) { assert.ok(IND_DOCS[i.id]?.what && IND_DOCS[i.id]?.caveat, `docs for ${i.id}`); assert.ok(COMP_DOCS[i.comp], `component ${i.comp}`); assert.ok(DOMAIN_SLUG[i.domain] && indSlug(i.id)); }
   assert.equal(Object.keys(DOMAIN_DOCS).length, 5);
+  const T = regimeTimeline(X);
+  assert.ok(T.episodes.length >= 1 && T.episodes.every((e) => ['Bullish', 'Neutral', 'Bearish'].includes(e.label) && e.weeks >= 1), 'long-run regime timeline');
+  assert.ok(similarConditions(X, up) !== null, 'similar-conditions search runs');
   const M = reportModel(up);
   assert.ok(M.sections.length >= 10 && M.sections.find((x) => x.title === 'Key drivers').lines.length >= 1, 'report model from the same engine output');
 }

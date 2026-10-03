@@ -7,7 +7,7 @@
 // (Binance BTC-USDT as fallback); on those views today's daily averages and bands are
 // drawn as flat reference levels, because they are defined on daily closes.
 import { computeDaily, envelopePosition } from '../engine/envelope.js';
-import { timeoutSignal } from './network.js?v=20261003j';
+import { timeoutSignal } from './network.js?v=20261003m';
 
 export const RANGES = [['1H', 'h1'], ['1D', 'd1'], ['7D', 'd7'], ['1M', 30], ['3M', 91], ['6M', 182], ['YTD', 'ytd'], ['1Y', 365], ['2Y', 730], ['5Y', 1826], ['All', 0]];
 const INTRA = {
