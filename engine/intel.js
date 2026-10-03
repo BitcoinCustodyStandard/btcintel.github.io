@@ -71,7 +71,15 @@ const joinAnd = (xs) => (xs.length > 1 ? `${xs.slice(0, -1).join(', ')} and ${xs
 
 // ---------------------------------------------------------------------------
 // INPUTS: normalise the published files into dated series + today's snapshot values
-export function buildInputs({ a, rows = [], pi = null, dash = null, etf = null, live = null } = {}) {
+// union of two series by date; the second (shorter, fresher) wins where both have a point
+function merge(longS, shortS) {
+  if (!longS?.length) return shortS || []; if (!shortS?.length) return longS;
+  const m = new Map(longS); for (const [d, v] of shortS) m.set(d, v);
+  return [...m.entries()].sort((x, y) => (x[0] < y[0] ? -1 : 1));
+}
+// value of `s` at each date of `base` (last value on or before), for derived series
+const onDates = (base, fn) => clean(base.map(([d, v]) => [d, fn(d, v)]));
+export function buildInputs({ a, rows = [], pi = null, dash = null, etf = null, live = null, long = null } = {}) {
   const M = a?.metrics || {};
   const today = String(a?.dataThrough || new Date().toISOString()).slice(0, 10);
   const ser = (k) => clean(rows.map((r) => [r.date, r[k]]));
@@ -92,21 +100,33 @@ export function buildInputs({ a, rows = [], pi = null, dash = null, etf = null, 
   const act = dash?.activity, col = (n) => (act?.rows ? clean(act.rows.map((r) => [r[0], r[act.cols.indexOf(n)]])) : []);
   const fl = dash?.flows?.rows || [];
   const dist = dash?.distribution?.history || [];
+  const L = long?.series || {}, LS = (k) => clean(L[k]);
+  const fred = (id) => LS('fred.' + id);
+  // US net liquidity (Fed assets − Treasury account − reverse repo) on Fed balance-sheet dates
+  const walcl = fred('WALCL'), tga = fred('WTREGEN'), rrp = fred('RRPONTSYD');
+  const netLiqL = walcl.length && tga.length && rrp.length ? onDates(walcl, (d, v) => { const t = pt(tga, d)?.[1], r = pt(rrp, d)?.[1]; return ok(t) && ok(r) ? v - t - r : NaN; }) : [];
+  // Fed + ECB + BoJ balance sheets in USD bn (same formula as the daily analysis)
+  const ecb = fred('ECBASSETSW'), boj = fred('JPNASSETS'), eur = fred('DEXUSEU'), jpy = fred('DEXJPUS');
+  const g3 = walcl.length && ecb.length && boj.length && eur.length && jpy.length ? onDates(walcl, (d, f) => { const e = pt(ecb, d)?.[1], b = pt(boj, d)?.[1], x1 = pt(eur, d)?.[1], x2 = pt(jpy, d)?.[1]; return [e, b, x1, x2].every(ok) && dd(pt(boj, d)[0], d) < 75 ? f + e * x1 + (b * 0.1) / x2 : NaN; }) : [];
+  const supply = LS('cm.SplyCur'), flowOut = new Map(LS('cm.FlowOutExNtv'));
   const X = {
-    today, spot, M, a, dash, live,
+    today, spot, M, a, dash, live, long,
+    supply, us2y: fred('DGS2'), ff: fred('DFF'), curve: fred('T10Y2Y'), be: fred('T10YIE'), m2: fred('M2SL'), cpi: fred('CPIAUCSL'), pce: fred('PCEPILFE'), unrate: fred('UNRATE'), gdp: fred('A191RL1Q225SBEA'), nfci: fred('NFCI'), walcl, g3,
+    spx: LS('yahoo.SPX'), acwi: LS('yahoo.ACWI'), hash: LS('cm.HashRate'),
+    skew: ser('skew'), pcr: ser('pcr'), oimcap: ser('oiPctMcap'), ls: ser('ls'), taker: ser('takerSpot7'),
     close, ath,
     volume: clean(dash?.volume?.rows),
     mvrv, puell: clean(ch.puell), sopr: clean(ch.sopr), profit: clean(ch.profit),
     sth: clean(dash?.cohorts?.sth), lth: clean(dash?.cohorts?.lth),
-    exnet: clean(fl.map((r) => [r[0], r[1] - r[2]])), exbal: clean(fl.map((r) => [r[0], r[3]])),
-    active: col('active'), tx: col('tx'), fees: col('feesBtc'),
+    exnet: merge(onDates(LS('cm.FlowInExNtv'), (d, v) => v - (flowOut.get(d) ?? NaN)), clean(fl.map((r) => [r[0], r[1] - r[2]]))), exbal: merge(LS('cm.SplyExNtv'), clean(fl.map((r) => [r[0], r[3]]))),
+    active: merge(LS('cm.AdrActCnt'), col('active')), tx: merge(LS('cm.TxCnt'), col('tx')), fees: col('feesBtc'),
     hashprice: clean(dash?.hashpower?.daily?.map((r) => [r[0], r[1]])),
-    stables: ser('stables'),
+    stables: merge(LS('llama.stables'), ser('stables')),
     etf: [...em.entries()].sort((x, y) => (x[0] < y[0] ? -1 : 1)),
     funding: ser('fundingAnn'), oi: ser('oiOkx'), dvol: ser('dvol'), basis: ser('basisAnn'), cbp: ser('cbPremium'), dom: ser('dominance'),
-    fng: clean(dash?.fng?.series),
-    dxy: ser('dxy'), real10y: ser('real10y'), us10y: ser('us10y'), hy: ser('hy'), vix: ser('vix'), ndx: ser('ndx'), gold: ser('gold'), netLiq: ser('netLiq'), corrNdx: ser('corrNdx30'),
-    wiki: clean(dash?.attention?.rows),
+    fng: merge(LS('fng.value'), clean(dash?.fng?.series)),
+    dxy: merge(LS('yahoo.DXY'), ser('dxy')), real10y: merge(fred('DFII10'), ser('real10y')), us10y: merge(fred('DGS10'), ser('us10y')), hy: merge(fred('BAMLH0A0HYM2'), ser('hy')), vix: merge(LS('yahoo.VIX'), ser('vix')), ndx: merge(LS('yahoo.NDX'), ser('ndx')), gold: merge(LS('yahoo.GOLD'), ser('gold')), netLiq: merge(netLiqL, ser('netLiq')), corrNdx: ser('corrNdx30'),
+    wiki: merge(LS('wiki.views'), clean(dash?.attention?.rows)),
     whales: clean(dist.map((h) => [h.date, (h.c?.whale?.[1] ?? NaN) + (h.c?.humpback?.[1] ?? NaN)])),
     _c: {},
   };
@@ -142,6 +162,21 @@ function techAt(X, d) {
   return (X._c[key] = t);
 }
 
+// MVRV Z-Score = (market cap − realised cap) / σ(market cap over all history to date);
+// market cap = price × supply (Coin Metrics), realised cap = market cap ÷ MVRV.
+function mvrvZ(X, d) {
+  if (!X.supply?.length) return null;
+  if (!X._mc) {
+    const mc = onDates(X.supply, (dt, sp) => { const p = pt(X.close, dt); return p && dd(p[0], dt) <= 3 ? p[1] * sp : NaN; });
+    let s1 = 0, s2 = 0; X._mc = mc; X._mcs = mc.map(([, v]) => { s1 += v; s2 += v * v; return [s1, s2]; });
+  }
+  const i = idx(X._mc, d); if (i < 104 || dd(X._mc[i][0], d) > 10) return null;
+  const mv = pt(X.mvrv, d); if (!mv || dd(mv[0], d) > 10) return null;
+  const n = i + 1, [s1, s2] = X._mcs[i], sd = Math.sqrt(Math.max(0, s2 / n - (s1 / n) ** 2));
+  const mc = X._mc[i][1], rc = mc / mv[1];
+  return sd ? { z: (mc - rc) / sd, mc, rc, at: X._mc[i][0] } : null;
+}
+
 // ---------------------------------------------------------------------------
 // LAYER 2–3: indicators and their interpretation
 // Each definition: id, name, domain, component, horizon, weight, expected update interval
@@ -149,11 +184,11 @@ function techAt(X, d) {
 // for context-only readings). Current-only inputs (order books, options surface, news…) are
 // known only for today, so they never enter an "as of" comparison.
 const DOMAINS = [
-  { key: 'tech', name: 'Technical', question: 'What are price structure, trend, momentum and volatility telling us?', comps: { Trend: 0.35, Momentum: 0.25, Structure: 0.2, Extension: 0.1, Volatility: 0.1 } },
+  { key: 'tech', name: 'Technical', question: 'What is price telling us?', comps: { Trend: 0.35, Momentum: 0.25, Structure: 0.2, Extension: 0.1, Volatility: 0.1 } },
   { key: 'chain', name: 'On-chain', question: 'What are the Bitcoin network and its holders telling us?', comps: { Valuation: 0.22, 'Holder behaviour': 0.25, 'Exchange behaviour': 0.15, 'On-chain liquidity': 0.15, 'Network activity': 0.15, 'Supply dynamics': 0.08 } },
-  { key: 'mkt', name: 'Market structure', question: 'What is capital doing and how is the market positioned?', comps: { 'Institutional demand': 0.3, 'Spot demand': 0.2, Leverage: 0.2, Derivatives: 0.15, 'Market positioning': 0.1, 'Crypto market structure': 0.05 } },
-  { key: 'sent', name: 'Sentiment', question: 'What does the market believe, fear, search for and discuss?', comps: { 'Fear & Greed': 0.45, News: 0.2, 'Retail attention': 0.25, Narrative: 0.1 } },
-  { key: 'macro', name: 'Macro & liquidity', question: 'What financial environment is Bitcoin operating in?', comps: { Liquidity: 0.3, Rates: 0.2, Dollar: 0.2, 'Risk appetite': 0.2, 'Monetary regime': 0.1 } },
+  { key: 'mkt', name: 'Market structure', question: 'What are capital flows, positioning, derivatives and demand telling us?', comps: { 'Institutional demand': 0.3, 'Spot demand': 0.2, Leverage: 0.2, Derivatives: 0.15, 'Market positioning': 0.1, 'Crypto market structure': 0.05 } },
+  { key: 'sent', name: 'Sentiment', question: 'What does the market believe, and how is that changing?', comps: { 'Fear & Greed': 0.45, News: 0.2, 'Retail attention': 0.25, Narrative: 0.1 } },
+  { key: 'macro', name: 'Macro & liquidity', question: 'What financial and liquidity environment is Bitcoin operating in?', comps: { Liquidity: 0.3, 'Rates & policy': 0.2, Dollar: 0.2, 'Financial conditions': 0.15, 'Risk appetite': 0.15 } },
 ];
 export const DOMAIN_META = DOMAINS;
 // words for a component's state: [positive, neutral, negative]
@@ -164,10 +199,10 @@ const VOCAB = {
 // gaps we will not paper over: listed on the Analysis page
 export const UNAVAILABLE = {
   tech: [],
-  chain: ['MVRV Z-Score (needs the market-cap history in the free tier)', 'NVT and NVT Signal (transfer value is not on the Coin Metrics free tier)', 'Adjusted SOPR, RHODL, HODL waves, dormancy, coin days destroyed', 'Long-/short-term holder supply (only their cost bases are free)', 'Stablecoin exchange balances and netflows', 'Miner selling pressure'],
+  chain: ['NVT and NVT Signal (transfer value is not on the Coin Metrics free tier)', 'Adjusted SOPR, RHODL, HODL waves, dormancy, coin days destroyed', 'Long-/short-term holder supply (only their cost bases are free)', 'Stablecoin exchange balances and netflows', 'Miner selling pressure'],
   mkt: ['Spot CVD across venues', 'Dealer gamma positioning (modelled only on the Liquidity page)', 'Options term structure beyond Deribit'],
-  sent: ['Google Trends (no free API; Wikipedia pageviews used instead)', 'Reddit and X sentiment (no reliable free source)'],
-  macro: ['PMI (ISM data is not free)', 'Global M2 (US M2 and the Fed/ECB/BoJ balance sheets used instead)', 'Fed-funds futures (the 2-year yield is used as the rate-expectations proxy)'],
+  sent: ['Search interest: Google Trends has no free API (Wikipedia pageviews are used as the retail-attention proxy)', 'Social sentiment: Reddit and X have no reliable free source'],
+  macro: ['PMI (ISM data is not free)', 'Global M2 (US M2 and the Fed/ECB/BoJ balance sheets are used instead)', 'Fed-funds futures (the 2-year yield is used as the rate-expectations proxy)'],
 };
 
 const SRC = {
@@ -204,11 +239,14 @@ def('t_atr', 'Average daily move (14d, close-to-close ATR)', 'tech', 'Volatility
 def('t_hv', 'Historical volatility (1 year)', 'tech', 'Volatility', 'long', 0, 1, SRC.px, (X, d) => { const t = techAt(X, d); if (!ok(t?.rv365)) return null; return { v: t.rv365, disp: `${f(t.rv365, 0)}% annualised`, s: null, why: 'Baseline volatility for comparison (context).', asOf: t.asOf }; });
 
 // ---- ON-CHAIN ----------------------------------------------------------------
+const curOr = (X, now, cur, k, d, maxAge = 3) => { if (now && ok(cur)) return { v: cur, at: X.today }; const r = pt(X[k], d); return r && dd(r[0], d) <= maxAge ? { v: r[1], at: r[0] } : null; };
 const pAt = (X, d) => techAt(X, d)?.p ?? pt(X.close, d)?.[1] ?? null;
 const sAt = (X, k, d, maxAge) => { const r = pt(X[k], d); return r && dd(r[0], d) <= maxAge ? r : null; };
 def('c_mvrv', 'MVRV ratio', 'chain', 'Valuation', 'long', 1.4, 2, SRC.cm, (X, d) => { const r = sAt(X, 'mvrv', d, 10); if (!r) return null; const v = r[1], hist = X.mvrv.filter((x) => x[0] <= d).map((x) => x[1]), p = percentileRank(v, hist); return { v, disp: `${f(v, 2)} · ${ord(p)} percentile since 2010`, s: interp([[0.8, 1], [1.2, 0.7], [1.6, 0.2], [2.0, 0], [2.4, -0.3], [3.2, -0.8], [3.8, -1]], v), why: v < 1 ? 'Price is below the average holder cost basis: historically deep value.' : v < 1.6 ? 'Holders sit on modest unrealised gains: not expensive.' : v < 2.4 ? 'Mid-cycle valuation.' : 'Holders sit on large unrealised gains: historically expensive.', asOf: r[0], pctile: p }; });
 def('c_realized', 'Realised price (average cost basis)', 'chain', 'Valuation', 'long', 0, 2, SRC.cm, (X, d) => { const r = sAt(X, 'mvrv', d, 10), p = pAt(X, d); if (!r || !p) return null; const rp = p / r[1]; return { v: rp, disp: `${usd(rp)} (price ${pc((p / rp - 1) * 100, 0)} above)`, s: null, why: 'What all coins last moved at, on average (same information as MVRV; context).', asOf: r[0] }; });
 def('c_nupl', 'NUPL (net unrealised profit/loss)', 'chain', 'Valuation', 'long', 0, 2, SRC.cm, (X, d) => { const r = sAt(X, 'mvrv', d, 10); if (!r) return null; const v = 1 - 1 / r[1]; return { v, disp: `${f(v, 2)} (${v < 0 ? 'capitulation' : v < 0.25 ? 'hope / fear' : v < 0.5 ? 'optimism / anxiety' : v < 0.75 ? 'belief / denial' : 'euphoria / greed'})`, s: null, why: 'Derived exactly from MVRV, so shown for context and not scored twice.', asOf: r[0] }; });
+def('c_mvrvz', 'MVRV Z-Score', 'chain', 'Valuation', 'long', 0.5, 2, SRC.cm, (X, d) => { const z = mvrvZ(X, d); if (!z) return null; return { v: z.z, disp: f(z.z, 2), s: interp([[-0.5, 1], [0.5, 0.6], [1.5, 0.2], [3, -0.2], [5, -0.6], [7, -1]], z.z), why: z.z < 0.5 ? 'Market value sits close to or below realised value relative to its historical swings: historically cheap.' : z.z > 5 ? 'Market value is far above realised value by historical standards.' : 'Market value is within its usual distance from realised value.', asOf: z.at }; });
+def('c_rcap', 'Realised capitalisation', 'chain', 'Valuation', 'long', 0, 2, SRC.cm, (X, d) => { const z = mvrvZ(X, d); if (!z) return null; return { v: z.rc, disp: `${big(z.rc)} (market cap ${big(z.mc)})`, s: null, why: 'The value of all coins at the price they last moved: the network’s aggregate cost basis (context).', asOf: z.at }; });
 def('c_puell', 'Puell Multiple', 'chain', 'Valuation', 'long', 0.7, 3, SRC.cyc, (X, d) => { const r = sAt(X, 'puell', d, 10); if (!r) return null; return { v: r[1], disp: f(r[1], 2), s: interp([[0.5, 0.8], [0.8, 0.3], [1.2, 0], [1.6, -0.3], [2.5, -0.8], [3.5, -1]], r[1]), why: r[1] < 0.8 ? 'Miner revenue is low versus its yearly average (historically cheap).' : r[1] > 1.6 ? 'Miner revenue is high versus its yearly average.' : 'Miner revenue is near its yearly average.', asOf: r[0] }; });
 def('c_sth', 'Price vs short-term holder cost basis', 'chain', 'Holder behaviour', 'medium', 1.2, 7, SRC.bg, (X, d) => { const r = sAt(X, 'sth', d, 14), p = pAt(X, d); if (!r || !p) return null; const x = (p / r[1] - 1) * 100; return { v: x, disp: `${pc(x, 0)} (STH realised ${usd(r[1])})`, s: interp([[-20, -1], [-5, -0.4], [0, 0], [8, 0.5], [30, 0.6], [60, -0.2]], x), why: x >= 0 ? 'Recent buyers are in profit on average, so dips tend to meet support near their cost.' : 'Recent buyers are underwater on average, so rallies meet break-even selling.', asOf: r[0] }; });
 def('c_lth', 'Price vs long-term holder cost basis', 'chain', 'Holder behaviour', 'long', 0.6, 7, SRC.bg, (X, d) => { const r = sAt(X, 'lth', d, 14), p = pAt(X, d); if (!r || !p) return null; const x = p / r[1]; return { v: x, disp: `${f(x, 2)}× (LTH realised ${usd(r[1])})`, s: interp([[0.8, 1], [1, 0.8], [1.5, 0.4], [2.5, 0.1], [4, -0.5], [6, -1]], x), why: x < 1.5 ? 'Long-term holders sit on small gains: little incentive to distribute.' : x > 3 ? 'Long-term holders sit on large gains: historically when they distribute.' : 'Long-term holders sit on moderate gains.', asOf: r[0] }; });
@@ -217,7 +255,7 @@ def('c_profit', 'Supply in profit', 'chain', 'Holder behaviour', 'medium', 0.8, 
 def('c_active', 'Active addresses (30d vs 90d average)', 'chain', 'Network activity', 'long', 0.8, 3, SRC.act, (X, d) => { const v = vals(X.active, d, 90), r = pt(X.active, d); if (v.length < 90 || dd(r[0], d) > 7) return null; const x = (mean(v.slice(-30)) / mean(v) - 1) * 100; return { v: x, disp: `${pc(x)} (${Math.round(mean(v.slice(-30))).toLocaleString('en-US')} a day)`, s: ramp(x, 10), why: x > 2 ? 'More addresses are active than in recent months.' : x < -2 ? 'Fewer addresses are active than in recent months.' : 'Network use is steady.', asOf: r[0] }; });
 def('c_tx', 'Transactions (30d vs 90d average)', 'chain', 'Network activity', 'long', 0.6, 3, SRC.act, (X, d) => { const v = vals(X.tx, d, 90), r = pt(X.tx, d); if (v.length < 90 || dd(r[0], d) > 7) return null; const x = (mean(v.slice(-30)) / mean(v) - 1) * 100; return { v: x, disp: pc(x), s: ramp(x, 12), why: 'Demand for blockspace from transactions.', asOf: r[0] }; });
 def('c_fees', 'Fees paid (30d vs 90d average)', 'chain', 'Network activity', 'medium', 0.4, 3, SRC.act, (X, d) => { const v = vals(X.fees, d, 90), r = pt(X.fees, d); if (v.length < 90 || dd(r[0], d) > 7) return null; const x = (mean(v.slice(-30)) / mean(v) - 1) * 100; return { v: x, disp: pc(x, 0), s: ramp(x, 40) * 0.5, why: 'Willingness to pay for blockspace.', asOf: r[0] }; });
-def('c_hash', 'Hash rate, 30-day change', 'chain', 'Network activity', 'long', 0.6, 2, SRC.cm, (X, d, now) => { const v = now ? X.M.onchain?.hashCh30d : null; if (!ok(v)) return null; return { v, disp: pc(v), s: ramp(v, 10) * 0.7, why: v >= 0 ? 'Miners keep adding capacity: network security is growing.' : 'Hash rate is falling: some miners are switching off.', asOf: X.M.onchain?.mvrvDate || X.today }; });
+def('c_hash', 'Hash rate, 30-day change', 'chain', 'Network activity', 'long', 0.6, 2, SRC.cm, (X, d, now) => { const v7 = vals(X.hash, d, 7), r = pt(X.hash, d); let v = null, at = r?.[0]; if (v7.length === 7 && dd(r[0], d) <= 5) { const o = vals(X.hash, shiftDate(r[0], -30), 7); if (o.length === 7) v = pct(mean(v7), mean(o)); } if (!ok(v) && now) { v = X.M.onchain?.hashCh30d; at = X.M.onchain?.mvrvDate || X.today; } if (!ok(v)) return null; return { v, disp: `${pc(v)} (7-day average)`, s: ramp(v, 10) * 0.7, why: v >= 0 ? 'Miners keep adding capacity: network security is growing.' : 'Hash rate is falling: some miners are switching off.', asOf: at }; });
 def('c_hashprice', 'Hashprice (miner revenue per PH/s), 30d', 'chain', 'Network activity', 'medium', 0.5, 2, SRC.hp, (X, d) => { const r = pt(X.hashprice, d); if (!r || dd(r[0], d) > 5) return null; const o = ago(X.hashprice, d, 30); if (!ok(o)) return null; const x = pct(r[1], o); return { v: x, disp: `$${f(r[1], 1)} / PH/s / day (${pc(x, 0)} over 30 days)`, s: ramp(x, 20) * 0.6, why: x < -15 ? 'Miner revenue is squeezed, which can force selling.' : x > 15 ? 'Miner revenue is improving.' : 'Miner revenue is stable.', asOf: r[0] }; });
 def('c_exnet', 'Exchange netflow, 30 days', 'chain', 'Exchange behaviour', 'medium', 1, 2, SRC.fl, (X, d) => { const v = vals(X.exnet, d, 30), r = pt(X.exnet, d); if (v.length < 30 || dd(r[0], d) > 5) return null; const x = v.reduce((s, y) => s + y, 0); return { v: x, disp: `${fs(x, 0)} BTC`, s: ramp(-x, 40000), why: x < 0 ? 'More BTC left exchanges than arrived: coins moving to custody.' : 'More BTC arrived on exchanges than left: potential supply for sale.', asOf: r[0] }; });
 def('c_exbal', 'Exchange balance, 30-day change', 'chain', 'Supply dynamics', 'medium', 1, 2, SRC.fl, (X, d) => { const r = pt(X.exbal, d), o = ago(X.exbal, d, 30); if (!r || !ok(o) || dd(r[0], d) > 5) return null; const x = pct(r[1], o); return { v: x, disp: `${pc(x, 2)} (${Math.round(r[1]).toLocaleString('en-US')} BTC on exchanges)`, s: ramp(-x, 2.5), why: x < 0 ? 'Fewer coins sit on exchanges: tighter liquid supply.' : 'More coins sit on exchanges: looser liquid supply.', asOf: r[0] }; });
@@ -231,24 +269,25 @@ const etfSum = (X, d, n) => { const i = idx(X.etf, d); if (i < n - 1 || dd(X.etf
 def('m_etf5', 'Spot ETF net flows, 5 trading days', 'mkt', 'Institutional demand', 'short', 1, 3, SRC.fs, (X, d) => { const e = etfSum(X, d, 5); if (!e) return null; return { v: e.s, disp: `${fs(e.s, 0)} US$m`, s: ramp(e.s, 1000), why: e.s > 250 ? 'US spot ETFs are absorbing coins.' : e.s < -250 ? 'US spot ETFs are releasing coins.' : 'ETF flows are small either way.', asOf: e.asOf }; });
 def('m_etf20', 'Spot ETF net flows, 20 trading days', 'mkt', 'Institutional demand', 'medium', 1.2, 3, SRC.fs, (X, d) => { const e = etfSum(X, d, 20); if (!e) return null; return { v: e.s, disp: `${fs(e.s, 0)} US$m`, s: ramp(e.s, 3000), why: 'The persistent part of institutional demand.', asOf: e.asOf }; });
 def('m_etfacc', 'ETF flow acceleration (5d vs 20d pace)', 'mkt', 'Institutional demand', 'short', 0.5, 3, SRC.fs, (X, d) => { const a = etfSum(X, d, 5), b = etfSum(X, d, 20); if (!a || !b) return null; const x = a.s / 5 - b.s / 20; return { v: x, disp: `${fs(x, 0)} US$m a day`, s: ramp(x, 150) * 0.6, why: x > 0 ? 'Daily inflows are running above their 20-day pace.' : 'Daily inflows are running below their 20-day pace.', asOf: a.asOf }; });
+def('m_etfcum', 'Cumulative ETF net flows (stored window)', 'mkt', 'Institutional demand', 'medium', 0, 3, SRC.fs, (X, d, now) => { const i = idx(X.etf, d); if (i < 4) return null; const t = X.etf.slice(0, i + 1).reduce((a, r) => a + r[1], 0); const full = now && X.M.etf?.fullHistory ? X.M.etf.cumulativeUsdM : null; return { v: t, disp: `${fs(t, 0)} US$m since ${X.etf[0][0]}${ok(full) ? ` (since launch ${fs(full, 0)} US$m)` : ''}`, s: null, why: 'Running total of net creations and redemptions over the days stored (context).', asOf: X.etf[i][0] }; });
 def('m_etfweeks', 'ETF weekly streak', 'mkt', 'Institutional demand', 'medium', 0, 7, SRC.fs, (X, d, now) => { const e = now ? X.M.etf : null; if (!e || (!e.consecInWeeks && !e.consecOutWeeks)) return null; return { v: e.consecInWeeks || -e.consecOutWeeks, disp: e.consecInWeeks ? `${e.consecInWeeks} straight week(s) of net inflows` : `${e.consecOutWeeks} straight week(s) of net outflows`, s: null, why: 'Persistence of the flow (context).', asOf: e.lastDate }; });
 def('m_etfaum', 'US spot ETF assets', 'mkt', 'Institutional demand', 'long', 0, 1, SRC.et, (X, d, now) => { const F = now ? X.dash?.etfs?.funds : null; if (!F?.length) return null; const t = F.reduce((s, x) => s + (x.assets || 0), 0); if (!t) return null; return { v: t, disp: `${big(t)} across ${F.length} funds`, s: null, why: 'Size of the institutional wrapper (context).', asOf: X.dash.etfs.fetchedAt }; });
 def('m_treas', 'Public-company treasuries', 'mkt', 'Institutional demand', 'long', 0, 2, SRC.tr, (X, d, now) => { const T = now ? X.dash?.treasuries : null; if (!ok(T?.totalBtc)) return null; return { v: T.totalBtc, disp: `${Math.round(T.totalBtc).toLocaleString('en-US')} BTC`, s: null, why: 'Corporate balance-sheet holdings (context).', asOf: T.fetchedAt }; });
 def('m_cftcam', 'CME asset managers, weekly net change', 'mkt', 'Institutional demand', 'medium', 0.4, 9, SRC.cftc, (X, d, now) => { const c = now ? X.M.derivs?.cot : null; if (!ok(c?.amNet) || !ok(c.amNetPrev)) return null; const x = c.amNet - c.amNetPrev; return { v: x, disp: `${fs(x, 0)} contracts (net ${fs(c.amNet, 0)})`, s: ramp(x, 1500) * 0.6, why: 'Regulated-futures positioning of asset managers.', asOf: c.date }; });
 def('m_funding', 'Perpetual funding (annualised)', 'mkt', 'Leverage', 'short', 1, 1, SRC.drv, (X, d, now) => { let v = now ? X.M.derivs?.fundingAnn : null, at = X.today; if (!ok(v)) { const r = pt(X.funding, d); if (!r || dd(r[0], d) > 3) return null; v = r[1]; at = r[0]; } return { v, disp: `${pc(v)} a year`, s: interp([[-10, 0.1], [-2, 0.2], [0, 0.2], [8, 0.1], [15, -0.2], [25, -0.6], [40, -1]], v), why: v > 20 ? 'Longs pay a lot to stay leveraged: crowded.' : v < 0 ? 'Shorts pay longs: bearish positioning, squeeze fuel.' : 'Leverage costs are moderate.', asOf: at }; });
 def('m_oigrowth', 'Open interest vs price, 30 days (OKX)', 'mkt', 'Leverage', 'medium', 1, 2, SRC.okx, (X, d) => { const r = pt(X.oi, d), o = ago(X.oi, d, 30), p = pAt(X, d), po = ago(X.close, d, 30); if (!r || !ok(o) || !p || !ok(po) || dd(r[0], d) > 4) return null; const oi = pct(r[1], o), px = pct(p, po), x = oi - px; return { v: x, disp: `OI ${pc(oi, 0)} vs price ${pc(px, 0)}`, s: -ramp(x - 5, 25), why: x > 15 ? 'Open interest is growing faster than price: the move is leaning on leverage.' : x < -15 ? 'Open interest fell versus price: leverage has been flushed.' : 'Leverage is growing in line with price.', asOf: r[0] }; });
-def('m_oimcap', 'Futures open interest ÷ market cap', 'mkt', 'Leverage', 'medium', 0.8, 1, SRC.drv, (X, d, now) => { const v = now ? X.M.derivs?.oiPctMcap : null; if (!ok(v)) return null; return { v, disp: `${f(v, 2)}% (${big(X.M.derivs.totalOi)})`, s: interp([[1.5, 0.2], [2.5, 0], [3.5, -0.4], [5, -0.8]], v), why: v > 3.5 ? 'A lot of leverage relative to the asset.' : 'Leverage is moderate relative to the asset.', asOf: X.today }; });
+def('m_oimcap', 'Futures open interest ÷ market cap', 'mkt', 'Leverage', 'medium', 0.8, 1, SRC.drv, (X, d, now) => { const c = curOr(X, now, X.M.derivs?.oiPctMcap, 'oimcap', d); if (!c) return null; const v = c.v; return { v, disp: `${f(v, 2)}%${now && X.M.derivs?.totalOi ? ` (${big(X.M.derivs.totalOi)})` : ''}`, s: interp([[1.5, 0.2], [2.5, 0], [3.5, -0.4], [5, -0.8]], v), why: v > 3.5 ? 'A lot of leverage relative to the asset.' : 'Leverage is moderate relative to the asset.', asOf: c.at }; });
 def('m_liq', 'Liquidations (sample, last ~day)', 'mkt', 'Leverage', 'short', 0, 1, SRC.okx, (X, d, now) => { const L = now ? X.M.liq : null; if (!L || !ok(L.longUsd)) return null; return { v: L.longUsd + L.shortUsd, disp: `longs ${big(L.longUsd)} · shorts ${big(L.shortUsd)} (${L.venue})`, s: null, why: 'Forced closures in the latest public sample (context).', asOf: L.to }; });
 def('m_basis', 'Futures basis (annualised, ~3 months)', 'mkt', 'Derivatives', 'medium', 0.8, 1, SRC.der, (X, d, now) => { let v = now ? X.M.derivs?.basis?.annPct : null, at = X.today; if (!ok(v)) { const r = pt(X.basis, d); if (!r || dd(r[0], d) > 3) return null; v = r[1]; at = r[0]; } return { v, disp: `${pc(v)} a year (${v >= 0 ? 'contango' : 'backwardation'})`, s: interp([[-2, -0.4], [2, -0.1], [5, 0.2], [10, 0.2], [15, -0.3], [25, -0.9]], v), why: v > 15 ? 'Rich basis: leveraged demand is paying up.' : v < 2 ? 'Thin basis: little appetite for leveraged longs.' : 'A normal carry.', asOf: at }; });
-def('m_skew', 'Options 25-delta skew (30-day)', 'mkt', 'Derivatives', 'short', 0.8, 1, SRC.der, (X, d, now) => { const v = now ? X.M.options?.skew25 : null; if (!ok(v)) return null; return { v, disp: `${fs(v, 1)} vol pts (${v < 0 ? 'puts richer' : 'calls richer'})`, s: ramp(v, 8) * 0.8, why: v < -4 ? 'Strong demand for downside protection.' : v > 3 ? 'Demand for upside calls.' : 'Balanced options demand.', asOf: X.today }; });
-def('m_pcr', 'Options put/call ratio (open interest)', 'mkt', 'Derivatives', 'medium', 0.3, 1, SRC.der, (X, d, now) => { const v = now ? X.M.options?.pcRatio : null; if (!ok(v)) return null; return { v, disp: f(v, 2), s: interp([[0.4, 0.1], [0.7, 0], [1.0, -0.2], [1.3, -0.4]], v), why: 'Share of puts in open options positions.', asOf: X.today }; });
+def('m_skew', 'Options 25-delta skew (30-day)', 'mkt', 'Derivatives', 'short', 0.8, 1, SRC.der, (X, d, now) => { const c = curOr(X, now, X.M.options?.skew25, 'skew', d); if (!c) return null; const v = c.v; return { v, disp: `${fs(v, 1)} vol pts (${v < 0 ? 'puts richer' : 'calls richer'})`, s: ramp(v, 8) * 0.8, why: v < -4 ? 'Strong demand for downside protection.' : v > 3 ? 'Demand for upside calls.' : 'Balanced options demand.', asOf: c.at }; });
+def('m_pcr', 'Options put/call ratio (open interest)', 'mkt', 'Derivatives', 'medium', 0.3, 1, SRC.der, (X, d, now) => { const c = curOr(X, now, X.M.options?.pcRatio, 'pcr', d); if (!c) return null; return { v: c.v, disp: f(c.v, 2), s: interp([[0.4, 0.1], [0.7, 0], [1.0, -0.2], [1.3, -0.4]], c.v), why: 'Share of puts in open options positions.', asOf: c.at }; });
 def('m_dvol', 'Implied volatility (DVOL) percentile', 'mkt', 'Derivatives', 'short', 0.6, 1, SRC.der, (X, d) => { const r = pt(X.dvol, d); if (!r || dd(r[0], d) > 3) return null; const p = percentileRank(r[1], vals(X.dvol, d, 365)); return { v: r[1], disp: `${f(r[1], 0)} · ${ord(p)} percentile of the past year`, s: interp([[20, 0.1], [60, 0], [85, -0.5], [95, -0.8]], p), why: p >= 85 ? 'Options price a lot of turbulence.' : p <= 20 ? 'Options price calm conditions.' : 'Implied volatility is ordinary.', asOf: r[0] }; });
 def('m_ivrv', 'Implied minus realised volatility', 'mkt', 'Derivatives', 'short', 0, 1, SRC.der, (X, d, now) => { const v = now ? X.M.options?.ivRvSpread : null; if (!ok(v)) return null; return { v, disp: `${fs(v, 1)} vol pts`, s: null, why: v > 10 ? 'Protection is expensive versus actual movement.' : v < 0 ? 'Options are cheap versus actual movement.' : 'Options are fairly priced versus actual movement (context).', asOf: X.today }; });
 def('m_cbp', 'Coinbase premium', 'mkt', 'Spot demand', 'short', 0.7, 1, SRC.book, (X, d, now) => { let v = now ? X.M.depth?.coinbasePremiumPct : null, at = X.today; if (!ok(v)) { const r = pt(X.cbp, d); if (!r || dd(r[0], d) > 2) return null; v = r[1]; at = r[0]; } return { v, disp: `${fs(v, 3)}%`, s: ramp(v, 0.08), why: v > 0.02 ? 'US buyers are paying up versus offshore venues.' : v < -0.02 ? 'US venues trade at a discount: weaker US demand.' : 'No US premium either way.', asOf: at }; });
-def('m_taker', 'Spot taker buy/sell ratio, 7 days (OKX)', 'mkt', 'Spot demand', 'short', 0.6, 1, SRC.okx, (X, d, now) => { const v = now ? X.M.derivs?.takerSpot7d : null; if (!ok(v)) return null; return { v, disp: f(v, 3), s: ramp(v - 1, 0.08), why: v > 1.02 ? 'Aggressive buyers outweigh aggressive sellers.' : v < 0.98 ? 'Aggressive sellers outweigh buyers.' : 'Balanced aggressor flow.', asOf: X.today }; });
+def('m_taker', 'Spot taker buy/sell ratio, 7 days (OKX)', 'mkt', 'Spot demand', 'short', 0.6, 1, SRC.okx, (X, d, now) => { const c = curOr(X, now, X.M.derivs?.takerSpot7d, 'taker', d); if (!c) return null; const v = c.v; return { v, disp: f(v, 3), s: ramp(v - 1, 0.08), why: v > 1.02 ? 'Aggressive buyers outweigh aggressive sellers.' : v < 0.98 ? 'Aggressive sellers outweigh buyers.' : 'Balanced aggressor flow.', asOf: c.at }; });
 def('m_depth', 'Order-book balance within ±1%', 'mkt', 'Spot demand', 'short', 0.4, 1, SRC.book, (X, d, now) => { const D = now ? X.M.depth : null; if (!ok(D?.imbalance1)) return null; const v = D.imbalance1; return { v, disp: `${big(D.d1)} deep · ${v >= 0 ? 'bid' : 'ask'}-heavy by ${f(Math.abs(v) * 100, 0)}%`, s: ramp(v, 0.25) * 0.5, why: v > 0.1 ? 'More resting bids than offers near price.' : v < -0.1 ? 'More resting offers than bids near price.' : 'Books are balanced near price.', asOf: X.today }; });
 def('m_spotvol', 'Spot volume, 24h', 'mkt', 'Spot demand', 'short', 0, 1, SRC.cg, (X, d, now) => { const v = now ? X.M.structure?.spotVolume24h : null; if (!ok(v)) return null; return { v, disp: `${big(v)} (derivatives ÷ spot ${f(X.M.structure.derivToSpot, 2)}×)`, s: null, why: 'Activity level (context).', asOf: X.today }; });
-def('m_ls', 'Long/short account ratio (OKX)', 'mkt', 'Market positioning', 'short', 0.6, 1, SRC.okx, (X, d, now) => { const L = now ? X.M.derivs?.longShort : null; if (!ok(L?.okx)) return null; const v = L.okx; return { v, disp: `${f(v, 2)}${ok(L.okx7dAgo) ? ` (7 days ago ${f(L.okx7dAgo, 2)})` : ''}`, s: interp([[0.7, 0.3], [1, 0.1], [1.5, 0], [2.2, -0.3], [3, -0.6]], v), why: v > 2 ? 'Retail accounts lean heavily long: crowded.' : v < 0.9 ? 'Accounts lean short: contrarian support.' : 'Positioning is not one-sided.', asOf: X.today }; });
+def('m_ls', 'Long/short account ratio (OKX)', 'mkt', 'Market positioning', 'short', 0.6, 1, SRC.okx, (X, d, now) => { const L = now ? X.M.derivs?.longShort : null, c = curOr(X, now, L?.okx, 'ls', d); if (!c) return null; const v = c.v; return { v, disp: `${f(v, 2)}${now && ok(L?.okx7dAgo) ? ` (7 days ago ${f(L.okx7dAgo, 2)})` : ''}`, s: interp([[0.7, 0.3], [1, 0.1], [1.5, 0], [2.2, -0.3], [3, -0.6]], v), why: v > 2 ? 'Retail accounts lean heavily long: crowded.' : v < 0.9 ? 'Accounts lean short: contrarian support.' : 'Positioning is not one-sided.', asOf: c.at }; });
 def('m_cftclev', 'CME leveraged funds, net position', 'mkt', 'Market positioning', 'medium', 0, 9, SRC.cftc, (X, d, now) => { const c = now ? X.M.derivs?.cot : null; if (!ok(c?.levNet)) return null; return { v: c.levNet, disp: `${fs(c.levNet, 0)} contracts`, s: null, why: 'Hedge funds are usually short CME futures against long ETF holdings (basis trade), so this is context, not direction.', asOf: c.date }; });
 def('m_dom', 'BTC dominance', 'mkt', 'Crypto market structure', 'medium', 0.5, 1, SRC.cg, (X, d, now) => { const v = now ? X.M.structure?.dominance : pt(X.dom, d)?.[1]; if (!ok(v)) return null; const o = ago(X.dom, d, 7); const ch = ok(o) && dd(pt(X.dom, shiftDate(d, -7))[0], d) >= 5 ? v - o : null; return { v, disp: `${f(v, 1)}%${ok(ch) ? ` (${fs(ch, 1)} pts in 7 days)` : ''}`, s: ok(ch) ? ramp(ch, 1.5) * 0.4 : null, why: 'Share of crypto value held in BTC; rising means capital is concentrating in Bitcoin.', asOf: X.today }; });
 def('m_breadth', 'Altcoin breadth (30d, vs BTC)', 'mkt', 'Crypto market structure', 'medium', 0, 1, SRC.cg, (X, d, now) => { const v = now ? X.M.structure?.breadth30 : null; if (!ok(v)) return null; return { v, disp: `${f(v, 0)}% of the top coins beat BTC`, s: null, why: v > 70 ? 'A broad altcoin rotation: speculative risk appetite is high.' : v < 30 ? 'Bitcoin is leading the market.' : 'Mixed leadership (context).', asOf: X.today }; });
@@ -271,26 +310,33 @@ const chgPct = (X, k, d, n, maxAge = 10) => { const r = pt(X[k], d), o = ago(X[k
 const MM = (X, now) => (now ? X.M.macro || {} : {});
 def('x_netliq4', 'US net liquidity, 4-week change', 'macro', 'Liquidity', 'medium', 1, 7, SRC.fred, (X, d) => { const c = chgAbs(X, 'netLiq', d, 28, 12); if (!c) return null; return { v: c.x, disp: `${fs(c.x, 0)} bn (level $${f(c.v / 1000, 2)}T)`, s: ramp(c.x, 200), why: c.x > 0 ? 'Fed assets net of the Treasury account and reverse repo are rising: more dollars in the system.' : 'Net dollar liquidity is shrinking.', asOf: c.at }; });
 def('x_netliq13', 'US net liquidity, 13-week change', 'macro', 'Liquidity', 'long', 0.8, 7, SRC.fred, (X, d) => { const c = chgAbs(X, 'netLiq', d, 91, 12); if (!c) return null; return { v: c.x, disp: `${fs(c.x, 0)} bn`, s: ramp(c.x, 400), why: 'The slower liquidity trend.', asOf: c.at }; });
-def('x_m2', 'US M2 money supply, year on year', 'macro', 'Liquidity', 'long', 0.7, 35, SRC.fred, (X, d, now) => { const v = MM(X, now).m2Yoy; if (!v) return null; return { v: v[1], disp: `${pc(v[1])}${MM(X, now).m2Yoy3m ? ` (3 months earlier ${pc(MM(X, now).m2Yoy3m[1])})` : ''}`, s: interp([[0, -0.6], [2, -0.2], [4, 0.1], [6, 0.5], [9, 0.8]], v[1]), why: v[1] > 4 ? 'Broad money is growing at a healthy pace.' : v[1] < 1 ? 'Broad money is barely growing.' : 'Broad money growth is modest.', asOf: v[0] }; });
-def('x_g3', 'Fed + ECB + BoJ balance sheets, 13 weeks', 'macro', 'Liquidity', 'long', 0.5, 7, SRC.fred, (X, d, now) => { const g = MM(X, now).g3; if (!ok(g?.ch13wPct)) return null; return { v: g.ch13wPct, disp: `${pc(g.ch13wPct)} (${big(g.usdBn * 1e9)})`, s: ramp(g.ch13wPct, 3) * 0.6, why: 'Global central-bank liquidity (BoJ data is monthly and lags).', asOf: X.today }; });
-def('x_real', '10-year real yield, 4-week change', 'macro', 'Rates', 'medium', 1, 3, SRC.fred, (X, d) => { const c = chgAbs(X, 'real10y', d, 28, 6); if (!c) return null; return { v: c.x, disp: `${fs(c.x * 100, 0)} bp (now ${f(c.v, 2)}%)`, s: -ramp(c.x, 0.35), why: c.x > 0.1 ? 'Rising real yields raise the cost of holding a non-yielding asset.' : c.x < -0.1 ? 'Falling real yields ease the pressure on non-yielding assets.' : 'Real yields are stable.', asOf: c.at }; });
-def('x_2y', '2-year yield, 4-week change (rate expectations)', 'macro', 'Rates', 'medium', 0.7, 3, SRC.fred, (X, d, now) => { const m = MM(X, now); if (!ok(m.us2y20d) || !m.us2y) return null; return { v: m.us2y20d, disp: `${fs(m.us2y20d * 100, 0)} bp (now ${f(m.us2y[1], 2)}%)`, s: -ramp(m.us2y20d, 0.35) * 0.8, why: m.us2y20d < -0.1 ? 'Markets are pricing more rate cuts.' : m.us2y20d > 0.1 ? 'Markets are pricing fewer cuts or more hikes.' : 'Rate expectations are steady.', asOf: m.us2y[0] }; });
-def('x_10y', '10-year yield, 4-week change', 'macro', 'Rates', 'medium', 0.4, 3, SRC.fred, (X, d) => { const c = chgAbs(X, 'us10y', d, 28, 6); if (!c) return null; return { v: c.x, disp: `${fs(c.x * 100, 0)} bp (now ${f(c.v, 2)}%)`, s: -ramp(c.x, 0.4) * 0.6, why: 'Long-term borrowing costs.', asOf: c.at }; });
-def('x_curve', 'Yield curve (10y − 2y)', 'macro', 'Rates', 'long', 0, 3, SRC.fred, (X, d, now) => { const v = MM(X, now).curve; if (!v) return null; return { v: v[1], disp: `${fs(v[1], 2)} pts`, s: null, why: v[1] < 0 ? 'Inverted: markets expect slower growth or cuts (context).' : 'Positively sloped (context).', asOf: v[0] }; });
-def('x_dxy', 'Dollar index, 4-week change', 'macro', 'Dollar', 'medium', 1, 3, SRC.yh, (X, d) => { const c = chgPct(X, 'dxy', d, 28, 6); if (!c) return null; return { v: c.x, disp: `${pc(c.x)} (now ${f(c.v, 2)})`, s: -ramp(c.x, 2.5), why: c.x > 0.5 ? 'A firmer dollar tightens global financial conditions.' : c.x < -0.5 ? 'A softer dollar eases global financial conditions.' : 'The dollar is stable.', asOf: c.at }; });
+// year-on-year % change of a monthly series as of d (published with a lag, so up to ~75 days old)
+const yoyAt = (X, k, d, back = 0) => { const s = X[k]; if (!s?.length) return null; const i = idx(s, d) - back; if (i < 0 || dd(s[i][0], d) > 75 + back * 31) return null; const o = pt(s, shiftDate(s[i][0], -365)); return o && dd(o[0], shiftDate(s[i][0], -365)) < 40 ? { v: pct(s[i][1], o[1]), at: s[i][0] } : null; };
+const lvlAt = (X, k, d, maxAge) => { const r = pt(X[k], d); return r && dd(r[0], d) <= maxAge ? r : null; };
+def('x_m2', 'US M2 money supply, year on year', 'macro', 'Liquidity', 'long', 0.7, 35, SRC.fred, (X, d, now) => { let y = yoyAt(X, 'm2', d); const y3 = yoyAt(X, 'm2', d, 3); if (!y && now && MM(X, now).m2Yoy) y = { v: MM(X, now).m2Yoy[1], at: MM(X, now).m2Yoy[0] }; if (!y) return null; return { v: y.v, disp: `${pc(y.v)}${y3 ? ` (3 months earlier ${pc(y3.v)})` : ''}`, s: interp([[0, -0.6], [2, -0.2], [4, 0.1], [6, 0.5], [9, 0.8]], y.v), why: y.v > 4 ? 'Broad money is growing at a healthy pace.' : y.v < 1 ? 'Broad money is barely growing.' : 'Broad money growth is modest.', asOf: y.at }; });
+def('x_g3', 'Global liquidity: Fed + ECB + BoJ balance sheets, 13-week change', 'macro', 'Liquidity', 'long', 0.6, 7, SRC.fred, (X, d, now) => { const r = lvlAt(X, 'g3', d, 14), o = r ? ago(X.g3, r[0], 91) : null; let v = r && ok(o) ? pct(r[1], o) : null, lvl = r?.[1], at = r?.[0]; if (!ok(v) && now && ok(MM(X, now).g3?.ch13wPct)) { v = MM(X, now).g3.ch13wPct; lvl = MM(X, now).g3.usdBn; at = X.today; } if (!ok(v)) return null; return { v, disp: `${pc(v)} (${big(lvl * 1e9)} in USD)`, s: ramp(v, 3) * 0.7, why: v > 0.5 ? 'Major central-bank balance sheets are expanding in dollar terms.' : v < -0.5 ? 'Major central-bank balance sheets are shrinking in dollar terms.' : 'Central-bank balance sheets are roughly flat in dollar terms.', asOf: at }; });
+def('x_fed', 'Fed balance sheet, 13-week change (QT/QE)', 'macro', 'Liquidity', 'long', 0.6, 7, SRC.fred, (X, d, now) => { const r = lvlAt(X, 'walcl', d, 14), o = r ? ago(X.walcl, r[0], 91) : null; let v = r && ok(o) ? r[1] - o : null, at = r?.[0]; if (!ok(v) && now && ok(MM(X, now).fedAssets13w)) { v = MM(X, now).fedAssets13w; at = MM(X, now).fedAssets?.[0]; } if (!ok(v)) return null; return { v, disp: `${fs(v, 0)} bn (${v < -20 ? 'QT running' : v > 20 ? 'expanding' : 'roughly flat'})`, s: ramp(v, 150) * 0.7, why: v < -20 ? 'The Fed is still shrinking its balance sheet (quantitative tightening).' : v > 20 ? 'The Fed balance sheet is growing.' : 'The Fed balance sheet is roughly flat.', asOf: at }; });
+def('x_real', '10-year real yield, 4-week change', 'macro', 'Rates & policy', 'medium', 1, 3, SRC.fred, (X, d) => { const c = chgAbs(X, 'real10y', d, 28, 6); if (!c) return null; return { v: c.x, disp: `${fs(c.x * 100, 0)} bp (now ${f(c.v, 2)}%)`, s: -ramp(c.x, 0.35), why: c.x > 0.1 ? 'Rising real yields raise the cost of holding a non-yielding asset.' : c.x < -0.1 ? 'Falling real yields ease the pressure on non-yielding assets.' : 'Real yields are stable.', asOf: c.at }; });
+def('x_reallvl', '10-year real yield (level)', 'macro', 'Rates & policy', 'long', 0, 3, SRC.fred, (X, d) => { const r = lvlAt(X, 'real10y', d, 6); if (!r) return null; return { v: r[1], disp: `${f(r[1], 2)}%`, s: null, why: 'The inflation-adjusted return on safe US government bonds: the opportunity cost of holding Bitcoin (context).', asOf: r[0] }; });
+def('x_2y', '2-year yield, 4-week change (rate expectations)', 'macro', 'Rates & policy', 'medium', 0.7, 3, SRC.fred, (X, d, now) => { let c = chgAbs(X, 'us2y', d, 28, 6); if (!c && now && ok(MM(X, now).us2y20d) && MM(X, now).us2y) c = { x: MM(X, now).us2y20d, v: MM(X, now).us2y[1], at: MM(X, now).us2y[0] }; if (!c) return null; return { v: c.x, disp: `${fs(c.x * 100, 0)} bp (now ${f(c.v, 2)}%)`, s: -ramp(c.x, 0.35) * 0.8, why: c.x < -0.1 ? 'Markets are pricing more rate cuts.' : c.x > 0.1 ? 'Markets are pricing fewer cuts or more hikes.' : 'Rate expectations are steady.', asOf: c.at }; });
+def('x_10y', '10-year Treasury yield, 4-week change', 'macro', 'Rates & policy', 'medium', 0.4, 3, SRC.fred, (X, d) => { const c = chgAbs(X, 'us10y', d, 28, 6); if (!c) return null; return { v: c.x, disp: `${fs(c.x * 100, 0)} bp (now ${f(c.v, 2)}%)`, s: -ramp(c.x, 0.4) * 0.6, why: 'Long-term borrowing costs.', asOf: c.at }; });
+def('x_ff', 'Fed funds rate, 6-month change', 'macro', 'Rates & policy', 'long', 0.8, 3, SRC.fred, (X, d, now) => { let c = chgAbs(X, 'ff', d, 182, 6); if (!c && now && ok(MM(X, now).ff180) && MM(X, now).ff) c = { x: MM(X, now).ff180, v: MM(X, now).ff[1], at: MM(X, now).ff[0] }; if (!c) return null; return { v: c.x, disp: `${fs(c.x * 100, 0)} bp (now ${f(c.v, 2)}%)`, s: -ramp(c.x, 0.75) * 0.7, why: c.x < -0.1 ? 'The Fed is cutting rates.' : c.x > 0.1 ? 'The Fed is raising rates.' : 'Policy rates are on hold.', asOf: c.at }; });
+def('x_curve', 'Yield curve (10y − 2y)', 'macro', 'Rates & policy', 'long', 0, 3, SRC.fred, (X, d, now) => { let r = lvlAt(X, 'curve', d, 6); if (!r && now && MM(X, now).curve) r = MM(X, now).curve; if (!r) return null; return { v: r[1], disp: `${fs(r[1], 2)} pts`, s: null, why: r[1] < 0 ? 'Inverted: markets expect slower growth or cuts (context).' : 'Positively sloped (context).', asOf: r[0] }; });
+def('x_cpi', 'CPI inflation, year on year', 'macro', 'Rates & policy', 'medium', 0.5, 35, SRC.fred, (X, d, now) => { let y = yoyAt(X, 'cpi', d), y3 = yoyAt(X, 'cpi', d, 3); if (!y && now && MM(X, now).cpiYoy) { y = { v: MM(X, now).cpiYoy[1], at: MM(X, now).cpiYoy[0] }; y3 = MM(X, now).cpiYoy3m ? { v: MM(X, now).cpiYoy3m[1] } : null; } if (!y) return null; const tr = y3 ? y.v - y3.v : null; return { v: y.v, disp: `${f(y.v, 1)}%${ok(tr) ? ` (${fs(tr, 1)} pts in 3 months)` : ''}`, s: clamp((ok(tr) ? -ramp(tr, 0.6) * 0.5 : 0) + interp([[2, 0.2], [3, 0], [4, -0.3], [6, -0.6]], y.v) * 0.5, -1, 1), why: ok(tr) && tr > 0.2 ? 'Inflation is re-accelerating, which limits rate cuts.' : ok(tr) && tr < -0.2 ? 'Inflation is cooling, which gives room for easier policy.' : 'Inflation is stable.', asOf: y.at }; });
+def('x_pce', 'Core PCE inflation, year on year', 'macro', 'Rates & policy', 'medium', 0, 35, SRC.fred, (X, d, now) => { let y = yoyAt(X, 'pce', d); if (!y && now && MM(X, now).pceYoy) y = { v: MM(X, now).pceYoy[1], at: MM(X, now).pceYoy[0] }; if (!y) return null; return { v: y.v, disp: `${f(y.v, 1)}%`, s: null, why: 'The Fed’s preferred inflation gauge (context).', asOf: y.at }; });
+def('x_be', '10-year breakeven inflation', 'macro', 'Rates & policy', 'medium', 0, 3, SRC.fred, (X, d, now) => { let r = lvlAt(X, 'be', d, 6); if (!r && now && MM(X, now).breakeven) r = MM(X, now).breakeven; if (!r) return null; return { v: r[1], disp: `${f(r[1], 2)}%`, s: null, why: 'Market inflation expectations (context).', asOf: r[0] }; });
+def('x_unrate', 'Unemployment rate', 'macro', 'Rates & policy', 'medium', 0, 35, SRC.fred, (X, d, now) => { let r = lvlAt(X, 'unrate', d, 75), c = r ? ago(X.unrate, r[0], 92) : null; if (!r && now && MM(X, now).unrate) { r = MM(X, now).unrate; c = ok(MM(X, now).unrate3m) ? r[1] - MM(X, now).unrate3m : null; } if (!r) return null; const ch = ok(c) ? r[1] - c : null; return { v: r[1], disp: `${f(r[1], 1)}%${ok(ch) ? ` (${fs(ch, 1)} pts in 3 months)` : ''}`, s: null, why: 'A rising rate can bring cuts but also growth worries, so it is context, not direction.', asOf: r[0] }; });
+def('x_gdp', 'Real GDP growth (q/q annualised)', 'macro', 'Rates & policy', 'long', 0, 100, SRC.fred, (X, d, now) => { let r = lvlAt(X, 'gdp', d, 130); if (!r && now && MM(X, now).gdp) r = MM(X, now).gdp; if (!r) return null; return { v: r[1], disp: `${f(r[1], 1)}%`, s: null, why: 'Growth backdrop (context).', asOf: r[0] }; });
+def('x_nfci', 'Financial conditions (Chicago Fed NFCI)', 'macro', 'Financial conditions', 'medium', 0.9, 7, SRC.fred, (X, d) => { const r = lvlAt(X, 'nfci', d, 14); if (!r) return null; const o = ago(X.nfci, r[0], 28); return { v: r[1], disp: `${fs(r[1], 2)}${ok(o) ? ` (${fs(r[1] - o, 2)} in 4 weeks)` : ''}`, s: clamp(-ramp(r[1] + 0.3, 0.5) * 0.7 - (ok(o) ? ramp(r[1] - o, 0.15) * 0.3 : 0), -1, 1), why: r[1] < 0 ? 'Financial conditions are looser than their long-run average (negative = looser).' : 'Financial conditions are tighter than their long-run average.', asOf: r[0] }; });
+def('x_spx', 'S&P 500, 4-week change', 'macro', 'Risk appetite', 'medium', 0.5, 3, SRC.yh, (X, d) => { const c = chgPct(X, 'spx', d, 28, 6); if (!c) return null; return { v: c.x, disp: pc(c.x), s: ramp(c.x, 5), why: c.x > 0 ? 'US equities are rising.' : 'US equities are falling.', asOf: c.at }; });
+def('x_acwi', 'Global equities (MSCI ACWI ETF), 4-week change', 'macro', 'Risk appetite', 'medium', 0.5, 3, SRC.yh, (X, d) => { const c = chgPct(X, 'acwi', d, 28, 6); if (!c) return null; return { v: c.x, disp: pc(c.x), s: ramp(c.x, 5), why: c.x > 0 ? 'Global equities are rising.' : 'Global equities are falling.', asOf: c.at }; });
+def('x_dxy', 'Dollar index (DXY), 4-week change', 'macro', 'Dollar', 'medium', 1, 3, SRC.yh, (X, d) => { const c = chgPct(X, 'dxy', d, 28, 6); if (!c) return null; return { v: c.x, disp: `${pc(c.x)} (now ${f(c.v, 2)})`, s: -ramp(c.x, 2.5), why: c.x > 0.5 ? 'A firmer dollar tightens global financial conditions.' : c.x < -0.5 ? 'A softer dollar eases global financial conditions.' : 'The dollar is stable.', asOf: c.at }; });
 def('x_dxytr', 'Dollar vs its 200-day average', 'macro', 'Dollar', 'long', 0.7, 3, SRC.yh, (X, d) => { const v = vals(X.dxy, d, 200), r = pt(X.dxy, d); if (v.length < 200 || dd(r[0], d) > 6) return null; const x = (r[1] / mean(v) - 1) * 100; return { v: x, disp: pc(x), s: -ramp(x, 4) * 0.8, why: x > 0 ? 'The dollar is in an uptrend.' : 'The dollar is in a downtrend.', asOf: r[0] }; });
-def('x_vix', 'VIX (equity volatility)', 'macro', 'Risk appetite', 'short', 0.9, 3, SRC.yh, (X, d) => { const r = pt(X.vix, d); if (!r || dd(r[0], d) > 6) return null; return { v: r[1], disp: f(r[1], 1), s: interp([[12, 0.4], [16, 0.2], [20, 0], [25, -0.4], [32, -0.8], [40, -1]], r[1]), why: r[1] > 25 ? 'Equity markets are stressed.' : r[1] < 16 ? 'Equity markets are calm: risk appetite is healthy.' : 'Equity volatility is normal.', asOf: r[0] }; });
-def('x_hy', 'High-yield credit spread, 4-week change', 'macro', 'Risk appetite', 'medium', 0.8, 3, SRC.fred, (X, d) => { const c = chgAbs(X, 'hy', d, 28, 6); if (!c) return null; return { v: c.x, disp: `${fs(c.x * 100, 0)} bp (now ${f(c.v, 2)}%)`, s: -ramp(c.x, 0.4), why: c.x > 0.15 ? 'Credit markets are demanding more compensation for risk.' : c.x < -0.15 ? 'Credit spreads are tightening: risk appetite is improving.' : 'Credit spreads are stable.', asOf: c.at }; });
+def('x_vix', 'VIX (equity volatility)', 'macro', 'Financial conditions', 'short', 0.9, 3, SRC.yh, (X, d) => { const r = pt(X.vix, d); if (!r || dd(r[0], d) > 6) return null; return { v: r[1], disp: f(r[1], 1), s: interp([[12, 0.4], [16, 0.2], [20, 0], [25, -0.4], [32, -0.8], [40, -1]], r[1]), why: r[1] > 25 ? 'Equity markets are stressed.' : r[1] < 16 ? 'Equity markets are calm: risk appetite is healthy.' : 'Equity volatility is normal.', asOf: r[0] }; });
+def('x_hy', 'High-yield credit spread, 4-week change', 'macro', 'Financial conditions', 'medium', 0.8, 3, SRC.fred, (X, d) => { const c = chgAbs(X, 'hy', d, 28, 6); if (!c) return null; return { v: c.x, disp: `${fs(c.x * 100, 0)} bp (now ${f(c.v, 2)}%)`, s: -ramp(c.x, 0.4), why: c.x > 0.15 ? 'Credit markets are demanding more compensation for risk.' : c.x < -0.15 ? 'Credit spreads are tightening: risk appetite is improving.' : 'Credit spreads are stable.', asOf: c.at }; });
 def('x_ndx', 'Nasdaq 100, 4-week change', 'macro', 'Risk appetite', 'medium', 0.8, 3, SRC.yh, (X, d) => { const c = chgPct(X, 'ndx', d, 28, 6); if (!c) return null; return { v: c.x, disp: pc(c.x), s: ramp(c.x, 6), why: c.x > 0 ? 'Growth equities are rising.' : 'Growth equities are falling.', asOf: c.at }; });
 def('x_gold', 'Gold, 4-week change', 'macro', 'Risk appetite', 'medium', 0, 3, SRC.yh, (X, d) => { const c = chgPct(X, 'gold', d, 28, 6); if (!c) return null; return { v: c.x, disp: `${pc(c.x)} (${usd(c.v)})`, s: null, why: 'Demand for the traditional hedge (context).', asOf: c.at }; });
 def('x_corr', 'BTC–Nasdaq correlation (30 days)', 'macro', 'Risk appetite', 'short', 0, 3, SRC.yh, (X, d) => { const r = pt(X.corrNdx, d); if (!r || dd(r[0], d) > 6) return null; return { v: r[1], disp: f(r[1], 2), s: null, why: Math.abs(r[1]) >= 0.4 ? 'Bitcoin is trading with equities: macro matters more than usual.' : 'Bitcoin is moving largely on its own drivers (context).', asOf: r[0] }; });
-def('x_fed', 'Fed balance sheet, 13 weeks', 'macro', 'Monetary regime', 'long', 0.8, 7, SRC.fred, (X, d, now) => { const m = MM(X, now); if (!ok(m.fedAssets13w)) return null; return { v: m.fedAssets13w, disp: `${fs(m.fedAssets13w, 0)} bn (QT ${m.fedAssets13w < -20 ? 'running' : 'paused or slow'})`, s: ramp(m.fedAssets13w, 150) * 0.7, why: m.fedAssets13w < -20 ? 'The Fed is still shrinking its balance sheet.' : m.fedAssets13w > 20 ? 'The Fed balance sheet is growing.' : 'The Fed balance sheet is roughly flat.', asOf: m.fedAssets?.[0] }; });
-def('x_ff', 'Fed funds rate, 6-month change', 'macro', 'Monetary regime', 'long', 0.8, 3, SRC.fred, (X, d, now) => { const m = MM(X, now); if (!ok(m.ff180) || !m.ff) return null; return { v: m.ff180, disp: `${fs(m.ff180 * 100, 0)} bp (now ${f(m.ff[1], 2)}%)`, s: -ramp(m.ff180, 0.75) * 0.7, why: m.ff180 < -0.1 ? 'The Fed is cutting rates.' : m.ff180 > 0.1 ? 'The Fed is raising rates.' : 'Policy rates are on hold.', asOf: m.ff[0] }; });
-def('x_cpi', 'CPI inflation, year on year', 'macro', 'Monetary regime', 'medium', 0.5, 35, SRC.fred, (X, d, now) => { const m = MM(X, now); if (!m.cpiYoy) return null; const tr = m.cpiYoy3m ? m.cpiYoy[1] - m.cpiYoy3m[1] : null; return { v: m.cpiYoy[1], disp: `${f(m.cpiYoy[1], 1)}%${ok(tr) ? ` (${fs(tr, 1)} pts in 3 months)` : ''}`, s: clamp((ok(tr) ? -ramp(tr, 0.6) * 0.5 : 0) + interp([[2, 0.2], [3, 0], [4, -0.3], [6, -0.6]], m.cpiYoy[1]) * 0.5, -1, 1), why: ok(tr) && tr > 0.2 ? 'Inflation is re-accelerating, which limits rate cuts.' : ok(tr) && tr < -0.2 ? 'Inflation is cooling, which gives room for easier policy.' : 'Inflation is stable.', asOf: m.cpiYoy[0] }; });
-def('x_pce', 'Core PCE inflation, year on year', 'macro', 'Monetary regime', 'medium', 0, 35, SRC.fred, (X, d, now) => { const m = MM(X, now); if (!m.pceYoy) return null; return { v: m.pceYoy[1], disp: `${f(m.pceYoy[1], 1)}%`, s: null, why: 'The Fed’s preferred inflation gauge (context).', asOf: m.pceYoy[0] }; });
-def('x_be', '10-year breakeven inflation', 'macro', 'Monetary regime', 'medium', 0, 3, SRC.fred, (X, d, now) => { const m = MM(X, now); if (!m.breakeven) return null; return { v: m.breakeven[1], disp: `${f(m.breakeven[1], 2)}%`, s: null, why: 'Market inflation expectations (context).', asOf: m.breakeven[0] }; });
-def('x_unrate', 'Unemployment rate', 'macro', 'Monetary regime', 'medium', 0, 35, SRC.fred, (X, d, now) => { const m = MM(X, now); if (!m.unrate) return null; return { v: m.unrate[1], disp: `${f(m.unrate[1], 1)}%${ok(m.unrate3m) ? ` (${fs(m.unrate3m, 1)} pts in 3 months)` : ''}`, s: null, why: 'A rising rate can bring cuts but also growth worries, so it is context, not direction.', asOf: m.unrate[0] }; });
-def('x_gdp', 'Real GDP growth (q/q annualised)', 'macro', 'Monetary regime', 'long', 0, 100, SRC.fred, (X, d, now) => { const m = MM(X, now); if (!m.gdp) return null; return { v: m.gdp[1], disp: `${f(m.gdp[1], 1)}%`, s: null, why: 'Growth backdrop (context).', asOf: m.gdp[0] }; });
 
 export const INDICATORS = DEFS.map(({ calc, ...x }) => x);
 
@@ -403,11 +449,11 @@ const FORCES = [
     detect: (R, Dm) => { const l = comp(Dm, 'macro', 'Liquidity'); return l !== null && Math.abs(l) >= 0.3 ? { dir: Math.sign(l), str: Math.min(1, Math.abs(l)) } : null; },
     text: (d, R) => `US net liquidity ${R.x_netliq4 ? R.x_netliq4.disp.split(' (')[0] : '—'} over 4 weeks${R.x_m2 ? `; M2 ${R.x_m2.disp.split(' (')[0]} year on year` : ''}.` },
   { id: 'conditions', domains: ['macro'], horizon: 'medium', ev: ['x_dxy', 'x_real', 'x_2y'], name: (d) => (d < 0 ? 'Macro tightening' : 'Financial conditions easing'),
-    detect: (R, Dm) => { const r = comp(Dm, 'macro', 'Rates'), u = comp(Dm, 'macro', 'Dollar'); if (r === null || u === null) return null; if (r <= -0.2 && u <= -0.2) return { dir: -1, str: Math.min(1, -(r + u) / 1.4) }; if (r >= 0.2 && u >= 0.2) return { dir: 1, str: Math.min(1, (r + u) / 1.4) }; return null; },
+    detect: (R, Dm) => { const r = comp(Dm, 'macro', 'Rates & policy'), u = comp(Dm, 'macro', 'Dollar'); if (r === null || u === null) return null; if (r <= -0.2 && u <= -0.2) return { dir: -1, str: Math.min(1, -(r + u) / 1.4) }; if (r >= 0.2 && u >= 0.2) return { dir: 1, str: Math.min(1, (r + u) / 1.4) }; return null; },
     text: (d, R) => `Dollar ${R.x_dxy ? R.x_dxy.disp.split(' (')[0] : '—'} over 4 weeks; 10-year real yield ${R.x_real ? R.x_real.disp.split(' (')[0] : '—'}.` },
-  { id: 'risk', domains: ['macro'], horizon: 'medium', ev: ['x_vix', 'x_hy', 'x_ndx', 'x_corr'], name: (d) => (d > 0 ? 'Risk appetite firm' : 'Risk appetite deteriorating'),
-    detect: (R, Dm) => { const x = comp(Dm, 'macro', 'Risk appetite'); if (x === null || Math.abs(x) < 0.35) return null; const c = Math.abs(R.x_corr?.value ?? 0.3); return { dir: Math.sign(x), str: Math.min(1, Math.abs(x) * (0.6 + 0.4 * c)) }; },
-    text: (d, R) => `VIX ${R.x_vix ? R.x_vix.disp : '—'}; high-yield spreads ${R.x_hy ? R.x_hy.disp.split(' (')[0] : '—'}; Nasdaq ${R.x_ndx ? R.x_ndx.disp : '—'} over 4 weeks${R.x_corr ? `; BTC–Nasdaq correlation ${R.x_corr.disp}` : ''}.` },
+  { id: 'risk', domains: ['macro'], horizon: 'medium', ev: ['x_nfci', 'x_vix', 'x_hy', 'x_ndx', 'x_acwi', 'x_corr'], name: (d) => (d > 0 ? 'Risk appetite firm' : 'Risk appetite deteriorating'),
+    detect: (R, Dm) => { const a = comp(Dm, 'macro', 'Risk appetite'), b = comp(Dm, 'macro', 'Financial conditions'), v = [a, b].filter((y) => y !== null), x = v.length ? mean(v) : null; if (x === null || Math.abs(x) < 0.35) return null; const c = Math.abs(R.x_corr?.value ?? 0.3); return { dir: Math.sign(x), str: Math.min(1, Math.abs(x) * (0.6 + 0.4 * c)) }; },
+    text: (d, R) => `${R.x_nfci ? `Financial conditions index ${R.x_nfci.disp.split(' (')[0]}; ` : ''}VIX ${R.x_vix ? R.x_vix.disp : '—'}; high-yield spreads ${R.x_hy ? R.x_hy.disp.split(' (')[0] : '—'}; Nasdaq ${R.x_ndx ? R.x_ndx.disp : '—'} over 4 weeks${R.x_corr ? `; BTC–Nasdaq correlation ${R.x_corr.disp}` : ''}.` },
   { id: 'heat', domains: ['sent'], horizon: 'medium', ev: ['s_fng', 's_fngchg', 's_wiki'], name: (d) => (d < 0 ? 'Sentiment overheating' : 'Extreme fear (contrarian)'),
     detect: (R, Dm, X, d) => { const v = R.s_fng?.value; if (!ok(v)) return null; const a7 = mean(vals(X.fng, d, 7)); if (v >= 78 && a7 >= 72) return { dir: -1, str: Math.min(1, (v - 70) / 20) }; if (v <= 25 && a7 <= 30) return { dir: 1, str: Math.min(1, (35 - v) / 20) }; return null; },
     text: (d, R) => `Fear & Greed ${R.s_fng.disp.split(' ·')[0]}${R.s_wiki ? `; public attention ${R.s_wiki.disp.split(' (')[0]} its 90-day norm` : ''}.` },
@@ -524,7 +570,13 @@ function crossDomain(R, Dm) {
     R.s_fng && { name: 'Sentiment heat', arrow: ARROW((R.s_fng.value - 50) / 40), s: R.s_fng.s, note: R.s_fng.disp.split(' ·')[0], inverse: true },
     R.c_stab30 && { name: 'Stablecoin liquidity', arrow: ARROW(R.c_stab30.s), s: R.c_stab30.s, note: R.c_stab30.disp.split(' (')[0] },
   ].filter(Boolean);
-  return { agree, diverge: div, lens };
+  // concentration: how much of the net support (or pressure) comes from one domain
+  const W = { tech: 0.25, chain: 0.2, mkt: 0.25, sent: 0.1, macro: 0.2 }, net = live.reduce((a, x) => a + W[x.key] * x.score, 0);
+  const same = live.filter((x) => Math.sign(x.score) === Math.sign(net) && Math.abs(x.score) >= 0.05).map((x) => ({ x, c: W[x.key] * Math.abs(x.score) })).sort((p, q) => q.c - p.c);
+  const tot = same.reduce((a, y) => a + y.c, 0), top = same[0];
+  const concentration = top && tot && Math.abs(net) >= 0.05 ? { domain: top.x.name, share: top.c / tot, high: top.c / tot >= 0.55, text: top.c / tot >= 0.55 ? `The ${net > 0 ? 'supportive' : 'cautionary'} read leans heavily on ${top.x.name.toLowerCase()} (${Math.round((top.c / tot) * 100)}% of the net weight): it is narrowly based, so a change in that one domain would move the overall read.` : `No single domain dominates: the largest share of the net weight is ${top.x.name.toLowerCase()} at ${Math.round((top.c / tot) * 100)}%.` } : null;
+  const breadth = { supportive: up.map((x) => x.name), cautionary: dn.map((x) => x.name), neutral: live.filter((x) => x.score > -0.15 && x.score < 0.15).map((x) => x.name) };
+  return { agree, diverge: div, lens, concentration, breadth };
 }
 
 // Fair Grade: a configuration score built from explicit contributions (not an average)
@@ -627,6 +679,8 @@ export function intelligence(input) {
     confirmation: S.cross, changes, valuation: S.V, cycle: C, risk: S.risk,
     readings: R,
   };
+  out.horizons = ['short', 'medium', 'long'].map((h) => { const r = Object.values(R).filter((x) => x.horizon === h && x.s !== null); const m = r.length ? mean(r.map((x) => x.s)) : null; return { h, label: { short: 'Short term (days)', medium: 'Medium term (weeks)', long: 'Long term (months+)' }[h], score: m, state: m === null ? 'No data' : LBL(m, false), n: r.length, sup: r.filter((x) => x.s >= 0.2).length, cau: r.filter((x) => x.s <= -0.2).length }; });
+  Object.defineProperty(out, 'inputs', { value: X, enumerable: false });
   out.narrative = narrative(out);
   out.headline = `${out.state} · Fair Grade ${out.grade.value}/100 · ${out.breadth.n} of ${out.breadth.of} domains supportive`;
   return out;
@@ -644,4 +698,71 @@ function narrative(I) {
   const c2 = I.changes.d2, c7 = I.changes.d7;
   P.push(`${c2?.label && c2.label !== 'Not enough history' ? `Over the last two days the picture is ${c2.label.toLowerCase()}: ${c2.text.charAt(0).toLowerCase() + c2.text.slice(1)}` : ''} ${c7?.label && c7.label !== 'Not enough history' ? `Over a week it is ${c7.label.toLowerCase()}.` : ''} The risk regime is <b>${I.risk.level.toLowerCase()}</b>: ${I.risk.desc.charAt(0).toLowerCase() + I.risk.desc.slice(1)}${I.watch.length ? ` Also worth watching: ${I.watch.map((x) => x.name.toLowerCase()).join(', ')}.` : ''}`.trim());
   return P;
+}
+
+// ---------------------------------------------------------------------------
+// HISTORY: the same indicator definitions evaluated across all available history
+// (daily for the last year, weekly before that), with percentile baselines.
+export const DOMAIN_SLUG = { tech: 'technical', chain: 'on-chain', mkt: 'market-structure', sent: 'sentiment', macro: 'macro-liquidity' };
+export const SLUG_DOMAIN = Object.fromEntries(Object.entries(DOMAIN_SLUG).map(([k, v]) => [v, k]));
+export const indSlug = (id) => id.slice(2).replace(/_/g, '-');
+export const compSlug = (c) => 'c-' + c.toLowerCase().replace(/&/g, 'and').replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+export const DEF_BY_ID = Object.fromEntries(DEFS.map(({ calc, ...x }) => [x.id, x]));
+export const indicatorsOf = (dk) => DEFS.filter((x) => x.domain === dk).map(({ calc, ...x }) => x);
+
+function grid(X, from = '2011-01-01', dailyDays = 365) {
+  const key = 'g' + from + dailyDays; if (X._c[key]) return X._c[key];
+  const out = [], cut = shiftDate(X.today, -dailyDays);
+  for (let d = from; d < cut; d = shiftDate(d, 7)) out.push(d);
+  for (let d = cut; d <= X.today; d = shiftDate(d, 1)) out.push(d);
+  return (X._c[key] = out);
+}
+const STAT_ZONES = [[2.5, 'Extreme low'], [10, 'Historically low'], [90, 'Normal range'], [97.5, 'Historically high'], [101, 'Extreme high']];
+const zoneOfPct = (p) => (p === null ? null : STAT_ZONES.find(([m]) => p < m)[1]);
+function baseline(pts, X) {
+  // statistics on a weekly sample, so the recent daily points do not dominate
+  const wk = []; let last = null;
+  for (const p of pts) { const w = Math.floor(Date.parse(p[0]) / (7 * DAYMS)); if (w !== last) { wk.push(p); last = w; } }
+  const v = wk.map((p) => p[1]).filter(ok), sv = [...v].sort((a, b) => a - b);
+  if (sv.length < 8) return { n: sv.length, enough: false };
+  const q = (x) => { const i = (sv.length - 1) * x, lo = Math.floor(i), hi = Math.ceil(i); return sv[lo] + (sv[hi] - sv[lo]) * (i - lo); };
+  const rank = (x) => { let lo = 0, hi = sv.length; while (lo < hi) { const m = (lo + hi) >> 1; if (sv[m] < x) lo = m + 1; else hi = m; } let eq = lo; while (eq < sv.length && sv[eq] === x) eq++; return ((lo + eq) / 2 / sv.length) * 100; };
+  const cur = pts.at(-1), m = mean(v), sd = std(v), pctNow = rank(cur[1]);
+  const zone = zoneOfPct(pctNow);
+  let persist = 0; for (let i = pts.length - 1; i >= 0 && zoneOfPct(rank(pts[i][1])) === zone; i--) persist++;
+  const firstOfRun = pts[pts.length - persist]?.[0] ?? cur[0];
+  const prev30 = pt(pts, shiftDate(cur[0], -30)), d30 = prev30 ? cur[1] - prev30[1] : null;
+  const dir = !ok(d30) || !sd ? null : Math.abs(d30) < 0.1 * sd ? 'flat' : d30 > 0 ? 'rising' : 'falling';
+  // what followed at similar historical readings (BTC price change 30 and 90 days later)
+  let fwd = null;
+  const span = dd(wk[0][0], cur[0]);
+  if (span >= 730 && X?.close?.length) {
+    const near = wk.filter((p) => dd(p[0], cur[0]) >= 90 && Math.abs(rank(p[1]) - pctNow) <= 7.5);
+    const r = (n) => near.map((p) => { const a = pt(X.close, p[0]), b = pt(X.close, shiftDate(p[0], n)); return a && b && dd(b[0], shiftDate(p[0], n)) <= 3 ? pct(b[1], a[1]) : null; }).filter(ok).sort((a, b) => a - b);
+    const qs = (arr) => (arr.length >= 15 ? { n: arr.length, p25: arr[Math.floor(arr.length * 0.25)], med: arr[Math.floor(arr.length * 0.5)], p75: arr[Math.floor(arr.length * 0.75)] } : null);
+    fwd = { d30: qs(r(30)), d90: qs(r(90)), band: [Math.max(0, pctNow - 7.5), Math.min(100, pctNow + 7.5)], obs: near.length };
+  }
+  return { enough: true, n: sv.length, first: wk[0][0], last: cur[0], now: cur[1], mean: m, sd, z: sd ? (cur[1] - m) / sd : null, min: sv[0], max: sv.at(-1), p2: q(0.025), p10: q(0.1), p50: q(0.5), p90: q(0.9), p97: q(0.975), pct: pctNow, zone, persist, since: firstOfRun, d30, dir, fwd };
+}
+export function indicatorHistory(X, id) {
+  const key = 'h' + id; if (X._c[key]) return X._c[key];
+  const D = DEFS.find((x) => x.id === id); if (!D) return null;
+  const pts = [];
+  for (const d of grid(X)) { let r = null; try { r = D.calc(X, d, d === X.today); } catch { r = null; } if (r && ok(r.v)) pts.push([d, r.v, ok(r.s) ? r.s : null]); }
+  return (X._c[key] = { id, pts, base: pts.length ? baseline(pts, X) : { n: 0, enough: false } });
+}
+// domain and component reads through time (indicators with stored history only)
+export function domainHistory(X) {
+  if (X._c.dh) return X._c.dh;
+  const pts = [];
+  for (const d of grid(X, shiftDate(X.today, -3 * 365), 60)) { const Dm = synthDomains(readingsAt(X, d)); pts.push({ d, dom: Object.fromEntries(Dm.map((x) => [x.key, x.score])), comp: Object.fromEntries(Dm.flatMap((x) => x.comps.map((c) => [x.key + '|' + c.name, c.score]))) }); }
+  return (X._c.dh = pts);
+}
+export function compHistory(X, dk, comp) {
+  const pts = domainHistory(X).map((p) => [p.d, p.comp[dk + '|' + comp]]).filter((p) => ok(p[1]));
+  return { pts, base: pts.length ? baseline(pts, X) : { n: 0, enough: false } };
+}
+export function domHistory(X, dk) {
+  const pts = domainHistory(X).map((p) => [p.d, p.dom[dk]]).filter((p) => ok(p[1]));
+  return { pts, base: pts.length ? baseline(pts, X) : { n: 0, enough: false } };
 }

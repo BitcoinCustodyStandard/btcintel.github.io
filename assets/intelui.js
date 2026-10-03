@@ -1,9 +1,12 @@
 // Views for the Market Intelligence Engine (engine/intel.js):
 //   marketReadHtml  — the dashboard's ten-second Market read
-//   analysisHtml    — Analysis tab: the five domains, components and every indicator behind them
 //   intelligenceHtml — Intelligence tab: what matters now and why, valuation, cycle, risk
 // All text comes from the engine's evidence; nothing here adds figures of its own.
 
+import { DOMAIN_SLUG, DEF_BY_ID, indSlug } from '../engine/intel.js?v=20261003i';
+
+const DLINK = (k) => `#analysis/${DOMAIN_SLUG[k]}`;
+const ILINK = (id) => (DEF_BY_ID[id] ? `${DLINK(DEF_BY_ID[id].domain)}/${indSlug(id)}` : '#analysis');
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 // narrative paragraphs carry <b> emphasis from the engine; everything else is escaped
 const rich = (s) => esc(s).replace(/&lt;(\/?)b&gt;/g, '<$1b>');
@@ -28,61 +31,18 @@ export function marketReadHtml(I, info = () => '') {
       <div class="ir-grade" title="Fair Grade: the engine’s score of today’s overall market configuration (not a forecast)"><span class="k">Fair Grade${info('i_grade')}</span><b class="num">${I.grade.value}</b><span class="of">/ 100</span><span class="gbar2"><i style="width:${I.grade.value}%"></i></span></div>
     </div>
     <p class="ir-sub"><b>${I.breadth.n} of ${I.breadth.of}</b> domains supportive${I.breadth.neg ? ` · ${I.breadth.neg} cautionary` : ''} · ${conf(I.confidence.level)}</p>
-    <div class="ir-doms">${I.domains.map((d) => `<a class="ir-dom t-${toneOf(d.state, d.score)}" href="#analysis" data-goto-dom="${d.key}" title="${esc(d.question)}"><span class="n">${esc(d.name)}</span><span class="a">${d.arrow}</span><span class="s">${esc(d.state)}</span></a>`).join('')}</div>
+    <div class="ir-doms">${I.domains.map((d) => `<a class="ir-dom t-${toneOf(d.state, d.score)}" href="${DLINK(d.key)}" title="${esc(d.question)}"><span class="n">${esc(d.name)}</span><span class="a">${d.arrow}</span><span class="s">${esc(d.state)}</span></a>`).join('')}</div>
     <div class="ir-cols">
       <div><h3>Key drivers${info('i_forces')}</h3>${I.drivers.length ? `<ul class="ir-f">${I.drivers.slice(0, 3).map(li).join('')}</ul>` : '<p class="muted small">No strong supportive force right now.</p>'}</div>
       <div><h3>Key offsets</h3>${I.offsets.length ? `<ul class="ir-f">${I.offsets.slice(0, 3).map(li).join('')}</ul>` : '<p class="muted small">No strong offsetting force right now.</p>'}</div>
     </div>
-    ${c2 ? `<p class="ir-chg"><span class="k">What changed · 2 days${info('i_changes')}</span>${pill(c2.label, c2.label === 'Improving' ? 1 : c2.label === 'Deteriorating' ? -0.5 : 0)} ${esc(c2.text)}</p>` : ''}
+    ${c2 ? `<p class="ir-chg"><span class="k">What changed${info('i_changes')}</span><span class="ir-hz">${[['2d', I.changes.d2], ['7d', I.changes.d7], ['30d', I.changes.d30]].map(([l, c]) => (c?.domains ? `<span title="${esc(c.text)}"><i>${l}</i>${pill(c.label, c.label === 'Improving' ? 1 : c.label === 'Deteriorating' ? -0.5 : 0)}</span>` : '')).join('')}</span>${esc(c2.text)}</p>` : ''}
     <div class="ir-concl">
       ${I.valuation ? `<span><span class="k">Valuation${info('i_valuation')}</span><b>${esc(I.valuation.state)}</b></span>` : ''}
       ${I.cycle ? `<span><span class="k">Cycle${info('i_cycle')}</span><b>${esc(I.cycle.phase)}</b></span>` : ''}
       <span><span class="k">Risk regime${info('i_risk')}</span><b>${esc(I.risk.level)}</b></span>
     </div>
     <p class="tr-n">Rules-based synthesis of free public data across five domains — not investment advice and not a forecast.</p>`;
-}
-
-// ---------------------------------------------------------------- analysis
-function indicatorRow(r) {
-  const st = r.state || (r.s === null ? 'Context' : 'Neutral');
-  return `<tr class="${r.s === null ? 'ctx' : ''}">
-    <td data-k="Indicator"><b>${esc(r.name)}</b><div class="xs dim">${esc({ short: 'Short term', medium: 'Medium term', long: 'Long term' }[r.horizon] || '')}${r.fresh === 'delayed' ? ' · delayed' : ''}</div></td>
-    <td data-k="Reading" class="num">${esc(r.disp)}</td>
-    <td data-k="Read">${pill(st, r.s)}${r.s !== null ? sbar(r.s) : ''}</td>
-    <td data-k="Why">${esc(r.why)}<div class="xs dim">${esc(r.src)} · as of ${esc(ago(r.asOf))}</div></td>
-  </tr>`;
-}
-function domainBlock(d, info) {
-  return `<details class="idom" id="dom-${d.key}" open>
-    <summary>
-      <span class="idom-n">${esc(d.name)}${info('i_' + d.key)}</span>
-      <span class="idom-q">${esc(d.question)}</span>
-      <span class="idom-s">${pill(d.state, d.score)}<span class="ia">${d.arrow}</span>${sbar(d.score)}${conf(d.confidence.level)}</span>
-    </summary>
-    <div class="idom-b">
-      <div class="icomps">${d.comps.map((c) => `<div class="icomp"><span class="cn">${esc(c.name)}</span><span class="cw t-${toneOf(null, c.score)}">${esc(c.word)}</span>${sbar(c.score)}<span class="cc xs dim">${c.n} scored</span></div>`).join('')}</div>
-      ${d.notes.length ? `<p class="inote">${d.notes.map(esc).join(' ')}</p>` : ''}
-      <p class="xs dim">Confidence ${esc(d.confidence.level.toLowerCase())}: ${Math.round(d.confidence.coverage * 100)}% of the domain’s indicator weight has data, ${Math.round(d.confidence.fresh * 100)}% freshness, ${Math.round(d.confidence.agree * 100)}% agreement with the domain’s direction.</p>
-      ${d.comps.map((c) => (c.indicators.length ? `<h4 class="ich">${esc(c.name)} <span>${esc(c.word)}</span></h4><div class="tbl-wrap"><table class="itbl"><tbody>${c.indicators.map(indicatorRow).join('')}</tbody></table></div>` : '')).join('')}
-      ${d.unavailable?.length ? `<p class="iun"><span class="k">Not available from free sources</span>${d.unavailable.map(esc).join(' · ')}</p>` : ''}
-    </div>
-  </details>`;
-}
-export function analysisHtml(I, info = () => '') {
-  if (!I) return '<div class="empty-state"><p>The analysis needs the published data files; it will appear once they load.</p></div>';
-  const n = Object.values(I.readings).length, sc = Object.values(I.readings).filter((r) => r.s !== null).length;
-  return `<section class="ihead">
-      <div><h1>Analysis</h1><p class="muted">What each area of the market says. ${n} indicators from free public sources, ${sc} of them scored, the rest shown as context. Each domain answers one question; expand any row to see exactly how its verdict was formed.</p></div>
-      <div class="ihead-r">${pill(I.state)}<span class="muted small">Fair Grade <b class="num">${I.grade.value}</b>/100 · data as of ${esc(I.asOf)}</span></div>
-    </section>
-    <div class="imatrix">${I.domains.map((d) => `<a href="#analysis" data-goto-dom="${d.key}" class="imx t-${toneOf(d.state, d.score)}"><span class="n">${esc(d.name)}</span><b>${d.arrow} ${esc(d.state)}</b><span class="xs">${esc(d.confidence.level)} confidence · ${d.n} indicators</span></a>`).join('')}</div>
-    ${I.domains.map((d) => domainBlock(d, info)).join('')}
-    <details class="about imethod"><summary>How the engine reads indicators</summary>
-      <p><b>Layer 1–2.</b> Raw data (prices, flows, on-chain series, macro series) becomes indicators: moving averages, RSI, MACD, Bollinger Bands, MVRV, cost bases, ETF flow sums, funding, yields and so on.</p>
-      <p><b>Layer 3.</b> Each indicator is interpreted on its own scale from −1 to +1 against fixed thresholds and its own history (percentiles where history exists): <i>supportive</i> (+0.2 or more), <i>neutral</i>, <i>cautionary</i> (−0.2 or less) or <i>deteriorating</i> (cautionary and worse than a week ago, or deeply negative). Context indicators are shown but not scored. Readings older than their normal update interval are down-weighted; very old ones are dropped.</p>
-      <p><b>Layer 4.</b> Indicators combine only with like indicators inside a component (Trend, Momentum, Valuation, Leverage…). Components combine into the domain by fixed weights, adjusted for coverage, with explicit override rules (for example, a negative long-term trend caps the Technical domain; elevated leverage caps Market structure; extreme greed overrides the other sentiment inputs). Nothing is averaged across domains.</p>
-      <p>Interpretation depends on context: extreme greed is read as crowding, not strength; negative funding as squeeze fuel, not weakness; low volatility as a pending move of unknown direction.</p>
-    </details>`;
 }
 
 // ---------------------------------------------------------------- intelligence
@@ -97,7 +57,7 @@ function forceCard(f) {
       <span><span class="k">Persistence</span>${f.persistence >= 30 ? '30+ days' : f.persistence ? `${f.persistence} day${f.persistence > 1 ? 's' : ''}` : 'new today'}</span>
       <span><span class="k">Trend</span>${esc(f.trend)}</span>
     </div>
-    <details><summary>Evidence</summary><ul class="iev">${f.evidence.map((e) => `<li>${pill(e.state, null)} <b>${esc(e.name)}</b> ${esc(e.disp)} <span class="xs dim">${esc(e.src)} · ${esc(ago(e.asOf))}</span></li>`).join('')}</ul></details>
+    <details><summary>Evidence</summary><ul class="iev">${f.evidence.map((e) => `<li>${pill(e.state, null)} <a href="${ILINK(e.id)}"><b>${esc(e.name)}</b></a> ${esc(e.disp)} <span class="xs dim">${esc(e.src)} · ${esc(ago(e.asOf))}</span></li>`).join('')}</ul></details>
   </article>`;
 }
 function changeCard(c, title) {
@@ -124,7 +84,7 @@ export function intelligenceHtml(I, info = () => '') {
         <p class="ir-sub">Fair Grade <b class="num">${I.grade.value}</b> / 100 (${gradeWord(I.grade.value)}) · ${I.breadth.n} of ${I.breadth.of} domains supportive · ${conf(I.confidence.level)}</p>
         <div class="ir-concl">${V ? `<span><span class="k">Valuation</span><b>${esc(V.state)}</b></span>` : ''}${C ? `<span><span class="k">Cycle</span><b>${esc(C.phase)}</b></span>` : ''}<span><span class="k">Risk regime</span><b>${esc(K.level)}</b></span></div>
       </div>
-      <div class="ihero-r"><div class="imatrix sm">${I.domains.map((d) => `<a href="#analysis" data-goto-dom="${d.key}" class="imx t-${toneOf(d.state, d.score)}"><span class="n">${esc(d.name)}</span><b>${d.arrow} ${esc(d.state)}</b></a>`).join('')}</div></div>
+      <div class="ihero-r"><p class="xs dim" style="margin:0 0 6px">The five analytical domains — open one for its research page:</p><div class="imatrix sm">${I.domains.map((d) => `<a href="${DLINK(d.key)}" class="imx t-${toneOf(d.state, d.score)}"><span class="n">${esc(d.name)}</span><b>${d.arrow} ${esc(d.state)}</b></a>`).join('')}</div></div>
     </section>
 
     <section class="block"><div class="bh"><h2>Why</h2><p class="aside">Data as of ${esc(I.asOf)} · plain-English synthesis of the evidence below</p></div>
@@ -137,6 +97,10 @@ export function intelligenceHtml(I, info = () => '') {
       ${I.offsets.length ? `<div class="iforces">${I.offsets.slice(0, 5).map(forceCard).join('')}</div>` : '<p class="muted">No strong offsetting force is active.</p>'}
       ${I.watch.length ? `<div class="iwatch"><span class="k">Two-way watch</span>${I.watch.map((w) => `<p><b>${esc(w.name)}.</b> ${esc(w.text)}</p>`).join('')}</div>` : ''}</section>
 
+    <section class="block"><div class="bh"><h2>By time horizon</h2><p class="aside">The same signals grouped by the horizon they work on</p></div>
+      <div class="ihz">${(I.horizons || []).map((x) => `<div class="ihz-c t-${toneOf(x.state, x.score)}"><span class="k">${esc(x.label)}</span><b>${esc(x.state)}</b>${sbar(x.score)}<span class="xs dim">${x.sup} supportive · ${x.cau} cautionary of ${x.n}</span></div>`).join('')}</div>
+      <p class="xs dim">Signals on different horizons can disagree without contradicting each other — stretched short-term momentum can coexist with an intact long-term trend. Force ranking weighs horizon so short-term signals cannot outweigh structural ones on their own.</p></section>
+
     <section class="block"><div class="bh"><h2>Cross-market confirmation${info('i_confirm')}</h2><p class="aside">Where independent domains agree, and where they do not</p></div>
       <div class="icross">
         <div class="icm">${I.domains.map((d) => `<div class="icr"><span>${esc(d.name)}</span><b class="t-${toneOf(d.state, d.score)}">${d.arrow}</b><span class="xs dim">${esc(d.state)}</span></div>`).join('')}
@@ -144,6 +108,8 @@ export function intelligenceHtml(I, info = () => '') {
           <p class="xs dim">Lens rows show the direction of the quantity itself (more leverage, hotter sentiment ↑); colour shows whether that helps (green) or hurts (amber/red).</p></div>
         <div>
           <h3>Confirmation</h3>${X.agree.length ? X.agree.map((a) => `<p>${esc(a.text)}</p>`).join('') : '<p class="muted small">Fewer than three domains point the same way: no broad confirmation.</p>'}
+          <h3>Breadth</h3><p class="small">${X.breadth ? `Supportive: ${esc(X.breadth.supportive.join(', ') || 'none')}. Neutral: ${esc(X.breadth.neutral.join(', ') || 'none')}. Cautionary: ${esc(X.breadth.cautionary.join(', ') || 'none')}.` : ''}</p>
+          <h3>Concentration</h3><p class="small">${X.concentration ? esc(X.concentration.text) : 'The domains roughly cancel out; there is no net direction to concentrate.'}</p>
           <h3>Divergence</h3>${X.diverge.length ? `<ul class="idiv">${X.diverge.map((x) => `<li class="${x.constructive ? 'up' : ''}">${esc(x.text)}</li>`).join('')}</ul>` : '<p class="muted small">No notable divergences.</p>'}
           <p class="xs dim">Divergence is information too: it marks where the current read is most likely to be tested.</p>
         </div>
@@ -174,14 +140,5 @@ export function intelligenceHtml(I, info = () => '') {
       <p class="xs dim">The grade weighs breadth, strength, conflicts, risk and valuation; each contribution is scaled by the confidence of the data behind it. It describes today’s configuration and is not a probability or a price forecast.</p></section>`;
 }
 
-// clicks on a domain chip open the Analysis tab at that domain
-let wired = false;
-export function wireIntel() {
-  if (wired) return; wired = true;
-  document.addEventListener('click', (e) => {
-    const a = e.target.closest('[data-goto-dom]'); if (!a) return;
-    e.preventDefault();
-    const go = () => { const el = document.getElementById('dom-' + a.dataset.gotoDom); if (el) { el.open = true; el.scrollIntoView({ behavior: 'smooth', block: 'start' }); } };
-    if (location.hash !== '#analysis') { location.hash = 'analysis'; setTimeout(go, 60); } else go();
-  });
-}
+// domain chips are plain links to the Analysis routes; kept for callers
+export function wireIntel() {}

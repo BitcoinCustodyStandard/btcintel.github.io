@@ -33,6 +33,18 @@ Raw data → indicators → interpretation → five domains → market forces �
 - **What changed**: the engine is re-evaluated as of 2, 7 and 30 days ago and compared on the indicators known on both dates only.
 - Views: the dashboard Market read card, the **Analysis** tab (every domain, component and indicator with source and date) and the **Intelligence** tab (narrative, drivers, offsets, cross-domain confirmation, changes, valuation, cycle, risk, Fair Grade breakdown). Tests: `agent/test/intel.test.mjs`.
 
+### Site architecture (one source of truth)
+
+DATA → INDICATORS → FIVE DOMAINS → CROSS-DOMAIN FORCES → INTELLIGENCE → DASHBOARD / ANALYSIS / CYCLE / REPORTS. Every page reads the same engine output; no page has its own calculation.
+
+- **BTC Dashboard** (`#dashboard`): what is happening now — Market read (state, breadth, Fair Grade, drivers, offsets, 2/7/30-day changes).
+- **Analysis** (`#analysis`): five domain tiles → domain research pages (`#analysis/technical`, `/on-chain`, `/market-structure`, `/sentiment`, `/macro-liquidity`) → component pages (`/c-liquidity`, `/c-leverage`, …) → indicator deep dives (`#analysis/macro-liquidity/g3`, `#analysis/technical/rsi`, …). Deep dives show the current value, its percentile and historical zone (2.5/10/90/97.5th percentiles of its own history), the full history chart computed by the engine for every past date, time in zone, 30-day direction, what followed similar readings (historical observation, not a forecast), interpretation with cross-domain confirmation, caveats, method, source and freshness. Research notes: `engine/indicator_docs.js`; views: `assets/research.js`.
+- **Intelligence** (`#overview`): what matters now — forces, horizon view, confirmation, divergence, concentration and breadth, changes, valuation, cycle, risk, Fair Grade breakdown.
+- **On-chain Cycle** (`#cycle`): the engine's cycle synthesis above the on-chain valuation cycle.
+- **Reports** (`#reports`): morning report, archive, and the outline of the planned daily PDF (`engine/reportmodel.js`, built from the same engine output).
+- The former *Liquidity detail* (order-book depth, impact, options expiries, $5K band map) is in-market liquidity and now lives on Market Structure (`#analysis/market-structure/liquidity`); external liquidity (net liquidity, M2, central-bank balance sheets) is on Macro & Liquidity. Old links (`#liquidity`, `#report`) redirect.
+- **Long history** (`data/longhist.json`, `engine/longhist.js`): written by the daily run from free sources — FRED since 2015 (incl. NFCI), Yahoo Finance 10 years (DXY, Nasdaq, S&P 500, gold, VIX, ACWI), Coin Metrics full history (supply, exchange flows/balance, activity, hash rate), DefiLlama stablecoins, Fear & Greed since 2018, Wikipedia pageviews since 2016. Daily for two years, weekly before. A source that fails keeps its last series, marked stale.
+
 ### On-chain Cycle & Momentum (`engine/cycle.js`)
 
 Where BTC sits in the historical on-chain valuation cycle — positioning research, not a signal. Rule-based and fully shown on the page:

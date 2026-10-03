@@ -1,7 +1,10 @@
 // Offline checks for the Market Intelligence Engine (engine/intel.js).
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { intelligence } from '../../engine/intel.js';
+import { intelligence, indicatorHistory, domHistory, INDICATORS, DOMAIN_SLUG, indSlug } from '../../engine/intel.js';
+import { IND_DOCS, COMP_DOCS, DOMAIN_DOCS } from '../../engine/indicator_docs.js';
+import { compact } from '../../engine/longhist.js';
+import { reportModel } from '../../engine/reportmodel.js';
 
 const day = (i, end = '2026-10-03') => new Date(Date.parse(end) - i * 864e5).toISOString().slice(0, 10);
 // n daily points ending on `end`, value = fn(k) with k = 0 … n-1 (oldest first)
@@ -65,5 +68,22 @@ if (latest?.metrics) {
   assert.ok(Object.keys(I.readings).length > 40, 'most indicators available from the published files');
   assert.ok(Date.now() - t0 < 5000, 'fast enough for the browser');
   console.log(`  live data: ${I.headline} · ${I.valuation?.state} valuation · ${I.cycle?.phase} · risk ${I.risk.level} (${Date.now() - t0} ms)`);
+}
+// 6. History: same calculation as today, sane baselines, weekly thinning of old points
+{
+  const X = up.inputs;
+  const h = indicatorHistory(X, 't_ma200');
+  assert.ok(h.pts.length > 300, 'long technical history');
+  assert.ok(Math.abs(h.pts.at(-1)[1] - up.readings.t_ma200.value) < 1e-9, 'history ends on today’s engine value');
+  const b = h.base;
+  assert.ok(b.enough && b.p2 <= b.p10 && b.p10 <= b.p50 && b.p50 <= b.p90 && b.p90 <= b.p97 && b.pct >= 0 && b.pct <= 100);
+  assert.ok(domHistory(X, 'tech').pts.length > 50, 'domain read history');
+  const c = compact([...Array(1500)].map((_, i) => [new Date(Date.parse('2022-10-03') + i * 864e5).toISOString().slice(0, 10), i]), 730, Date.parse('2026-10-03'));
+  assert.ok(c.length < 900 && c.length > 800, `thinned to weekly before two years (${c.length})`);
+  // every indicator has research notes, a slug and a domain route
+  for (const i of INDICATORS) { assert.ok(IND_DOCS[i.id]?.what && IND_DOCS[i.id]?.caveat, `docs for ${i.id}`); assert.ok(COMP_DOCS[i.comp], `component ${i.comp}`); assert.ok(DOMAIN_SLUG[i.domain] && indSlug(i.id)); }
+  assert.equal(Object.keys(DOMAIN_DOCS).length, 5);
+  const M = reportModel(up);
+  assert.ok(M.sections.length >= 10 && M.sections.find((x) => x.title === 'Key drivers').lines.length >= 1, 'report model from the same engine output');
 }
 console.log('intel.test: ok');

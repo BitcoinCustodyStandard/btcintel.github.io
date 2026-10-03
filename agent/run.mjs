@@ -16,6 +16,7 @@ import { analyze, backfillRows } from '../engine/analyze.js';
 import { morningReport, briefReport } from '../engine/report.js';
 import { computePiCycle } from '../engine/picycle.js';
 import { intelligence } from '../engine/intel.js';
+import { collectLong } from '../engine/longhist.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const DATA = process.env.INTEL_DATA_DIR ? path.resolve(process.env.INTEL_DATA_DIR) : path.resolve(here, '../data');
@@ -125,12 +126,18 @@ async function main() {
     }
   }
 
+  // Long history for the Analysis deep dives (data/longhist.json); live runs only.
+  if (!fixture) {
+    try { writeJSON(path.join(DATA, 'longhist.json'), await collectLong(readJSON(path.join(DATA, 'longhist.json')), log)); }
+    catch (e) { log('Long history skipped:', e.message); }
+  }
+
   // Market Intelligence Engine: the same synthesis the site computes in the browser, stored
   // daily so the history of reads and grades accumulates (the site always recomputes live).
   try {
     const priceFull0 = snap.onchain?.coinmetrics?.priceFull;
     const piNow = priceFull0?.length > 400 ? { rows: priceFull0 } : readJSON(path.join(DATA, 'pi_cycle.json'));
-    const I = intelligence({ a, rows, pi: piNow, dash: readJSON(path.join(DATA, 'dash.json')), etf: readJSON(path.join(DATA, 'etf_flows.json')), nowIso: a.dataThrough });
+    const I = intelligence({ a, rows, pi: piNow, dash: readJSON(path.join(DATA, 'dash.json')), etf: readJSON(path.join(DATA, 'etf_flows.json')), long: readJSON(path.join(DATA, 'longhist.json')), nowIso: a.dataThrough });
     a.intel = { version: I.version, asOf: I.asOf, headline: I.headline, state: I.state, grade: I.grade.value, breadth: I.breadth, confidence: I.confidence.level, valuation: I.valuation?.state ?? null, cycle: I.cycle?.phase ?? null, risk: I.risk.level, domains: I.domains.map((d) => ({ key: d.key, state: d.state, score: d.score })), drivers: I.drivers.slice(0, 5).map((f) => f.name), offsets: I.offsets.slice(0, 5).map((f) => f.name) };
     Object.assign(a.row, { intelState: I.state, intelGrade: I.grade.value, ...Object.fromEntries(I.domains.map((d) => ['dom_' + d.key, d.score === null ? null : +d.score.toFixed(3)])) });
     log(`Intelligence: ${I.headline}; valuation ${a.intel.valuation}, cycle ${a.intel.cycle}, risk ${a.intel.risk}.`);

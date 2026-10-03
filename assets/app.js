@@ -6,12 +6,14 @@ import { briefReport } from '../engine/report.js';
 import { brief } from '../engine/brief.js';
 import { ZONES } from '../engine/cycle.js';
 import { explain, EXPLAIN, REMINDER } from '../engine/explain.js';
-import { startLivePrice } from './live.js?v=20261003h';
-import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003h';
-import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261003h';
-import { intelligence } from '../engine/intel.js?v=20261003h';
-import { analysisHtml, intelligenceHtml, wireIntel } from './intelui.js?v=20261003h';
-import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003h';
+import { startLivePrice } from './live.js?v=20261003i';
+import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003i';
+import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261003i';
+import { intelligence } from '../engine/intel.js?v=20261003i';
+import { reportModel } from '../engine/reportmodel.js?v=20261003i';
+import { intelligenceHtml, wireIntel } from './intelui.js?v=20261003i';
+import { analysisRoute } from './research.js?v=20261003i';
+import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003i';
 import { fmtUsd, fmtUsdSigned, fmtPrice, fmtPct, fmtNum, fmtK, ordinal } from '../engine/util.js';
 
 const state = { a: null, rows: [], runs: [], index: null, snapshot: null, range: 90, pi: null, dash: null, live: null, liveState: 'init' };
@@ -230,11 +232,15 @@ const rangeBar = () => h`<div class="range" role="group" aria-label="Chart range
 // Three levels: the BTC Dashboard (what is happening), Analysis (what each domain says) and
 // Intelligence (#overview: what matters now and why), with research depth in the other tabs.
 // Old section anchors (#forces, #scenarios) still resolve.
-const TABS = ['dashboard', 'analysis', 'dca', 'overview', 'cycle', 'report', 'liquidity'];
+const TABS = ['dashboard', 'analysis', 'overview', 'dca', 'cycle', 'reports'];
 const LEGACY = { forces: 'overview', scenarios: 'overview', liqmap: 'overview', watch: 'overview', top3: 'overview' };
-const tabFromHash = () => { const k = location.hash.slice(1); return TABS.includes(k) ? k : LEGACY[k] || (k.startsWith('force-') ? 'overview' : 'dashboard'); };
+// retired top-level views now live inside the new structure
+const MOVED = { liquidity: 'analysis/market-structure/liquidity', report: 'reports' };
+const tabFromHash = () => { const k = location.hash.slice(1).split('/')[0]; return TABS.includes(k) ? k : LEGACY[k] || (k.startsWith('force-') ? 'overview' : 'dashboard'); };
 function showTab(scroll) {
+  if (MOVED[location.hash.slice(1)]) { location.replace('#' + MOVED[location.hash.slice(1)]); return; }
   const t = tabFromHash(), k = location.hash.slice(1);
+  if (t === 'analysis') { renderAnalysis(scroll); }
   document.querySelectorAll('[data-tab]').forEach((s) => { s.hidden = s.dataset.tab !== t; });
   document.querySelectorAll('[data-tab-link]').forEach((x) => x.setAttribute('aria-current', x.dataset.tabLink === t ? 'page' : 'false'));
   drawCharts($(`[data-tab="${t}"]`) || document);
@@ -245,6 +251,21 @@ function showTab(scroll) {
   else if (scroll) window.scrollTo(0, 0);
 }
 window.addEventListener('hashchange', () => { if (state.a) showTab(true); });
+// in-page jumps that must not change the route
+document.addEventListener('click', (e) => { const a = e.target.closest('[data-jump]'); if (!a) return; e.preventDefault(); document.getElementById(a.dataset.jump)?.scrollIntoView({ behavior: 'smooth' }); });
+// Analysis: landing, domain pages, component pages and indicator deep dives (assets/research.js)
+let analysisKey = null;
+function renderAnalysis(scroll) {
+  const el = $('[data-tab="analysis"]'); if (!el) return;
+  const k = location.hash.slice(1);
+  if (k === analysisKey && el.childElementCount) return;
+  analysisKey = k;
+  const v = analysisRoute(k.split('/'), state.intel, { wireChart, extras: { marketLiquidity: () => `<section class="block" id="mkt-liquidity"><div class="bh"><h2>Market liquidity &amp; positioning map</h2><p class="aside">Formerly “Liquidity detail”: order-book depth, order impact, options expiries and the $5K band map</p></div>${liquidityTab().s}</section>` } });
+  el.innerHTML = v.html;
+  document.title = `${k.split('/').length > 1 ? (el.querySelector('h1')?.textContent || 'Analysis') + ' · ' : ''}Analysis · BTCIntel`;
+  if (v.scrollTo) setTimeout(() => document.getElementById(v.scrollTo)?.scrollIntoView(), 50); else if (scroll) window.scrollTo(0, 0);
+  v.after(el);
+}
 function openForce(id) {
   const d = document.getElementById(id);
   if (!d) return;
@@ -352,7 +373,7 @@ function ladderBlock(b) {
     </li>`)}</ol>
     <p class="legend"><span><i class="k-acc"></i>Likely to accelerate</span><span><i class="k-two"></i>Two-sided</span><span><i class="k-dec"></i>Likely to slow</span><span class="dim">Liquidation figures are modelled estimates.</span></p>
     <details class="more"><summary>Full band table</summary><div class="more-body">${lmapTable()}</div></details>
-    <p class="note"><a href="#liquidity">Liquidity detail: depth by venue, order impact, options expiries →</a></p>`);
+    <p class="note"><a href="#analysis/market-structure/liquidity">Market liquidity detail (Market Structure): depth by venue, order impact, options expiries →</a></p>`);
 }
 const cap1 = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
@@ -447,6 +468,18 @@ function gauge(score) {
     <div class="gscale"><span>−2 · stretched</span><span>0</span><span>+2 · deep value</span></div>
   </div>`;
 }
+// The cycle is a synthesis: the engine's phase read (all five domains) above the on-chain
+// valuation cycle that feeds it.
+function cycleSynthesis() {
+  const I = state.intel; if (!I?.cycle) return '';
+  const C = I.cycle, V = I.valuation;
+  return h`<section class="block cy-synth"><div class="bh"><h2>Cycle synthesis</h2><p class="aside">A conclusion from all five analytical domains, not a sixth input</p></div>
+    <div class="iconc"><div class="iconc-h"><div class="ir-state t-neu">${C.phase}</div>${raw(`<span class="iconf ${{ High: 'c-hi', Moderate: 'c-mid' }[C.confidence] || 'c-lo'}">${C.confidence} confidence</span>`)}${V ? h`<span class="small muted">Valuation <b>${V.state}</b> · risk regime <b>${I.risk.level}</b></span>` : ''}</div>
+      <p>${C.desc}</p>
+      <div class="icyc"><div><h3>Conditions met</h3><ul class="ichk">${C.met.map((m) => h`<li class="y">${m}</li>`)}</ul></div><div><h3>Not met</h3><ul class="ichk">${C.unmet.length ? C.unmet.map((m) => h`<li class="n">${m}</li>`) : h`<li class="muted">None</li>`}</ul></div></div>
+      ${C.halving ? h`<p class="xs dim">${C.halving.note}</p>` : ''}
+      <p class="small">Inputs: price structure from <a href="#analysis/technical">Technical Analysis</a>, valuation and holder behaviour from <a href="#analysis/on-chain">On-Chain Analysis</a>, leverage from <a href="#analysis/market-structure">Market Structure</a>, mood from <a href="#analysis/sentiment">Sentiment</a> and the liquidity backdrop from <a href="#analysis/macro-liquidity">Macro &amp; Liquidity</a>. The full reasoning is on <a href="#overview">Intelligence</a>.</p></div></section>`;
+}
 function cycleTab() {
   const c = state.a.cycle;
   if (!c || c.error) return sec('cycle-sec', 'On-chain cycle & momentum', null, h`<p class="muted">On-chain cycle data is unavailable in this analysis${c?.error ? ` (${c.error})` : ''}. It is computed on the next server run.</p>`);
@@ -534,9 +567,9 @@ function cycleTab() {
 // ---------- Liquidity detail tab ----------
 function liquidityTab() {
   const a = state.a, map = a.map, dep = a.metrics.depth, O = a.metrics.options;
-  if (!map) return sec('liq-detail', 'Liquidity detail', null, h`<p class="muted">Price unavailable.</p>`);
+  if (!map) return sec('liq-detail', 'Order-book liquidity map', null, h`<p class="muted">Price unavailable.</p>`);
   const imp = dep?.impact;
-  return sec('liq-detail', 'Liquidity detail', 'Why could BTC accelerate if it crosses a level? $5K bands around spot — a map of where forced or hedging flows could sit, not a prediction.', h`
+  return sec('liq-detail', 'Order-book liquidity map', 'Why could BTC accelerate if it crosses a level? $5K bands around spot — a map of where forced or hedging flows could sit, not a prediction.', h`
     ${lmapTable()}
     <div class="twocol" style="margin-top:16px">
       <div class="panel"><h3>Order-book depth by venue${info('depthVenues')}</h3>
@@ -568,6 +601,24 @@ function reportBodies(a) {
     <details class="more"><summary>Full research report — all sections, evidence and sources${a.narrative?.text ? ' + analyst narrative' : ''}</summary><div class="report more-body">${full}</div></details>`;
 }
 const reportText = (a) => [briefOf(a), a.reportMd, a.narrative?.text ? '# Analyst narrative\n\n' + a.narrative.text : null].filter(Boolean).join('\n\n---\n\n');
+// Reports: the morning report today, the archive, and the planned daily PDF built from the
+// same engine output (engine/reportmodel.js) — no separate model.
+function reportsTab() {
+  const idx = state.index?.reports || [];
+  const M = state.intel ? reportModel(state.intel, state.a) : null;
+  return h`<section class="block"><div class="bh"><h2>Reports</h2><p class="aside">Research output generated from the same data and engine as every other page</p></div>
+    <div class="rep-cards">
+      <a class="rep-card" href="#reports" data-jump="reports-morning"><b>Morning report</b><span>Daily at 07:00 ${state.index?.timezone || ''}: brief and full research report.</span></a>
+      <a class="rep-card" href="#reports" data-jump="reports-archive"><b>Report archive</b><span>${idx.length} stored report${idx.length === 1 ? '' : 's'}, newest first.</span></a>
+      <div class="rep-card plan"><b>Daily BTCIntel Report (PDF)</b><span>Planned. Its outline below is already generated from today’s engine output.</span></div>
+    </div></section>
+    <div id="reports-morning">${reportTab()}</div>
+    <section class="block" id="reports-archive"><div class="bh"><h2>Report archive</h2><p class="aside">Markdown files in data/reports, kept permanently</p></div>
+      ${idx.length ? h`<div class="tbl-wrap"><table><thead><tr><th>Report</th><th>Kind</th><th class="n">BTC</th><th>Regime</th></tr></thead><tbody>${idx.slice(0, 60).map((r) => h`<tr><td><a href="data/reports/${r.id}.md" target="_blank" rel="noopener">${r.id}</a></td><td>${r.kind === 'morning' ? 'Morning report' : 'Refresh'}</td><td class="n">${fmtPrice(r.price)}</td><td>${r.regime || ''}</td></tr>`)}</tbody></table></div>` : h`<p class="muted">No archived reports yet.</p>`}</section>
+    ${M ? h`<section class="block" id="reports-daily"><div class="bh"><h2>Daily BTCIntel Report — outline (PDF planned)</h2><p class="aside">Generated from the intelligence engine for ${M.date}; the PDF will render exactly this content</p></div>
+      <div class="rep-outline">${M.sections.map((x) => h`<div class="ro-sec"><h3>${x.title}</h3>${x.lines.length ? h`<ul>${x.lines.map((l) => h`<li>${l}</li>`)}</ul>` : h`<p class="xs dim">${x.note || '—'}</p>`}</div>`)}</div>
+      <p class="xs dim">${M.notes}</p></section>` : ''}`;
+}
 function reportTab() {
   const a = state.a;
   return sec('report', 'Morning report', `Same structure as the overview. Generated daily at 07:00 ${state.index?.timezone || ''}; the full research report is one click below and archived permanently.`, h`
@@ -638,16 +689,16 @@ const infoS = (k) => info(k).s; // the views build plain strings
 // Recomputed from every published file (and the live price) on load, on Refresh, when the
 // 15-minute feed changes and every ten minutes; ~0.3 s of work in the browser.
 function computeIntel() {
-  try { state.intel = intelligence({ a: state.a, rows: state.rows, pi: state.pi, dash: getDash() || state.dash, etf: state.etf, live: state.live }); }
+  try { state.intel = intelligence({ a: state.a, rows: state.rows, pi: state.pi, dash: getDash() || state.dash, etf: state.etf, long: state.long, live: state.live }); }
   catch (e) { console.error('intelligence engine', e); state.intel = null; }
   return state.intel;
 }
 function updateIntel() {
   if (!state.a) return;
   computeIntel();
-  const an = $('[data-tab="analysis"]'), im = $('#intel-main');
-  const open = an ? [...an.querySelectorAll('details.idom')].map((d) => d.open) : [];
-  if (an) { an.innerHTML = analysisHtml(state.intel, infoS); an.querySelectorAll('details.idom').forEach((d, i) => { if (open[i] === false) d.open = false; }); }
+  const im = $('#intel-main');
+  // the Analysis pages re-render only on their landing page, so a reader is never moved mid-page
+  analysisKey = null; if (tabFromHash() === 'analysis' && location.hash === '#analysis') renderAnalysis(false);
   if (im) im.innerHTML = intelligenceHtml(state.intel, infoS);
   setIntel(state.intel);
 }
@@ -666,12 +717,11 @@ function render() {
   else if (a.kind === 'browser') banners.push(h`<div class="banner">Browser refresh: ${liveN} sources retrieved live. ETF flows, FRED, Yahoo and CFTC data cannot be fetched from a browser and show their last server values. Not saved to the archive.</div>`);
   $('#app').innerHTML = h`${banners}
     <div data-tab="dashboard" hidden>${raw(dashTab({ a, pi: state.pi, dash: state.dash, info }))}</div>
-    <div data-tab="analysis" hidden>${raw(analysisHtml(state.intel, infoS))}</div>
+    <div data-tab="analysis" hidden></div>
     <div data-tab="dca" hidden>${raw(dcaPageHtml({ pi: state.pi, info }))}</div>
     <div data-tab="overview" hidden>${overviewTab(b)}</div>
-    <div data-tab="cycle" hidden>${cycleTab()}</div>
-    <div data-tab="report" hidden>${reportTab()}</div>
-    <div data-tab="liquidity" hidden>${liquidityTab()}</div>
+    <div data-tab="cycle" hidden>${cycleSynthesis()}${cycleTab()}</div>
+    <div data-tab="reports" hidden>${reportsTab()}</div>
 `.s;
   wireSections();
   mountDash({ dash: state.dash, getLive: () => state.live });
@@ -738,7 +788,8 @@ function wireSections() {
 async function getJSON(u) { const r = await fetch(u, { cache: 'no-store' }); if (!r.ok) throw new Error(`${u}: HTTP ${r.status}`); return r.json(); }
 
 async function load() {
-  const [latest, ts, idx, runs, pi, dash, etf] = await Promise.allSettled([getJSON('data/latest.json'), getJSON('data/timeseries.json'), getJSON('data/index.json'), getJSON('data/runs.json'), getJSON('data/pi_cycle.json'), getJSON('data/dash.json'), getJSON('data/etf_flows.json')]);
+  const [latest, ts, idx, runs, pi, dash, etf, long] = await Promise.allSettled([getJSON('data/latest.json'), getJSON('data/timeseries.json'), getJSON('data/index.json'), getJSON('data/runs.json'), getJSON('data/pi_cycle.json'), getJSON('data/dash.json'), getJSON('data/etf_flows.json'), getJSON('data/longhist.json')]);
+  state.long = long.status === 'fulfilled' ? long.value : null;
   state.etf = etf.status === 'fulfilled' ? etf.value : null;
   state.pi = pi.status === 'fulfilled' ? pi.value : null;
   state.dash = dash.status === 'fulfilled' ? dash.value : null;
@@ -766,11 +817,12 @@ async function refreshAll() {
   try {
     const [live, files] = await Promise.all([
       liveFeed ? liveFeed.now() : null,
-      Promise.allSettled([getJSON('data/latest.json'), getJSON('data/timeseries.json'), getJSON('data/pi_cycle.json'), getJSON('data/index.json'), getJSON('data/runs.json'), getJSON('data/etf_flows.json')]),
+      Promise.allSettled([getJSON('data/latest.json'), getJSON('data/timeseries.json'), getJSON('data/pi_cycle.json'), getJSON('data/index.json'), getJSON('data/runs.json'), getJSON('data/etf_flows.json'), getJSON('data/longhist.json')]),
       refreshDash(),
     ]);
     await new Promise((r) => setTimeout(r, Math.max(0, 600 - (Date.now() - t0)))); // keep the busy state visible briefly
-    const [latest, ts, pi, idx, runs, etf] = files.map((r) => (r.status === 'fulfilled' ? r.value : null));
+    const [latest, ts, pi, idx, runs, etf, long] = files.map((r) => (r.status === 'fulfilled' ? r.value : null));
+    if (long?.series) state.long = long;
     if (etf?.rows) state.etf = etf;
     if (ts?.rows) state.rows = ts.rows;
     if (idx) state.index = idx;

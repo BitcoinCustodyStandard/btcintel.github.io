@@ -4,10 +4,10 @@
 // data/latest.json (agent snapshot) and data/pi_cycle.json. Values that cannot be
 // obtained free are shown as such, never estimated.
 
-import { startNetwork, seedNetwork, refreshNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js?v=20261003h';
-import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js?v=20261003h';
-import { priceCardHtml, envelopeNow } from './pricechart.js?v=20261003h';
-import { marketReadHtml } from './intelui.js?v=20261003h';
+import { startNetwork, seedNetwork, refreshNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js?v=20261003i';
+import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js?v=20261003i';
+import { priceCardHtml, envelopeNow } from './pricechart.js?v=20261003i';
+import { marketReadHtml } from './intelui.js?v=20261003i';
 
 // ---------- formatting ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -515,8 +515,9 @@ function paintSince() {
 const DEEPER = [
   ['#overview', 'Intelligence', 'Daily forces, regime, scenarios and what changed'],
   ['#cycle', 'On-chain cycle', 'MVRV, NUPL, SOPR and the cycle composite in depth'],
-  ['#liquidity', 'Liquidity detail', 'Order-book depth, liquidation map and options levels'],
-  ['#report', 'Morning report', 'The full written 07:00 report'],
+  ['#analysis/market-structure/liquidity', 'Market liquidity', 'Order-book depth, liquidation map and options levels (Market Structure)'],
+  ['#analysis/macro-liquidity', 'Macro & Liquidity', 'Central banks, M2, rates, dollar, financial conditions'],
+  ['#reports', 'Reports', 'The 07:00 morning report and the archive'],
   ['https://mempool.space', 'mempool.space ↗', 'Blocks, fees and mining, live'],
   ['https://farside.co.uk/bitcoin-etf-flow-all-data/', 'Farside ETF flows ↗', 'Daily flows per fund'],
   ['https://charts.coinmetrics.io/crypto-data/', 'Coin Metrics charts ↗', 'Free on-chain network data'],
