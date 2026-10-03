@@ -1,0 +1,19 @@
+name: probe-sources
+# Temporary: looks for a free full-history source of per-fund ETF flows. Will be removed.
+on:
+  push:
+    paths: ['.github/workflows/probe.yml']
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: |
+          cat > p.mjs <<'JS'
+          const UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
+          const get = async (u, n = 400) => { try { const r = await fetch(u, { headers: { 'user-agent': UA, accept: 'text/html,application/json' }, signal: AbortSignal.timeout(20000) }); const t = await r.text(); console.log(`\n### ${r.status} ${u} len=${t.length}`); return t; } catch (e) { console.log(`\n### ERR ${u} ${e.message}`); return ''; } };
+          for (const u of ['https://farside.co.uk/btc/', 'https://farside.co.uk/bitcoin-etf-flow-all-data/']) { const h = await get(u); const rows = (h.match(/<tr/g) || []).length; console.log('rows', rows, h.includes('IBIT') ? 'has IBIT' : 'no IBIT'); }
+          for (const u of ['https://bitbo.io/treasuries/etf-flows/', 'https://bitbo.io/treasuries/etf-flows']) { const h = await get(u); const i = h.indexOf('IBIT'); console.log('IBIT at', i, (h.match(/<tr/g) || []).length, 'rows', h.slice(i, i + 600).replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ')); const dates = h.match(/(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]* \d{1,2},? 20\d\d/g) || []; console.log('dates', dates.length, dates[0], dates.at(-1)); }
+          JS
+          node p.mjs
