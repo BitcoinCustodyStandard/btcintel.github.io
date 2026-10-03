@@ -364,7 +364,10 @@ const STATE = (s) => (s === null ? 'Context' : s >= 0.2 ? 'Supportive' : s <= -0
 
 // ---------------------------------------------------------------------------
 // LAYER 4: domains (components first, then explicit weights and override rules)
-const LBL = (s, mixed) => (s >= 0.4 ? 'Supportive' : s >= 0.15 ? 'Constructive' : s > -0.15 ? (mixed ? 'Mixed' : 'Neutral') : s > -0.4 ? 'Cautionary' : 'Adverse');
+// one five-step scale for every verdict: Adverse < Cautionary < Neutral < Constructive < Supportive
+// ("components disagree" is reported separately as `mixed`, never as a sixth label)
+export const SCALE = ['Adverse', 'Cautionary', 'Neutral', 'Constructive', 'Supportive'];
+const LBL = (s) => (s >= 0.4 ? 'Supportive' : s >= 0.15 ? 'Constructive' : s > -0.15 ? 'Neutral' : s > -0.4 ? 'Cautionary' : 'Adverse');
 const ARROW = (s) => (s >= 0.4 ? '↑↑' : s >= 0.15 ? '↑' : s > -0.15 ? '→' : s > -0.4 ? '↓' : '↓↓');
 // named states (valuation, leverage…) need a clearer reading before they leave "neutral"
 const word = (comp, s) => { const v = VOCAB[comp] || ['Positive', 'Neutral', 'Negative'], t = VOCAB[comp] ? 0.3 : 0.15; return s >= t ? (s >= 0.6 && !VOCAB[comp] ? 'Strong' : v[0]) : s > -t ? v[1] : s <= -0.6 && !VOCAB[comp] ? 'Weak' : v[2]; };
@@ -540,19 +543,18 @@ function marketRegime(Dm, C) {
   const ev = REGIME_EVIDENCE.map(([name, dk, cn, w]) => { const v = cn ? comp(Dm, dk, cn) : Dm.find((x) => x.key === dk)?.score ?? null; return { name, dk, comp: cn, w, score: v }; }).filter((x) => ok(x.score));
   if (!ev.length) return null;
   const W = ev.reduce((a, x) => a + x.w, 0), score = ev.reduce((a, x) => a + x.w * x.score, 0) / W;
-  const label = score >= 0.2 ? 'Bullish' : score <= -0.2 ? 'Bearish' : 'Neutral';
+  const label = LBL(score), dir = score >= 0.15 ? 1 : score <= -0.15 ? -1 : 0;
   const sup = ev.filter((x) => x.score >= 0.15).sort((a, b) => b.w * b.score - a.w * a.score), opp = ev.filter((x) => x.score <= -0.15).sort((a, b) => a.w * a.score - b.w * b.score);
-  const cov = W / REGIME_EVIDENCE.reduce((a, x) => a + x[3], 0), agree = label === 'Neutral' ? 0.6 : (label === 'Bullish' ? sup : opp).reduce((a, x) => a + x.w, 0) / W;
+  const cov = W / REGIME_EVIDENCE.reduce((a, x) => a + x[3], 0), agree = !dir ? 0.6 : (dir > 0 ? sup : opp).reduce((a, x) => a + x.w, 0) / W;
   const confidence = cov >= 0.85 && agree >= 0.55 && Math.abs(score) >= 0.3 ? 'High' : cov >= 0.6 && agree >= 0.4 ? 'Moderate' : 'Low';
   const nm = (xs) => joinAnd(xs.slice(0, 3).map((x) => x.name.toLowerCase()));
-  const why = `${label === 'Neutral' ? 'Structural evidence is balanced' : `Structural evidence leans ${label.toLowerCase()}`}: ${sup.length ? `${nm(sup)} ${sup.length > 1 ? 'are' : 'is'} supportive` : 'nothing is clearly supportive'}${opp.length ? `, while ${nm(opp)} ${opp.length > 1 ? 'point' : 'points'} the other way` : ''}.${C ? ` The combination is most consistent with ${withArticle(C.phase)}${C.transitional && C.runnerUp ? ` (bordering on ${withArticle(C.runnerUp.phase)})` : ''}.` : ''}`;
-  return { label, score, confidence, evidence: ev.map((x) => ({ ...x, word: x.score >= 0.15 ? 'Supportive' : x.score <= -0.15 ? 'Against' : 'Neutral' })), why, character: C };
+  const why = `${!dir ? 'Structural evidence is balanced' : `Structural evidence reads ${label.toLowerCase()}`}: ${sup.length ? `${nm(sup)} ${sup.length > 1 ? 'are' : 'is'} supportive` : 'nothing is clearly supportive'}${opp.length ? `, while ${nm(opp)} ${opp.length > 1 ? 'point' : 'points'} the other way` : ''}.${C ? ` The combination is most consistent with ${withArticle(C.phase)}${C.transitional && C.runnerUp ? ` (bordering on ${withArticle(C.runnerUp.phase)})` : ''}.` : ''}`;
+  return { label, score, confidence, evidence: ev.map((x) => ({ ...x, word: LBL(x.score) })), why, character: C };
 }
-function overallAssessment(state, overall, drivers, offsets, regime) {
-  const label = ['Strong', 'Constructive'].includes(state) ? 'Bullish' : ['Cautious', 'Weak'].includes(state) ? 'Bearish' : 'Neutral';
+function overallAssessment(state, overall, drivers, offsets, regime, mixed) {
   const f = (xs) => xs.slice(0, 3).map((x) => x.name);
-  return { label, state, score: overall, drivers: f(drivers), offsets: f(offsets),
-    why: `${label} on balance (market read ${state.toLowerCase()}). ${drivers.length ? `Principal supports: ${joinAnd(f(drivers).map((x) => x.toLowerCase()))}.` : 'No strong supportive force.'} ${offsets.length ? `Principal offsets: ${joinAnd(f(offsets).map((x) => x.toLowerCase()))}.` : 'No strong offsetting force.'}${regime && regime.label !== label ? ` The structural regime reads ${regime.label.toLowerCase()}: shorter-horizon factors (positioning, sentiment, near-term macro) explain the difference.` : ''}` };
+  return { label: state, state, score: overall, drivers: f(drivers), offsets: f(offsets),
+    why: `${state} on balance${mixed ? ', with domains pulling in opposite directions' : ''}. ${drivers.length ? `Principal supports: ${joinAnd(f(drivers).map((x) => x.toLowerCase()))}.` : 'No strong supportive force.'} ${offsets.length ? `Principal offsets: ${joinAnd(f(offsets).map((x) => x.toLowerCase()))}.` : 'No strong offsetting force.'}` };
 }
 
 function riskRegime(R, Dm, V, divergences) {
@@ -623,7 +625,7 @@ function fairGrade(Dm, V, risk, divCount, breadth) {
   const breadthPts = clamp((breadth.n - 2.5) * 1.5, -4, 4);
   const riskPts = -(Math.min(3, divCount) * 1.5) - ({ High: 4, Elevated: 2 }[risk.level] || 0);
   const valPts = V ? VAL_ADJ[V.state] : 0;
-  parts.push({ key: 'breadth', label: 'Breadth', max: 4, pts: breadthPts, note: `${breadth.n} of ${breadth.of} domains supportive.` });
+  parts.push({ key: 'breadth', label: 'Breadth', max: 4, pts: breadthPts, note: `${breadth.n} of ${breadth.of} domains Constructive or better.` });
   parts.push({ key: 'risk', label: 'Risk adjustment', max: 8.5, pts: riskPts, note: `${divCount} divergence(s); risk regime ${risk.level.toLowerCase()}.` });
   parts.push({ key: 'valuation', label: 'Valuation adjustment', max: 8, pts: valPts, note: V ? `Valuation ${V.state.toLowerCase()}.` : 'Valuation unavailable.' });
   const raw = 50 + parts.reduce((a, p) => a + p.pts, 0);
@@ -639,18 +641,19 @@ function synth(X, d, R, only) {
   const W = { tech: 0.25, chain: 0.2, mkt: 0.25, sent: 0.1, macro: 0.2 };
   const wsum = live.reduce((a, x) => a + W[x.key], 0), overall = wsum ? live.reduce((a, x) => a + W[x.key] * x.score, 0) / wsum : 0;
   let state;
-  if (overall >= 0.35 && breadth.n >= 4) state = 'Strong';
+  if (overall >= 0.35 && breadth.n >= 4) state = 'Supportive';
   else if (overall >= 0.15 && breadth.n >= 3) state = 'Constructive';
   else if (overall >= 0.12) state = 'Constructive';
-  else if (overall <= -0.35 && breadth.neg >= 4) state = 'Weak';
-  else if (overall <= -0.12) state = 'Cautious';
-  else state = breadth.n >= 2 && breadth.neg >= 2 ? 'Mixed' : 'Neutral';
+  else if (overall <= -0.35 && breadth.neg >= 4) state = 'Adverse';
+  else if (overall <= -0.12) state = 'Cautionary';
+  else state = 'Neutral';
+  const mixed = state === 'Neutral' && breadth.n >= 2 && breadth.neg >= 2;
   const V = valuation(X, d, Rx, Dm);
   const cross = crossDomain(Rx, Dm);
   const divCount = cross.diverge.filter((x) => !x.constructive).length;
   const risk = riskRegime(Rx, Dm, V, divCount);
   const grade = fairGrade(Dm, V, risk, divCount, breadth);
-  return { Dm, breadth, overall, state, V, cross, risk, grade, R: Rx };
+  return { Dm, breadth, overall, state, mixed, V, cross, risk, grade, R: Rx };
 }
 
 // ---------------------------------------------------------------------------
@@ -702,7 +705,7 @@ export function intelligence(input) {
   const REG = marketRegime(S.Dm, C);
   const out = {
     version: INTEL_VERSION, asOf: d, generatedAt: X.nowIso,
-    state: S.state, overall: S.overall, breadth: S.breadth, grade: S.grade,
+    state: S.state, mixed: S.mixed, overall: S.overall, breadth: S.breadth, grade: S.grade,
     confidence: (() => { const l = S.Dm.filter((x) => x.score !== null).map((x) => x.confidence.score); const m = mean(l) ?? 0; return { level: m >= 0.72 ? 'High' : m >= 0.5 ? 'Moderate' : 'Low', score: m }; })(),
     domains: S.Dm.map((x) => ({ ...x, comps: x.comps.map((c) => ({ ...c, indicators: c.indicators.map((i) => R[i.id] || i) })) })),
     forces, drivers, offsets, watch,
@@ -711,9 +714,9 @@ export function intelligence(input) {
   };
   out.horizons = ['short', 'medium', 'long'].map((h) => { const r = Object.values(R).filter((x) => x.horizon === h && x.s !== null); const m = r.length ? mean(r.map((x) => x.s)) : null; return { h, label: { short: 'Short term (days)', medium: 'Medium term (weeks)', long: 'Long term (months+)' }[h], score: m, state: m === null ? 'No data' : LBL(m, false), n: r.length, sup: r.filter((x) => x.s >= 0.2).length, cau: r.filter((x) => x.s <= -0.2).length }; });
   Object.defineProperty(out, 'inputs', { value: X, enumerable: false });
-  out.assessment = overallAssessment(out.state, out.overall, drivers, offsets, REG);
+  out.assessment = overallAssessment(out.state, out.overall, drivers, offsets, REG, S.mixed);
   out.narrative = narrative(out);
-  out.headline = `${out.state} · Fair Grade ${out.grade.value}/100 · ${out.breadth.n} of ${out.breadth.of} domains supportive`;
+  out.headline = `${out.state} · Fair Grade ${out.grade.value}/100 · ${out.breadth.n} of ${out.breadth.of} domains Constructive or better`;
   return out;
 }
 
@@ -721,7 +724,7 @@ export function intelligence(input) {
 function narrative(I) {
   const P = [], D = (k) => I.domains.find((x) => x.key === k);
   const sup = I.domains.filter((x) => x.score >= 0.15).map((x) => x.name.toLowerCase()), neg = I.domains.filter((x) => x.score !== null && x.score <= -0.15).map((x) => x.name.toLowerCase());
-  P.push(`Bitcoin’s overall market configuration reads <b>${I.state.toLowerCase()}</b>, with a Fair Grade of ${I.grade.value} out of 100. ${I.breadth.n} of the ${I.breadth.of} analytical domains are supportive${sup.length ? ` (${joinAnd(sup)})` : ''}${neg.length ? `, while ${joinAnd(neg)} ${neg.length > 1 ? 'lean' : 'leans'} against it` : ''}. ${I.regime ? `Structurally, conditions are consistent with a <b>${I.regime.label.toLowerCase()} regime</b>${I.cycle ? ` resembling ${withArticle(I.cycle.phase)}` : ''}` : ''}${I.valuation ? `${I.regime ? ', with valuation' : 'Valuation is'} <b>${I.valuation.state.toLowerCase()}</b>` : ''}.`);
+  P.push(`Bitcoin’s overall market configuration reads <b>${I.state.toLowerCase()}</b>, with a Fair Grade of ${I.grade.value} out of 100. ${I.breadth.n} of the ${I.breadth.of} analytical domains read Constructive or better${sup.length ? ` (${joinAnd(sup)})` : ''}${neg.length ? `, while ${joinAnd(neg)} ${neg.length > 1 ? 'lean' : 'leans'} against it` : ''}. ${I.cycle ? `The structure is consistent with <b>${withArticle(I.cycle.phase)}</b>` : ''}${I.valuation ? `${I.regime ? ', with valuation' : 'Valuation is'} <b>${I.valuation.state.toLowerCase()}</b>` : ''}.`);
   if (I.drivers.length) P.push(`The strongest supports right now: ${I.drivers.slice(0, 3).map((x) => `<b>${x.name.toLowerCase()}</b> — ${x.text.replace(/\.$/, '')}`).join('; ')}.${I.drivers[0].persistence >= 7 ? ` The lead support has held for ${I.drivers[0].persistence >= 30 ? 'at least 30' : I.drivers[0].persistence} days, so it is not a one-day blip.` : ''}`);
   if (I.offsets.length) P.push(`Holding it back: ${I.offsets.slice(0, 3).map((x) => `<b>${x.name.toLowerCase()}</b> — ${x.text.replace(/\.$/, '')}`).join('; ')}.${I.offsets.some((x) => x.horizon === 'short') && I.drivers.some((x) => x.horizon !== 'short') ? ' Some of these offsets are short-term in nature, while the main supports work over weeks to months; the engine weighs them accordingly.' : ''}`);
   const cr = I.confirmation;
@@ -805,7 +808,7 @@ export function regimeTimeline(X) {
   if (X._c.rt) return X._c.rt;
   const a = new Map(indicatorHistory(X, 't_ma200').pts.map((p) => [p[0], p[1]])), b = indicatorHistory(X, 't_slope200').pts;
   const wk = []; let lastW = null;
-  for (const [d, sl] of b) { const w = Math.floor(Date.parse(d) / (7 * DAYMS)); if (w === lastW || !a.has(d)) continue; lastW = w; const m = a.get(d); wk.push([d, m > 0 && sl > 0.5 ? 'Bullish' : m < 0 && sl < -0.5 ? 'Bearish' : 'Neutral']); }
+  for (const [d, sl] of b) { const w = Math.floor(Date.parse(d) / (7 * DAYMS)); if (w === lastW || !a.has(d)) continue; lastW = w; const m = a.get(d); wk.push([d, m > 0 && sl > 0.5 ? 'Constructive' : m < 0 && sl < -0.5 ? 'Cautionary' : 'Neutral']); }
   const runs = [];
   for (const [d, l] of wk) { const r = runs.at(-1); if (r && r.label === l) r.end = d; else runs.push({ label: l, start: d, end: d }); }
   // fold runs shorter than 4 weeks into their neighbours (noise around the average)

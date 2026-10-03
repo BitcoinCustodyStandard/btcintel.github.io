@@ -15,11 +15,11 @@ export function reportModel(I, a = null) {
   return {
     date: I.asOf,
     sections: [
-      { title: 'Executive market read', lines: [`${I.assessment?.label ? I.assessment.label + ' — ' : ''}${I.state}. Fair Grade ${I.grade.value}/100. ${I.breadth.n} of ${I.breadth.of} domains supportive; ${I.confidence.level.toLowerCase()} confidence.`, ...(I.narrative?.[0] ? [I.narrative[0].replace(/<\/?b>/g, '')] : [])] },
+      { title: 'Executive market read', lines: [`${I.state}. Fair Grade ${I.grade.value}/100. ${I.breadth.n} of ${I.breadth.of} domains supportive; ${I.confidence.level.toLowerCase()} confidence.`, ...(I.narrative?.[0] ? [I.narrative[0].replace(/<\/?b>/g, '')] : [])] },
       { title: 'Key drivers', lines: I.drivers.slice(0, 5).map((f) => `${f.name} (${f.strengthWord.toLowerCase()}, ${f.horizon} term, ${f.persistence >= 30 ? '30+' : f.persistence} days): ${f.text}`) },
       { title: 'Key offsets', lines: I.offsets.slice(0, 5).map((f) => `${f.name} (${f.strengthWord.toLowerCase()}, ${f.horizon} term): ${f.text}`) },
       dom('tech', 'Technical'), dom('chain', 'On-Chain'), dom('mkt', 'Market Structure'), dom('sent', 'Sentiment'), dom('macro', 'Macro & Liquidity'),
-      { title: 'Market regime', lines: I.regime ? [`${I.regime.label} (${I.regime.confidence.toLowerCase()} confidence). ${I.regime.why}`] : [] },
+      { title: 'Market structure context', lines: I.regime ? [`${I.cycle ? `Consistent with ${I.cycle.phase.toLowerCase()}. ` : ''}${I.regime.why}`] : [] },
       { title: 'Valuation', lines: I.valuation ? [`${I.valuation.state}. ${I.valuation.context}`, I.valuation.evidence.map((e) => `${e.name} ${e.disp} (${e.zone})`).join(' · ')] : [] },
       { title: 'What changed', lines: [ch(I.changes.d2, '2 days'), ch(I.changes.d7, '7 days'), ch(I.changes.d30, '30 days')] },
       { title: 'Important charts', lines: [], note: 'Planned: price with trend envelope, domain reads over time, Fair Grade history and the key indicator charts from the Analysis pages.' },

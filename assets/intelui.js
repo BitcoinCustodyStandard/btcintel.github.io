@@ -3,7 +3,7 @@
 //   intelligenceHtml — Intelligence tab: what matters now and why, valuation, market regime, risk
 // All text comes from the engine's evidence; nothing here adds figures of its own.
 
-import { DOMAIN_SLUG, DEF_BY_ID, indSlug } from '../engine/intel.js?v=20261003p';
+import { DOMAIN_SLUG, DEF_BY_ID, indSlug } from '../engine/intel.js?v=20261003r';
 
 const DLINK = (k) => `#analysis/${DOMAIN_SLUG[k]}`;
 const ILINK = (id) => (DEF_BY_ID[id] ? `${DLINK(DEF_BY_ID[id].domain)}/${indSlug(id)}` : '#analysis');
@@ -30,7 +30,7 @@ export function marketReadHtml(I, info = () => '') {
       <div class="ir-state t-${toneOf(I.state)}">${esc(I.state)}</div>
       <div class="ir-grade" title="Fair Grade: the engine’s score of today’s overall market configuration (not a forecast)"><span class="k">Fair Grade${info('i_grade')}</span><b class="num">${I.grade.value}</b><span class="of">/ 100</span><span class="gbar2"><i style="width:${I.grade.value}%"></i></span></div>
     </div>
-    <p class="ir-sub"><b>${I.breadth.n} of ${I.breadth.of}</b> domains supportive${I.breadth.neg ? ` · ${I.breadth.neg} cautionary` : ''} · ${conf(I.confidence.level)}</p>
+    <p class="ir-sub"><b>${I.breadth.n} of ${I.breadth.of}</b> domains Constructive or better${I.breadth.neg ? ` · ${I.breadth.neg} Cautionary or worse` : ''} · ${conf(I.confidence.level)}</p>
     <div class="ir-doms">${I.domains.map((d) => `<a class="ir-dom t-${toneOf(d.state, d.score)}" href="${DLINK(d.key)}" title="${esc(d.question)}"><span class="n">${esc(d.name)}</span><span class="a">${d.arrow}</span><span class="s">${esc(d.state)}</span></a>`).join('')}</div>
     <div class="ir-cols">
       <div><h3>Key drivers${info('i_forces')}</h3>${I.drivers.length ? `<ul class="ir-f">${I.drivers.slice(0, 3).map(li).join('')}</ul>` : '<p class="muted small">No strong supportive force right now.</p>'}</div>
@@ -81,7 +81,7 @@ export function intelligenceHtml(I, info = () => '') {
       <div class="ihero-l">
         <span class="k">Market intelligence · current read${info('i_read')}</span>
         <div class="ir-state big t-${toneOf(I.state)}">${esc(I.state)}</div>
-        <p class="ir-sub">Fair Grade <b class="num">${I.grade.value}</b> / 100 (${gradeWord(I.grade.value)}) · ${I.breadth.n} of ${I.breadth.of} domains supportive · ${conf(I.confidence.level)}</p>
+        <p class="ir-sub">Fair Grade <b class="num">${I.grade.value}</b> / 100 (${gradeWord(I.grade.value)}) · ${I.breadth.n} of ${I.breadth.of} domains Constructive or better · ${conf(I.confidence.level)}</p>
         <div class="ir-concl">${V ? `<span><span class="k">Valuation</span><b>${esc(V.state)}</b></span>` : ''}${I.regime ? `<span><span class="k">Market regime</span><b>${esc(I.regime.label)}</b></span>` : ''}<span><span class="k">Risk regime</span><b>${esc(K.level)}</b></span></div>
       </div>
       <div class="ihero-r"><p class="xs dim" style="margin:0 0 6px">The five analytical domains — open one for its research page:</p><div class="imatrix sm">${I.domains.map((d) => `<a href="${DLINK(d.key)}" class="imx t-${toneOf(d.state, d.score)}"><span class="n">${esc(d.name)}</span><b>${d.arrow} ${esc(d.state)}</b></a>`).join('')}</div></div>
@@ -125,7 +125,7 @@ export function intelligenceHtml(I, info = () => '') {
         <p class="xs dim">Each input is placed on a cheap-to-rich scale against its own historical zones; the weighted reading sets the state (MVRV carries the most weight; NUPL and realised price repeat MVRV and are not counted twice). MVRV Z-Score is shown on the Analysis pages; NVT is not available from free sources.</p></div>` : '<p class="muted">Valuation inputs unavailable.</p>'}</section>
 
     <section class="block"><div class="bh"><h2>Market regime${info('i_cycle')}</h2><p class="aside">What regime current conditions are consistent with · <a href="#analysis/regime">evidence and historical context on Analysis →</a></p></div>
-      ${I.regime ? `<div class="iconc"><div class="iconc-h"><div class="ir-state t-${{ Bullish: 'up', Neutral: 'neu', Bearish: 'warn' }[I.regime.label]}">${esc(I.regime.label)}</div>${conf(I.regime.confidence)}${C ? `<span class="small muted">Most consistent with ${esc(C.phase.toLowerCase())}${C.transitional && C.runnerUp ? `, bordering on ${esc(C.runnerUp.phase.toLowerCase())}` : ''}</span>` : ''}</div>
+      ${I.regime ? `<div class="iconc"><div class="iconc-h"><div class="ir-state t-${toneOf(I.regime.label)}">${esc(I.regime.label)}</div>${conf(I.regime.confidence)}${C ? `<span class="small muted">Most consistent with ${esc(C.phase.toLowerCase())}${C.transitional && C.runnerUp ? `, bordering on ${esc(C.runnerUp.phase.toLowerCase())}` : ''}</span>` : ''}</div>
         <p>${esc(I.regime.why)}</p>
         <p class="xs dim">Classified from structural evidence across all five domains (trend, price structure, holder positioning, on-chain flows, institutional demand, liquidity, leverage, valuation room) — not from a cycle clock or time since the halving.</p></div>` : '<p class="muted">Not enough data.</p>'}</section>
 

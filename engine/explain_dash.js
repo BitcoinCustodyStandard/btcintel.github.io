@@ -340,7 +340,7 @@ export const DASH_EXPLAIN = {
   // ---- Market Intelligence Engine (engine/intel.js)
   i_read: {
     title: 'Market read',
-    what: 'The engine’s one-word summary of Bitcoin’s market configuration — Strong, Constructive, Neutral, Mixed, Cautious or Weak — built from five analytical domains: technical, on-chain, market structure, sentiment, and macro & liquidity.',
+    what: 'The engine’s one-word summary of Bitcoin’s market configuration on one five-step scale — Adverse, Cautionary, Neutral, Constructive or Supportive — built from five analytical domains: technical, on-chain, market structure, sentiment, and macro & liquidity.',
     why: 'It reads each of about 80 free indicators on its own scale, combines like with like inside each domain, and only then asks how many domains agree. Broad agreement across independent domains counts for more than any single strong signal.',
     caveat: () => 'A description of current conditions from public data — not investment advice and not a forecast. Open the Analysis tab to see every indicator behind it.',
   },

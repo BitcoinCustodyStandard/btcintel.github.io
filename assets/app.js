@@ -6,14 +6,14 @@ import { briefReport } from '../engine/report.js';
 import { brief } from '../engine/brief.js';
 import { ZONES } from '../engine/cycle.js';
 import { explain, EXPLAIN, REMINDER } from '../engine/explain.js';
-import { startLivePrice } from './live.js?v=20261003p';
-import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003p';
-import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261003p';
-import { intelligence } from '../engine/intel.js?v=20261003p';
-import { reportModel } from '../engine/reportmodel.js?v=20261003p';
-import { intelligenceHtml, wireIntel } from './intelui.js?v=20261003p';
-import { analysisRoute, indicatorPanel, idFromHref, ribbonMenu } from './research.js?v=20261003p';
-import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003p';
+import { startLivePrice } from './live.js?v=20261003r';
+import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003r';
+import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261003r';
+import { intelligence } from '../engine/intel.js?v=20261003r';
+import { reportModel } from '../engine/reportmodel.js?v=20261003r';
+import { intelligenceHtml, wireIntel } from './intelui.js?v=20261003r';
+import { analysisRoute, indicatorPanel, idFromHref, ribbonMenu } from './research.js?v=20261003r';
+import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003r';
 import { fmtUsd, fmtUsdSigned, fmtPrice, fmtPct, fmtNum, fmtK, ordinal } from '../engine/util.js';
 
 const state = { a: null, rows: [], runs: [], index: null, snapshot: null, range: 90, pi: null, dash: null, live: null, liveState: 'init' };
@@ -261,7 +261,7 @@ function renderAnalysis(scroll) {
   const k = location.hash.slice(1);
   if (k === analysisKey && el.childElementCount) return;
   analysisKey = k;
-  const v = analysisRoute(k.split('/'), state.intel, { wireChart, a: state.a, extras: { marketLiquidity: () => `<section class="block" id="mkt-liquidity">${liquidityTab().s}</section>` } });
+  const v = analysisRoute(k.split('/'), state.intel, { wireChart, a: state.a, info: infoS, extras: { marketLiquidity: () => `<section class="block" id="mkt-liquidity">${liquidityTab().s}</section>` } });
   el.innerHTML = v.html;
   // returning from a child view (an indicator or sub-section of this page): restore the old position
   const back = prevKey && prevKey.startsWith(k + '/') && scrollMem.has(k) ? scrollMem.get(k) : null;
