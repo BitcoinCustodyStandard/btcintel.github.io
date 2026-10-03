@@ -4,10 +4,10 @@
 // data/latest.json (agent snapshot) and data/pi_cycle.json. Values that cannot be
 // obtained free are shown as such, never estimated.
 
-import { startNetwork, seedNetwork, refreshNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js?v=20261003n';
-import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js?v=20261003n';
-import { priceCardHtml, envelopeNow } from './pricechart.js?v=20261003n';
-import { marketReadHtml } from './intelui.js?v=20261003n';
+import { startNetwork, seedNetwork, refreshNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js?v=20261003o';
+import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js?v=20261003o';
+import { priceCardHtml, envelopeNow } from './pricechart.js?v=20261003o';
+import { marketReadHtml } from './intelui.js?v=20261003o';
 
 // ---------- formatting ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -605,7 +605,7 @@ function refreshSide() {
 }
 let readT = 0;
 export function dashLive(live) { S.live = live; paintHero(); paintCards(); paintSince(); if (Date.now() - readT > 60e3) { readT = Date.now(); paintRead(); paintPosture(); } }
-// Refresh button: network data, CoinGecko market stats and the 15-minute feed file, now
+// Automatic refresh: network data, CoinGecko market stats and the 15-minute feed file, now
 async function loadEtfFlows() { try { const r = await fetch('data/etf_flows.json', { cache: 'no-store' }); if (r.ok) { S.etfFlows = await r.json(); paintCards(); } } catch {} }
 export async function refreshDash() {
   loadEtfFlows();

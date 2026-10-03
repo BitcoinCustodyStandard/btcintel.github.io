@@ -40,7 +40,7 @@ export function seedNetwork(snap) {
 }
 
 let api = null;
-// re-fetch everything now (used by the Refresh button); the WebSocket keeps running
+// re-fetch everything now (used by the automatic refresh); the WebSocket keeps running
 export const refreshNetwork = () => (api ? Promise.all([api.fast(), api.slow(), api.tip()]) : Promise.resolve());
 
 // chain-tip providers, tried in order; each returns blocks in mempool.space's shape (newest first)

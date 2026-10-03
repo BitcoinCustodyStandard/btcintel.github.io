@@ -6,14 +6,14 @@ import { briefReport } from '../engine/report.js';
 import { brief } from '../engine/brief.js';
 import { ZONES } from '../engine/cycle.js';
 import { explain, EXPLAIN, REMINDER } from '../engine/explain.js';
-import { startLivePrice } from './live.js?v=20261003n';
-import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003n';
-import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261003n';
-import { intelligence } from '../engine/intel.js?v=20261003n';
-import { reportModel } from '../engine/reportmodel.js?v=20261003n';
-import { intelligenceHtml, wireIntel } from './intelui.js?v=20261003n';
-import { analysisRoute, indicatorPanel, idFromHref, ribbonMenu } from './research.js?v=20261003n';
-import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003n';
+import { startLivePrice } from './live.js?v=20261003o';
+import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003o';
+import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261003o';
+import { intelligence } from '../engine/intel.js?v=20261003o';
+import { reportModel } from '../engine/reportmodel.js?v=20261003o';
+import { intelligenceHtml, wireIntel } from './intelui.js?v=20261003o';
+import { analysisRoute, indicatorPanel, idFromHref, ribbonMenu } from './research.js?v=20261003o';
+import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003o';
 import { fmtUsd, fmtUsdSigned, fmtPrice, fmtPct, fmtNum, fmtK, ordinal } from '../engine/util.js';
 
 const state = { a: null, rows: [], runs: [], index: null, snapshot: null, range: 90, pi: null, dash: null, live: null, liveState: 'init' };
@@ -625,7 +625,7 @@ window.addEventListener('scroll', () => {
 // ---------- render ----------
 // ---------- Market Intelligence Engine ----------
 const infoS = (k) => info(k).s; // the views build plain strings
-// Recomputed from every published file (and the live price) on load, on Refresh, when the
+// Recomputed from every published file (and the live price) on load, on each automatic refresh, when the
 // 15-minute feed changes and every ten minutes; ~0.3 s of work in the browser.
 function computeIntel() {
   try { state.intel = intelligence({ a: state.a, rows: state.rows, pi: state.pi, dash: getDash() || state.dash, etf: state.etf, long: state.long, live: state.live }); }
@@ -650,7 +650,7 @@ function render() {
   state.b = b;
   const old = ageH(a.dataThrough);
   const banners = [];
-  if (old !== null && old > 30) banners.push(h`<div class="banner warn">The latest analysis is ${Math.round(old)} hours old. The scheduled server update may be delayed; press <b>Refresh</b> to check for newer data.</div>`);
+  if (old !== null && old > 30) banners.push(h`<div class="banner warn">The latest analysis is ${Math.round(old)} hours old. The scheduled server update may be delayed; the page checks for newer data automatically every 10 minutes.</div>`);
   const liveN = a.quality.filter((q) => q.status === 'ok').length;
   if (a.kind === 'browser' && liveN < 5) banners.push(h`<div class="banner warn">Browser refresh could reach only ${liveN} of ${a.quality.length} sources from this network. All other values are the last server values, marked stale with their original timestamps. Values from the last server update are shown with their original timestamps.</div>`);
   else if (a.kind === 'browser') banners.push(h`<div class="banner">Browser refresh: ${liveN} sources retrieved live. ETF flows, FRED, Yahoo and CFTC data cannot be fetched from a browser and show their last server values. Not saved to the archive.</div>`);
@@ -743,29 +743,27 @@ async function load() {
   state.rows = ts.status === 'fulfilled' ? ts.value.rows || [] : [];
   state.index = idx.status === 'fulfilled' ? idx.value : null;
   if (latest.status === 'fulfilled' && latest.value?.metrics) { state.a = latest.value; render(); return; }
-  $('#app').innerHTML = h`<div class="empty-state"><p><b>No stored analysis yet.</b></p><p>The scheduled server job has not published its first analysis yet. Press <b>Refresh</b> in a few minutes.</p></div>`.s;
+  $('#app').innerHTML = h`<div class="empty-state"><p><b>No stored analysis yet.</b></p><p>The scheduled server job has not published its first analysis yet. Reload this page in a few minutes.</p></div>`.s;
 }
 
 const progress = (t) => { $('#progress').textContent = t || ''; };
 
-// ---------- the single Refresh button ----------
-// Polls the live price now, re-fetches the dashboard's live sources (mempool.space, CoinGecko),
-// and reloads the published data files; the page re-renders only if the server analysis changed.
-let refreshing = false;
+// ---------- automatic refresh (no button) ----------
+// Every 10 minutes while the page is visible, and when the tab comes back after 10+ minutes:
+// polls the live price, re-fetches the dashboard's live sources and reloads the published data
+// files; the page re-renders only if the server analysis changed. Live price (10 s), latest block
+// (20 s) and the 15-minute feed keep their own faster cycles.
+let refreshing = false, lastRefresh = Date.now();
 async function refreshAll() {
   if (refreshing) return;
-  refreshing = true;
-  const btn = $('#btn-refresh'), label = btn.querySelector('span');
-  btn.disabled = true; btn.classList.add('busy'); label.textContent = 'Refreshing…';
-  progress('Refreshing live price, network data and published analysis…');
-  const t0 = Date.now(), before = state.a?.generatedAt;
+  refreshing = true; lastRefresh = Date.now();
+  const before = state.a?.generatedAt;
   try {
     const [live, files] = await Promise.all([
       liveFeed ? liveFeed.now() : null,
       Promise.allSettled([getJSON('data/latest.json'), getJSON('data/timeseries.json'), getJSON('data/pi_cycle.json'), getJSON('data/index.json'), getJSON('data/runs.json'), getJSON('data/etf_flows.json'), getJSON('data/longhist.json')]),
       refreshDash(),
     ]);
-    await new Promise((r) => setTimeout(r, Math.max(0, 600 - (Date.now() - t0)))); // keep the busy state visible briefly
     const [latest, ts, pi, idx, runs, etf, long] = files.map((r) => (r.status === 'fulfilled' ? r.value : null));
     if (long?.series) state.long = long;
     if (etf?.rows) state.etf = etf;
@@ -776,20 +774,16 @@ async function refreshAll() {
     if (pi?.rows) state.pi = pi;
     const changed = latest?.metrics && latest.generatedAt !== before;
     if (live) state.live = live;
-    if (changed) { state.a = latest; render(); } else { if (piChanged && tabFromHash() === 'dashboard') drawPriceChart($('#pc-chart'), state.pi, state.live); updateIntel(); }
+    // a new analysis re-renders everything, except while a reader is deep in an Analysis page
+    if (changed && !(tabFromHash() === 'analysis' && location.hash.split('/').length > 1)) { state.a = latest; render(); }
+    else { if (changed) state.a = latest; if (piChanged && tabFromHash() === 'dashboard') drawPriceChart($('#pc-chart'), state.pi, state.live); updateIntel(); }
     if (live) paintLive();
-    const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    progress(`Updated ${t} in ${((Date.now() - t0) / 1000).toFixed(1)}s — live price ${live ? `${live.source} ${fmtPrice(live.price)}` : 'unavailable'} · analysis data through ${fmtTime(state.a?.dataThrough)}${changed ? ' (new analysis loaded)' : ''}.`);
-    label.textContent = `Updated ${t}`;
-    setTimeout(() => { if (!refreshing) label.textContent = 'Refresh'; }, 4000);
-    setTimeout(() => progress(''), 10000);
-  } catch (e) {
-    progress('Refresh failed: ' + e.message);
-    label.textContent = 'Refresh';
-  } finally { refreshing = false; btn.disabled = false; btn.classList.remove('busy'); }
+  } catch (e) { console.warn('auto refresh', e); }
+  finally { refreshing = false; }
 }
+setInterval(() => { if (!document.hidden && state.a) refreshAll(); }, 10 * 60e3);
+document.addEventListener('visibilitychange', () => { if (!document.hidden && state.a && Date.now() - lastRefresh > 10 * 60e3) refreshAll(); });
 
-$('#btn-refresh').addEventListener('click', refreshAll);
 $('#btn-theme').addEventListener('click', () => {
   const cur = document.documentElement.dataset.theme === 'light' ? 'dark' : 'light';
   document.documentElement.dataset.theme = cur;

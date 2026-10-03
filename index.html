@@ -11,7 +11,7 @@
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Serif:wght@400;500&display=swap" rel="stylesheet">
 <!-- bump ?v= here and on the assets/*.js imports together when CSS or page modules change -->
-<link rel="stylesheet" href="assets/app.css?v=20261003n">
+<link rel="stylesheet" href="assets/app.css?v=20261003o">
 <script>
   try { const t = localStorage.getItem('bmi-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
 </script>
@@ -23,7 +23,6 @@
       <span class="t1">BTC Intel</span><span class="brand-sep">/</span><span class="t2">Bitcoin Market Intelligence</span>
     </a>
     <div class="actions">
-      <button class="btn" id="btn-refresh" type="button" title="Update the live price now and reload the latest dashboard data"><i class="spin" aria-hidden="true"></i><span>Refresh</span></button>
       <button class="btn ghost icon-btn" id="btn-theme" type="button" aria-label="Toggle light/dark theme"><svg viewBox="0 0 16 16" aria-hidden="true"><path d="M8 1a7 7 0 1 0 0 14A7 7 0 0 0 8 1zm0 1.5v11a5.5 5.5 0 0 1 0-11z"/></svg></button>
     </div>
   </div>
@@ -37,7 +36,6 @@
       <a href="#overview" data-tab-link="overview">Intelligence</a>
       <a href="#dca" data-tab-link="dca">DCA backtest</a>
       <a href="#reports" data-tab-link="reports">Reports</a>
-      <a href="battlefield/" class="nav-bf">Battlefield ↗</a>
     </div>
     <div class="nav-tools">
       <span class="nav-price mono" id="nav-price"></span>
@@ -65,7 +63,7 @@
     <p><a href="/">BTC Intel</a> · <a href="data/index.json">Report archive (JSON)</a> · <a href="data/timeseries.json">Daily timeseries (JSON)</a> · <a href="https://github.com/BitcoinCustodyStandard/btcintel.github.io/blob/main/README.md" target="_blank" rel="noopener">Methodology &amp; operations</a></p>
   </div>
 </footer>
-<script type="module" src="assets/app.js?v=20261003n"></script>
+<script type="module" src="assets/app.js?v=20261003o"></script>
 <!-- GoatCounter (privacy-friendly, no cookies). Shares the bcs.goatcounter.com account;
      every path is prefixed "btcintel.org" so this site's traffic stays separate there.
      Hash routes (#analysis/…, #reports…) are counted as their own page views. -->
