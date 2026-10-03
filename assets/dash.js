@@ -4,9 +4,9 @@
 // data/latest.json (agent snapshot) and data/pi_cycle.json. Values that cannot be
 // obtained free are shown as such, never estimated.
 
-import { startNetwork, seedNetwork, refreshNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js?v=20261003c';
-import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js?v=20261003c';
-import { priceCardHtml, envelopeNow } from './pricechart.js?v=20261003c';
+import { startNetwork, seedNetwork, refreshNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js?v=20261003d';
+import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js?v=20261003d';
+import { priceCardHtml, envelopeNow } from './pricechart.js?v=20261003d';
 
 // ---------- formatting ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -32,7 +32,7 @@ function ago(t, now = Date.now()) {
 const relShort = (t) => { const m = Math.round((Date.now() - t) / 60e3); return m < 1 ? 'now' : m < 60 ? `${m}m` : m < 1440 ? `${Math.floor(m / 60)}h` : `${Math.floor(m / 1440)}d`; };
 
 // ---------- state ----------
-const S = { a: null, dash: null, pi: null, live: null, cg: null, cgAt: null, glob: null, moves: [], moveStatus: {}, newsFilter: 'all', newsTone: 'all', newsAll: false, pmIdx: 0, pmAll: false, moveFilter: 'all', info: () => '' };
+const S = { a: null, dash: null, pi: null, live: null, cg: null, cgAt: null, glob: null, moves: [], moveStatus: {}, newsFilter: 'all', newsTone: 'all', newsAll: false, pmIdx: 0, pmAll: false, etfSort: 'assets', etfFlows: null, moveFilter: 'all', info: () => '' };
 const price = () => S.live?.price ?? S.a?.metrics?.price?.spot ?? null;
 const supplyNow = () => (N.height ? issuedSupply(N.height) : null);
 const cyM = (id) => S.a?.cycle?.metrics?.find((x) => x.id === id);
@@ -155,7 +155,11 @@ const GROUPS = [
   ] },
   { id: 'holders', title: 'ETFs & treasuries', cards: [
     { k: 'etf', label: 'Spot ETF net flow', info: 'd_etf', get: () => { const e = S.a?.metrics.etf; return ok(e?.last) ? { v: `<span class="${cls(e.last)}">${e.last >= 0 ? '+' : '−'}$${num(Math.abs(e.last), 1)}M</span>`, sub: `${dShort(e.lastDate)} · 5 days ${e.s5 >= 0 ? '+' : '−'}$${num(Math.abs(e.s5))}M · 20 days ${e.s20 >= 0 ? '+' : '−'}$${num(Math.abs(e.s20))}M`, src: 'Farside Investors', at: e.lastDate, max: 4 * DAY } : null; } },
-    { k: 'etfhold', label: 'Total ETF holdings', info: 'd_etf', get: () => NA('No free source publishes reliable daily holdings for all US spot ETFs; flows are shown instead.') },
+    { k: 'etftot', label: 'US spot Bitcoin ETFs: total', info: 'd_etfs', get: () => {
+      const E = S.dash?.etfs?.funds?.filter((f) => f.assets > 0); if (!E?.length) return null;
+      const tot = E.reduce((a, f) => a + f.assets, 0), btc = price() ? tot / price() : null, fl = etfFlowSums();
+      return { v: big(tot), sub: `${E.length} funds · ≈${btcF(btc)} held${supplyNow() && btc ? ` (${((btc / supplyNow()) * 100).toFixed(2)}% of supply)` : ''}${fl ? ` · flows 1d ${sgnM(fl.d1)} · 5d ${sgnM(fl.d5)} · 20d ${fl.n >= 20 ? sgnM(fl.d20) : '—'}` : ''}`, src: 'Yahoo Finance · Farside', at: S.dash.etfs.fetchedAt, max: 2 * DAY };
+    } },
     { k: 'treas', label: 'Public companies: total BTC', info: 'd_treasury', get: () => {
       const T = S.dash?.treasuries; if (!ok(T?.totalBtc)) return null;
       return { v: btcF(T.totalBtc), sub: `${T.companies} listed companies${supplyNow() ? ` · ${((T.totalBtc / supplyNow()) * 100).toFixed(2)}% of issued supply` : ''} · worth ${big(T.totalBtc * price())}`, src: 'CoinGecko treasuries', at: T.fetchedAt, max: 2 * DAY };
@@ -165,6 +169,7 @@ const GROUPS = [
       const t1 = T.top[0], s1 = (t1.btc / T.totalBtc) * 100, s5 = (T.top.slice(0, 5).reduce((a, c) => a + c.btc, 0) / T.totalBtc) * 100;
       return { v: pct(s1, 1, false), sub: `held by ${esc(t1.name)} alone · top 5 hold ${pct(s5, 0, false)} of all company BTC`, src: 'CoinGecko treasuries', at: T.fetchedAt, max: 2 * DAY };
     } },
+    { k: 'etftable', full: true, label: 'US spot Bitcoin ETFs — ranked', info: 'd_etfs', get: () => etfTable() },
     { k: 'treaslist', full: true, label: 'Largest public company holders', info: 'd_treasury', get: () => {
       const T = S.dash?.treasuries; if (!T?.top?.length) return null;
       const n = S.treasAll ? T.top.length : 12, sup = supplyNow();
@@ -425,6 +430,29 @@ function paintConverter(fromInput) {
   note.textContent = `$1 = ${num(1e8 / p)} sats · 1 BTC = 100,000,000 sats · at ${usd(p)}`;
 }
 
+// ---------- spot ETF table ----------
+const sgnM = (v) => (!ok(v) ? '—' : v === 0 ? '$0' : `${v > 0 ? '+' : '−'}$${num(Math.abs(v), Math.abs(v) < 10 ? 1 : 0)}M`);
+function etfFlowSums(sym) {
+  const rows = S.etfFlows?.rows; if (!rows?.length) return null;
+  if (sym && !rows.some((r) => r.funds && sym in r.funds)) return null; // fund not tracked by Farside
+  const v = (r) => (sym ? r.funds?.[sym] ?? 0 : r.total ?? 0), sum = (n) => rows.slice(-n).reduce((a, r) => a + v(r), 0);
+  return { d1: v(rows.at(-1)), d5: sum(5), d20: sum(20), all: sum(rows.length), n: rows.length, asOf: rows.at(-1).date, first: rows[0].date };
+}
+const ETF_SORT = [['assets', 'Market value'], ['d1', '1-day flow'], ['d5', '5-day flow'], ['d20', '20-day flow']];
+function etfTable() {
+  const E = S.dash?.etfs?.funds; if (!E?.length) return null;
+  const p = price(), tot = E.reduce((a, f) => a + (f.assets || 0), 0);
+  const rows = E.map((f) => ({ ...f, fl: etfFlowSums(f.sym) || {} })).sort((a, b) => (S.etfSort === 'assets' ? (b.assets || 0) - (a.assets || 0) : (b.fl[S.etfSort] ?? -1e12) - (a.fl[S.etfSort] ?? -1e12)));
+  const T = etfFlowSums(), n = T?.n || 0;
+  const flowCell = (v) => `<td class="r num ${cls(v)}">${ok(v) ? sgnM(v) : '<span class="dim">—</span>'}</td>`;
+  const sortBtns = ETF_SORT.map(([k, l]) => `<button type="button" data-etfsort="${k}" aria-pressed="${S.etfSort === k}">${l}</button>`).join('');
+  return { v: '', sub: `<div class="etf-tools"><span class="dim small">Rank by</span><div class="seg">${sortBtns}</div></div>
+    <div class="etf-wrap"><table class="pmt etft"><thead><tr><th>#</th><th>Fund</th><th class="r">Market value</th><th class="r">Share</th><th class="r">≈ BTC held</th><th class="r">Flow 1d</th><th class="r">5d</th><th class="r">20d</th><th class="r">Since ${dShort(T?.first)}</th><th class="r">Fee</th><th class="r">$ volume</th><th class="r">YTD</th></tr></thead><tbody>
+    ${rows.map((f, i) => `<tr><td class="dim">${i + 1}</td><td><b>${esc(f.sym)}</b> <span class="dim">${esc(f.issuer)}</span>${f.sym === 'DEFI' ? ' <span class="dim small">(not in Farside’s flow table)</span>' : ''}</td><td class="r num">${big(f.assets)}${f.assetsSrc && f.assetsSrc !== 'Yahoo Finance' ? '<sup title="from stockanalysis.com">*</sup>' : ''}</td><td class="r num">${f.assets ? ((f.assets / tot) * 100).toFixed(1) + '%' : '—'}</td><td class="r num">${f.assets && p ? num(f.assets / p) : '—'}</td>${flowCell(f.fl.d1)}${flowCell(f.fl.d5)}${n >= 20 ? flowCell(f.fl.d20) : '<td class="r dim">—</td>'}${flowCell(f.fl.all)}<td class="r num">${ok(f.feePct) ? f.feePct.toFixed(2) + '%' : '—'}</td><td class="r num">${big(f.dollarVolume)}</td><td class="r num ${cls(f.ytdPct)}">${pct(f.ytdPct)}</td></tr>`).join('')}
+    <tr class="tot"><td></td><td><b>All ${E.length} funds</b></td><td class="r num"><b>${big(tot)}</b></td><td class="r num">100%</td><td class="r num"><b>${p ? num(tot / p) : '—'}</b></td>${flowCell(T?.d1)}${flowCell(T?.d5)}${n >= 20 ? flowCell(T?.d20) : '<td class="r dim">—</td>'}${flowCell(T?.all)}<td></td><td class="r num">${big(E.reduce((a, f) => a + (f.dollarVolume || 0), 0))}</td><td></td></tr></tbody></table></div>
+    <p class="dim small etf-note">Market value is each fund’s reported net assets (Yahoo Finance${E.some((f) => f.assetsSrc === 'stockanalysis.com') ? '; * stockanalysis.com where Yahoo had none' : ''}) and can lag by a day or more. ≈ BTC held = market value ÷ live price, an estimate. Flows are Farside’s daily creations/redemptions in US$ millions${T ? `, latest ${dShort(T.asOf)}; history held: ${n} trading days since ${dShort(T.first)}${n < 20 ? ' (20-day column appears once 20 days are stored)' : ''}` : ''}.</p>`, src: 'Yahoo Finance · Farside Investors', at: S.dash.etfs.fetchedAt, max: 2 * DAY };
+}
+
 // ---------- market posture ----------
 // Fixed, published rules over data already on this page. Each signal scores +1, 0 or −1;
 // the total picks the label: ≥ +3 Constructive, ≤ −2 Cautious, otherwise Neutral.
@@ -596,7 +624,7 @@ export function dashTab({ a, pi, dash, info }) {
     <p>Each card shows its source and when the figure was last updated. The dot is green when the figure is within its normal update interval, amber when it is older than that, and grey when it is unavailable. Nothing is filled in or estimated when a source fails; the last good value is kept and marked.</p>
     <h3>Not shown, and why</h3>
     <ul>
-      <li><b>Total spot ETF holdings</b> — no free source publishes reliable daily holdings for every fund. Daily flows (Farside) are shown instead.</li>
+      <li><b>Exact ETF bitcoin holdings</b> — issuers publish them separately; the dashboard estimates holdings from each fund’s reported net assets (Yahoo Finance) and the live price.</li>
       <li><b>Most entity-adjusted and holder-cohort metrics</b> (long- vs short-term holder supply, entity-adjusted SOPR, cohort MVRV bands) — paid providers only. Short- and long-term holder realised prices are shown from BGeometrics’ free tier, which runs about a week behind.</li>
       <li><b>NVT, supply active in the last year, USD fee averages</b> — not in Coin Metrics’ free tier.</li>
       <li><b>Market-wide liquidation totals</b> — paid aggregators only. We show a one-venue sample from the last server run and a live stream of large liquidations from OKX and Bybit.</li>
@@ -614,6 +642,7 @@ export function dashTab({ a, pi, dash, info }) {
 let started = false, tickT = null, cgT = null;
 document.addEventListener('click', (e) => {
   if (e.target.closest?.('[data-treas-more]')) { S.treasAll = !S.treasAll; paintCards(); return; }
+  const es = e.target.closest?.('[data-etfsort]'); if (es) { S.etfSort = es.dataset.etfsort; paintCards(); return; }
   const pmb = e.target.closest?.('[data-pm]');
   if (pmb) { S.pmIdx = +pmb.dataset.pm; S.pmAll = false; document.querySelectorAll('[data-pm]').forEach((x) => x.setAttribute('aria-pressed', String(x === pmb))); paintPm(); return; }
   if (e.target.closest?.('[data-pm-all]')) { S.pmAll = !S.pmAll; paintPm(); return; }
@@ -639,6 +668,7 @@ export function mountDash({ dash, getLive }) {
   paintNews(); paintMoves(); paintMoveStatus(); paintHero(); paintCards(); paintClock(); paintSince(); paintRead(); paintPm(); paintDist(); paintPosture();
   if (started) return;
   started = true;
+  loadEtfFlows();
   startNetwork({ onUpdate: () => { paintCards(); paintClock(); paintHero(); paintSince(); }, onBlock: toastBlock });
   startMoves({ onEvent: (list) => { S.moves = list; paintMoves(); }, onStatus: (st) => { S.moveStatus = st; paintMoveStatus(); }, priceNow: price });
   fetchCg(); cgT = setInterval(fetchCg, 5 * 60e3);
@@ -659,7 +689,9 @@ function refreshSide() {
 let readT = 0;
 export function dashLive(live) { S.live = live; paintHero(); paintCards(); paintSince(); if (Date.now() - readT > 60e3) { readT = Date.now(); paintRead(); paintPosture(); } }
 // Refresh button: network data, CoinGecko market stats and the 15-minute feed file, now
+async function loadEtfFlows() { try { const r = await fetch('data/etf_flows.json', { cache: 'no-store' }); if (r.ok) { S.etfFlows = await r.json(); paintCards(); } } catch {} }
 export async function refreshDash() {
+  loadEtfFlows();
   const feed = fetch('data/dash.json', { cache: 'no-store' }).then((r) => (r.ok ? r.json() : null)).then((j) => { if (j) { S.dash = j; refreshSide(); paintCards(); } }).catch(() => {});
   await Promise.allSettled([refreshNetwork(), fetchCg(true), feed]);
   paintHero(); paintCards(); paintClock(); paintRead();

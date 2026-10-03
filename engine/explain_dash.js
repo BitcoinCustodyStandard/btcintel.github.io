@@ -361,6 +361,12 @@ export const DASH_EXPLAIN = {
     why: 'A way to see quantities — how many sats a habit adds — without pretending to know future prices.',
     caveat: () => 'Hypothetical: one constant price, not a forecast. It never shows a future value.',
   },
+  d_etfs: {
+    title: 'US spot Bitcoin ETFs',
+    what: 'All 13 US-listed spot Bitcoin ETFs ranked by market value (each fund’s reported net assets) or by flows — the dollars of new shares created or redeemed, which the fund turns into bitcoin bought or sold. Includes Grayscale’s Mini Trust (BTC) and Hashdex (DEFI) alongside IBIT, FBTC, GBTC, BITB, ARKB, HODL, BRRR, EZBC, BTCO, BTCW and MSBT.',
+    why: 'ETFs are one of the largest and most visible sources of spot demand: sustained inflows mean the funds are buying bitcoin, outflows mean they are selling.',
+    caveat: () => 'Net assets come from Yahoo Finance and can lag a day or more; bitcoin held is estimated as net assets ÷ the live price. Flows come from Farside Investors and are published after the US close, some funds a day late. Hashdex (DEFI) is not in Farside’s table, so it has no flow figures.',
+  },
   d_lightning: {
     title: 'Lightning Network',
     what: 'Public channels, nodes and total capacity of the Lightning Network, Bitcoin’s layer for fast, small payments.',

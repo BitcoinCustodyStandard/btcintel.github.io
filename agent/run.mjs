@@ -136,6 +136,14 @@ async function main() {
     writeJSON(path.join(DATA, 'pi_cycle.json'), { updated: a.generatedAt, source: 'Coin Metrics Community API (PriceUSD, daily close UTC)', asOf: priceFull.at(-1)[0], latest: pi.latest, crosses: pi.crosses, rows: pi.rows });
     log(`Pi Cycle: ${pi.rows.length} days, crosses ${pi.crosses.map((c) => c.date).join(', ') || 'none'}, gap ${pi.latest ? (pi.latest.gap * 100).toFixed(1) + '%' : 'n/a'}`);
   }
+  // Per-fund ETF flows (Farside, US$m per day), accumulated across runs so the history keeps
+  // growing even when only Farside's recent-days page is reachable. Feeds the dashboard ETF table.
+  if (snap.etf?.daily?.length) {
+    const fp = path.join(DATA, 'etf_flows.json'), have = new Map((readJSON(fp, { rows: [] }).rows || []).map((r) => [r.date, r]));
+    for (const r of snap.etf.daily) have.set(r.date, { date: r.date, total: r.totalUsdM, funds: r.funds });
+    const etfRows = [...have.values()].sort((x, y) => (x.date < y.date ? -1 : 1));
+    writeJSON(path.join(DATA, 'etf_flows.json'), { updated: a.generatedAt, source: 'Farside Investors, US spot Bitcoin ETF flows (US$m per day)', first: etfRows[0].date, asOf: etfRows.at(-1).date, rows: etfRows });
+  }
   // Raw book levels are only needed for today's analysis; keep the stored snapshot lean.
   const cmLean = snap.onchain?.coinmetrics ? { ...snap.onchain, coinmetrics: { ...snap.onchain.coinmetrics, priceFull: undefined } } : snap.onchain;
   const lean = { ...(snap.books ? { ...snap, books: { ...snap.books, venues: snap.books.venues.map(({ levels, ...v }) => v) } } : snap), onchain: cmLean };

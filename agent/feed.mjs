@@ -196,13 +196,51 @@ export async function correlations() {
   return { source: 'Computed by BTC Intel: BTC daily closes (Coin Metrics) vs Yahoo Finance daily closes; overlapping trading days, daily log returns', method: 'Pearson correlation of daily log returns over the last 30 and 90 overlapping trading days.', asOf: Object.values(pairs)[0]?.asOf ?? null, pairs };
 }
 
+// US spot Bitcoin ETFs: net assets, price, volume, fee and YTD return from Yahoo Finance's quote
+// endpoint (needs only a session cookie and crumb, no key); stockanalysis.com fills any fund
+// Yahoo returns without net assets. Fund-reported assets can lag by a day or more.
+export const ETFS = [
+  ['IBIT', 'iShares Bitcoin Trust', 'BlackRock'], ['FBTC', 'Fidelity Wise Origin Bitcoin Fund', 'Fidelity'], ['GBTC', 'Grayscale Bitcoin Trust', 'Grayscale'],
+  ['BTC', 'Grayscale Bitcoin Mini Trust', 'Grayscale'], ['BITB', 'Bitwise Bitcoin ETF', 'Bitwise'], ['ARKB', 'ARK 21Shares Bitcoin ETF', 'ARK / 21Shares'],
+  ['HODL', 'VanEck Bitcoin ETF', 'VanEck'], ['BRRR', 'CoinShares Bitcoin ETF', 'CoinShares'], ['EZBC', 'Franklin Bitcoin ETF', 'Franklin Templeton'],
+  ['BTCO', 'Invesco Galaxy Bitcoin ETF', 'Invesco / Galaxy'], ['BTCW', 'WisdomTree Bitcoin Fund', 'WisdomTree'], ['MSBT', 'Morgan Stanley Bitcoin Trust', 'Morgan Stanley'],
+  ['DEFI', 'Hashdex Bitcoin ETF', 'Hashdex'],
+];
+const BROWSER = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/126.0 Safari/537.36';
+async function yahooQuotes(symbols) {
+  const r1 = await fetch('https://fc.yahoo.com', { headers: { 'user-agent': BROWSER }, redirect: 'manual', signal: AbortSignal.timeout(15000) });
+  const cookie = (r1.headers.getSetCookie?.() || []).map((c) => c.split(';')[0]).join('; ');
+  const crumb = await (await fetch('https://query2.finance.yahoo.com/v1/test/getcrumb', { headers: { 'user-agent': BROWSER, cookie }, signal: AbortSignal.timeout(15000) })).text();
+  if (!crumb || crumb.length > 40 || /</.test(crumb)) throw new Error('no Yahoo crumb');
+  const r = await fetch(`https://query2.finance.yahoo.com/v7/finance/quote?symbols=${symbols.join(',')}&crumb=${encodeURIComponent(crumb)}`, { headers: { 'user-agent': BROWSER, cookie }, signal: AbortSignal.timeout(20000) });
+  if (!r.ok) throw new Error(`Yahoo quote HTTP ${r.status}`);
+  return (await r.json()).quoteResponse?.result || [];
+}
+export function parseStockAnalysisAssets(html) {
+  const m = /Assets<\/[^>]+>[\s\S]{0,200}?\$([\d.,]+)\s*([KMBT])/.exec(html) || /Assets[\s\S]{0,120}?\$([\d.,]+)\s*([KMBT])/.exec(html);
+  return m ? +m[1].replace(/,/g, '') * { K: 1e3, M: 1e6, B: 1e9, T: 1e12 }[m[2]] : null;
+}
+async function etfs() {
+  const q = await yahooQuotes(ETFS.map((e) => e[0])).catch((e) => { log('yahoo etfs:', e.message); return []; });
+  const by = new Map(q.map((x) => [x.symbol, x]));
+  const funds = [];
+  for (const [sym, name, issuer] of ETFS) {
+    const y = by.get(sym) || {};
+    let assets = Number.isFinite(y.netAssets) && y.netAssets > 0 ? y.netAssets : null, assetsSrc = assets ? 'Yahoo Finance' : null;
+    if (!assets) { try { assets = parseStockAnalysisAssets(await get(`https://stockanalysis.com/etf/${sym.toLowerCase()}/`, 'text')); assetsSrc = assets ? 'stockanalysis.com' : null; } catch {} }
+    funds.push({ sym, name, issuer, price: y.regularMarketPrice ?? null, chPct: y.regularMarketChangePercent ?? null, assets, assetsSrc, feePct: y.netExpenseRatio ?? null, volume: y.regularMarketVolume ?? null, dollarVolume: y.regularMarketVolume && y.regularMarketPrice ? Math.round(y.regularMarketVolume * y.regularMarketPrice) : null, ytdPct: y.ytdReturn ?? null, quoteTime: y.regularMarketTime ? new Date(y.regularMarketTime * 1000).toISOString() : null });
+  }
+  if (!funds.some((f) => f.assets)) throw new Error('no fund assets from Yahoo or stockanalysis');
+  return { source: 'Yahoo Finance quotes (net assets, price, volume, fee); stockanalysis.com as fallback', fetchedAt: new Date().toISOString(), funds };
+}
+
 async function main() {
   let prev = null;
   try { prev = JSON.parse(await readFile(OUT, 'utf8')); } catch {}
   const out = { updated: new Date().toISOString() };
-  const blocks = { news, fng, treasuries, volume, flows, lightning, network, hashpower, pools, activity, cohorts, polymarket, distribution, correlations };
+  const blocks = { news, fng, treasuries, volume, flows, lightning, network, hashpower, pools, activity, cohorts, polymarket, distribution, correlations, etfs };
   // minimum age before a block is fetched again (default: every run)
-  const EVERY = { hashpower: 55 * 60e3, pools: 55 * 60e3, activity: 6 * 3600e3, treasuries: 55 * 60e3, cohorts: 23 * 3600e3, polymarket: 3 * 3600e3 - 5 * 60e3, distribution: 20 * 3600e3 };
+  const EVERY = { hashpower: 55 * 60e3, pools: 55 * 60e3, activity: 6 * 3600e3, treasuries: 55 * 60e3, cohorts: 23 * 3600e3, polymarket: 3 * 3600e3 - 5 * 60e3, distribution: 20 * 3600e3, etfs: 2 * 3600e3 - 5 * 60e3 };
   await Promise.all(Object.entries(blocks).map(async ([k, fn]) => {
     const p = prev?.[k];
     if (EVERY[k] && p?.fetchedAt && !p.error && Date.now() - Date.parse(p.fetchedAt) < EVERY[k]) { out[k] = p; log(`${k}: cached`); return; }

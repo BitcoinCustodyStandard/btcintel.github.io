@@ -1124,3 +1124,11 @@ details.more[open] > summary { border-bottom: 1px solid var(--line); }
 .roll-ax { position: relative; display: flex; justify-content: space-between; font: 10px var(--mono); color: var(--dim); margin-top: 2px; }
 .roll-ax span[style] { position: absolute; transform: translateX(-50%); }
 .roll-key { margin: 2px 0 0; }
+/* spot ETF table */
+.etf-tools { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 2px 0 8px; }
+.etf-wrap { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+.etft td, .etft th { white-space: nowrap; }
+.etft td.up { color: var(--up); } .etft td.down { color: var(--down); }
+.etft tr.tot td { border-top: 1px solid var(--line2); border-bottom: 0; }
+.etf-note { margin: 8px 0 0; }
+@media (max-width: 820px) { .etft th:first-child, .etft td:first-child { display: none; } .etft td:nth-child(2), .etft th:nth-child(2) { position: sticky; left: 0; background: var(--card); z-index: 1; } }
