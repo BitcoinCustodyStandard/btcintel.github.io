@@ -6,10 +6,12 @@ import { briefReport } from '../engine/report.js';
 import { brief } from '../engine/brief.js';
 import { ZONES } from '../engine/cycle.js';
 import { explain, EXPLAIN, REMINDER } from '../engine/explain.js';
-import { startLivePrice } from './live.js?v=20261003g';
-import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003g';
-import { dashTab, mountDash, dashLive, refreshDash } from './dash.js?v=20261003g';
-import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003g';
+import { startLivePrice } from './live.js?v=20261003h';
+import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003h';
+import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261003h';
+import { intelligence } from '../engine/intel.js?v=20261003h';
+import { analysisHtml, intelligenceHtml, wireIntel } from './intelui.js?v=20261003h';
+import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003h';
 import { fmtUsd, fmtUsdSigned, fmtPrice, fmtPct, fmtNum, fmtK, ordinal } from '../engine/util.js';
 
 const state = { a: null, rows: [], runs: [], index: null, snapshot: null, range: 90, pi: null, dash: null, live: null, liveState: 'init' };
@@ -225,9 +227,10 @@ const sparkEl = (key) => h`<div class="chart spark" data-spark="${key}"></div>`;
 const rangeBar = () => h`<div class="range" role="group" aria-label="Chart range">${[[30, '30D'], [90, '90D'], [180, '6M'], [365, '1Y']].map(([r, l]) => h`<button type="button" data-range="${r}" aria-pressed="${state.range === r}">${l}</button>`)}</div>`;
 
 // ---------- tabs ----------
-// The BTC Dashboard is the landing view; Intelligence (#overview) is the daily 60–90 second
-// read, with research depth in the other tabs. Old section anchors (#forces, #scenarios) still resolve.
-const TABS = ['dashboard', 'dca', 'overview', 'cycle', 'report', 'liquidity'];
+// Three levels: the BTC Dashboard (what is happening), Analysis (what each domain says) and
+// Intelligence (#overview: what matters now and why), with research depth in the other tabs.
+// Old section anchors (#forces, #scenarios) still resolve.
+const TABS = ['dashboard', 'analysis', 'dca', 'overview', 'cycle', 'report', 'liquidity'];
 const LEGACY = { forces: 'overview', scenarios: 'overview', liqmap: 'overview', watch: 'overview', top3: 'overview' };
 const tabFromHash = () => { const k = location.hash.slice(1); return TABS.includes(k) ? k : LEGACY[k] || (k.startsWith('force-') ? 'overview' : 'dashboard'); };
 function showTab(scroll) {
@@ -406,7 +409,9 @@ function dashboard() {
 }
 
 function overviewTab(b) {
-  return h`${execStrip(b)}<p class="pi-moved small">The live price chart (moving averages, volatility envelope and an optional Pi Cycle Top overlay) is on the <a href="#dashboard">BTC Dashboard</a>.</p>${top3(b)}${forcesBlock(b)}${ladderBlock(b)}${accelBlock(b)}${watchBlock(b)}${dashboard()}<p class="foot-note">${b.footer}</p>`;
+  return h`<div id="intel-main">${raw(intelligenceHtml(state.intel, infoS))}</div>
+    <section class="block research"><div class="bh"><h2>Research detail: the daily force analysis</h2><p class="aside">The agent’s morning analysis that feeds several of the inputs above</p></div></section>
+    ${execStrip(b)}${top3(b)}${forcesBlock(b)}${ladderBlock(b)}${accelBlock(b)}${watchBlock(b)}${dashboard()}<p class="foot-note">${b.footer}</p>`;
 }
 
 // ---------- On-chain cycle tab ----------
@@ -628,8 +633,29 @@ window.addEventListener('scroll', () => {
 }, { passive: true });
 
 // ---------- render ----------
+// ---------- Market Intelligence Engine ----------
+const infoS = (k) => info(k).s; // the views build plain strings
+// Recomputed from every published file (and the live price) on load, on Refresh, when the
+// 15-minute feed changes and every ten minutes; ~0.3 s of work in the browser.
+function computeIntel() {
+  try { state.intel = intelligence({ a: state.a, rows: state.rows, pi: state.pi, dash: getDash() || state.dash, etf: state.etf, live: state.live }); }
+  catch (e) { console.error('intelligence engine', e); state.intel = null; }
+  return state.intel;
+}
+function updateIntel() {
+  if (!state.a) return;
+  computeIntel();
+  const an = $('[data-tab="analysis"]'), im = $('#intel-main');
+  const open = an ? [...an.querySelectorAll('details.idom')].map((d) => d.open) : [];
+  if (an) { an.innerHTML = analysisHtml(state.intel, infoS); an.querySelectorAll('details.idom').forEach((d, i) => { if (open[i] === false) d.open = false; }); }
+  if (im) im.innerHTML = intelligenceHtml(state.intel, infoS);
+  setIntel(state.intel);
+}
+setInterval(() => { if (!document.hidden) updateIntel(); }, 10 * 60e3);
+
 function render() {
   const a = state.a;
+  computeIntel();
   const b = brief(a);
   state.b = b;
   const old = ageH(a.dataThrough);
@@ -640,6 +666,7 @@ function render() {
   else if (a.kind === 'browser') banners.push(h`<div class="banner">Browser refresh: ${liveN} sources retrieved live. ETF flows, FRED, Yahoo and CFTC data cannot be fetched from a browser and show their last server values. Not saved to the archive.</div>`);
   $('#app').innerHTML = h`${banners}
     <div data-tab="dashboard" hidden>${raw(dashTab({ a, pi: state.pi, dash: state.dash, info }))}</div>
+    <div data-tab="analysis" hidden>${raw(analysisHtml(state.intel, infoS))}</div>
     <div data-tab="dca" hidden>${raw(dcaPageHtml({ pi: state.pi, info }))}</div>
     <div data-tab="overview" hidden>${overviewTab(b)}</div>
     <div data-tab="cycle" hidden>${cycleTab()}</div>
@@ -648,6 +675,8 @@ function render() {
 `.s;
   wireSections();
   mountDash({ dash: state.dash, getLive: () => state.live });
+  setIntel(state.intel);
+  wireIntel();
   showTab(false);
   const np = $('#nav-price');
   if (np) np.innerHTML = h`${fmtPrice(a.metrics.price.spot)} <span class="${cls(a.metrics.price.ch24h)}">${fmtPct(a.metrics.price.ch24h)}</span>`.s;
@@ -709,7 +738,8 @@ function wireSections() {
 async function getJSON(u) { const r = await fetch(u, { cache: 'no-store' }); if (!r.ok) throw new Error(`${u}: HTTP ${r.status}`); return r.json(); }
 
 async function load() {
-  const [latest, ts, idx, runs, pi, dash] = await Promise.allSettled([getJSON('data/latest.json'), getJSON('data/timeseries.json'), getJSON('data/index.json'), getJSON('data/runs.json'), getJSON('data/pi_cycle.json'), getJSON('data/dash.json')]);
+  const [latest, ts, idx, runs, pi, dash, etf] = await Promise.allSettled([getJSON('data/latest.json'), getJSON('data/timeseries.json'), getJSON('data/index.json'), getJSON('data/runs.json'), getJSON('data/pi_cycle.json'), getJSON('data/dash.json'), getJSON('data/etf_flows.json')]);
+  state.etf = etf.status === 'fulfilled' ? etf.value : null;
   state.pi = pi.status === 'fulfilled' ? pi.value : null;
   state.dash = dash.status === 'fulfilled' ? dash.value : null;
   if (state.dash?.volume?.rows?.length) { pcState.vol = state.dash.volume.rows; pcState.volSource = 'CoinGecko aggregate spot, daily'; }
@@ -736,19 +766,21 @@ async function refreshAll() {
   try {
     const [live, files] = await Promise.all([
       liveFeed ? liveFeed.now() : null,
-      Promise.allSettled([getJSON('data/latest.json'), getJSON('data/timeseries.json'), getJSON('data/pi_cycle.json'), getJSON('data/index.json'), getJSON('data/runs.json')]),
+      Promise.allSettled([getJSON('data/latest.json'), getJSON('data/timeseries.json'), getJSON('data/pi_cycle.json'), getJSON('data/index.json'), getJSON('data/runs.json'), getJSON('data/etf_flows.json')]),
       refreshDash(),
     ]);
     await new Promise((r) => setTimeout(r, Math.max(0, 600 - (Date.now() - t0)))); // keep the busy state visible briefly
-    const [latest, ts, pi, idx, runs] = files.map((r) => (r.status === 'fulfilled' ? r.value : null));
+    const [latest, ts, pi, idx, runs, etf] = files.map((r) => (r.status === 'fulfilled' ? r.value : null));
+    if (etf?.rows) state.etf = etf;
     if (ts?.rows) state.rows = ts.rows;
     if (idx) state.index = idx;
     if (runs?.runs) state.runs = runs.runs;
     const piChanged = pi?.rows && pi.asOf !== state.pi?.asOf;
     if (pi?.rows) state.pi = pi;
     const changed = latest?.metrics && latest.generatedAt !== before;
-    if (changed) { state.a = latest; render(); } else if (piChanged && tabFromHash() === 'dashboard') drawPriceChart($('#pc-chart'), state.pi, state.live);
-    if (live) { state.live = live; paintLive(); }
+    if (live) state.live = live;
+    if (changed) { state.a = latest; render(); } else { if (piChanged && tabFromHash() === 'dashboard') drawPriceChart($('#pc-chart'), state.pi, state.live); updateIntel(); }
+    if (live) paintLive();
     const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
     progress(`Updated ${t} in ${((Date.now() - t0) / 1000).toFixed(1)}s — live price ${live ? `${live.source} ${fmtPrice(live.price)}` : 'unavailable'} · analysis data through ${fmtTime(state.a?.dataThrough)}${changed ? ' (new analysis loaded)' : ''}.`);
     label.textContent = `Updated ${t}`;

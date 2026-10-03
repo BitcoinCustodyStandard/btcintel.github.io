@@ -273,6 +273,13 @@ export function computeMetrics(snap, rows) {
     return mode === 'pct' ? pct(v, old) : old !== null ? v - old : null;
   };
   const lvl = (series) => (series ? lastPoint(series) : null);
+  // year-on-year % change of a monthly series, `back` observations before the latest
+  const yoy = (series, back = 0) => {
+    if (!series || series.length < 13 + back) return null;
+    const [d, v] = series[series.length - 1 - back];
+    const old = valueAt(series, shiftDate(d, -365));
+    return old ? [d, pct(v, old)] : null;
+  };
   let netLiq = null;
   if (pts('WALCL') && pts('WTREGEN') && pts('RRPONTSYD')) {
     // weekly net liquidity on WALCL dates: Fed assets − TGA − RRP (USD bn)
@@ -301,6 +308,13 @@ export function computeMetrics(snap, rows) {
     gold: lvl(Y.GOLD), gold20d: chg(Y.GOLD, 28),
     silver: lvl(Y.SILVER), silver20d: chg(Y.SILVER, 28),
     g3: g3BalanceSheet(F),
+    // monthly / quarterly series (year-on-year where the level itself is not meaningful)
+    curve: lvl(pts('T10Y2Y')), ff90: chg(pts('DFF'), 91, 'abs'), ff180: chg(pts('DFF'), 182, 'abs'),
+    m2: lvl(pts('M2SL')), m2Yoy: yoy(pts('M2SL')), m2Yoy3m: yoy(pts('M2SL'), 1),
+    cpiYoy: yoy(pts('CPIAUCSL')), cpiYoy3m: yoy(pts('CPIAUCSL'), 3),
+    pceYoy: yoy(pts('PCEPILFE')), pceYoy3m: yoy(pts('PCEPILFE'), 3),
+    unrate: lvl(pts('UNRATE')), unrate3m: chg(pts('UNRATE'), 92, 'abs'),
+    gdp: lvl(pts('A191RL1Q225SBEA')),
   } : null;
 
   // ---- correlations
@@ -1037,6 +1051,8 @@ export function makeRow(snap, m, extra = {}) {
     netLiq: m.macro?.netLiq?.[1] ?? null, dxy: m.macro?.dollar?.[1] ?? null, us10y: m.macro?.us10y?.[1] ?? null, real10y: m.macro?.real10y?.[1] ?? null, hy: m.macro?.hy?.[1] ?? null, vix: m.macro?.vix?.[1] ?? null, ndx: m.macro?.ndx?.[1] ?? null, gold: m.macro?.gold?.[1] ?? null,
     corrNdx30: m.corr?.NDX?.c30 ?? null, corrGold30: m.corr?.GOLD?.c30 ?? null,
     mvrv: m.onchain?.mvrv ?? null, stables: m.onchain?.stables ?? null, dominance: m.structure?.dominance ?? null,
+    curve: m.macro?.curve?.[1] ?? null, m2Yoy: m.macro?.m2Yoy?.[1] ?? null, cpiYoy: m.macro?.cpiYoy?.[1] ?? null,
+    ls: m.derivs?.longShort?.okx ?? null, takerSpot7: m.derivs?.takerSpot7d ?? null,
     ...extra,
   };
 }

@@ -21,6 +21,18 @@ collect (engine/collect.js)  →  merge with last snapshot (stale-labelling)
 
 The default **Overview** is a 60–90 second read: price and regime with a quiet data-status bar; today's three most important variables; the top 5 ranked forces (each row expands to full evidence, mechanism, invalidation and charts; the rest behind "Show all"); a liquidity ladder of key levels (full band table on expand); three acceleration cards (upside / base case / downside) with condition status; and what to watch in the next 24 hours. The KPI tiles and charts sit in a collapsed **Market dashboard**. Changes are called out on the overview only when they are at least 1.5σ versus the typical daily change. Other tabs: **On-chain cycle** (see below), **Morning report** (condensed, full report on expand), **Liquidity detail** (band table, depth by venue, order impact, options expiries), **Data & method**, **Archive**. The short copy is derived mechanically from the analysis (`engine/brief.js`) and adds no figures. Every tile, card, force, level and score has an ⓘ icon (hover, keyboard focus or tap) with a plain-English explanation from `engine/explain.js`: what it measures, why it matters, how to read today's zone, and one line of history — 3–5 short sentences, no unexplained jargon.
 
+### Market Intelligence Engine (`engine/intel.js`)
+
+Raw data → indicators → interpretation → five domains → market forces → Market read → valuation & cycle → narrative. Free data only, computed in the browser from the published files (and stored daily by the agent).
+
+- **Five domains**: Technical, On-chain, Market structure, Sentiment, Macro & liquidity. About 80 indicators; each is read on its own −1…+1 scale (supportive / neutral / cautionary / deteriorating) against fixed thresholds and its own history. Context-only readings are shown but not scored.
+- **No grand average**: indicators combine only inside a component (Trend, Valuation, Leverage…), components into a domain by fixed weights and explicit override rules (e.g. a negative long-term trend caps Technical; elevated leverage caps Market structure; extreme greed overrides Sentiment).
+- **Forces**: detected from combinations of indicators (uptrend, institutional demand, leverage building, macro tightening…), each with direction, strength, confidence, horizon, persistence (days) and strengthening/weakening. Ranking weighs horizon so short-term signals cannot dominate structural ones.
+- **Market read**: state, breadth (domains supportive), Fair Grade (50 + explicit contributions: trend, demand, network & holders, liquidity, positioning, breadth, risk and valuation adjustments, each scaled by data confidence), key drivers and offsets.
+- **Conclusions**: valuation (MVRV, Mayer, 200-week average, Puell, supply in profit, holder cost bases), cycle phase (scored conditions; halving timing is context only) and risk regime.
+- **What changed**: the engine is re-evaluated as of 2, 7 and 30 days ago and compared on the indicators known on both dates only.
+- Views: the dashboard Market read card, the **Analysis** tab (every domain, component and indicator with source and date) and the **Intelligence** tab (narrative, drivers, offsets, cross-domain confirmation, changes, valuation, cycle, risk, Fair Grade breakdown). Tests: `agent/test/intel.test.mjs`.
+
 ### On-chain Cycle & Momentum (`engine/cycle.js`)
 
 Where BTC sits in the historical on-chain valuation cycle — positioning research, not a signal. Rule-based and fully shown on the page:

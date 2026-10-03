@@ -37,7 +37,7 @@ jobs:
         run: npm ci --no-audit --no-fund
       - name: Offline self-test
         working-directory: agent
-        run: node test/offline.mjs
+        run: node test/offline.mjs && node test/intel.test.mjs
       - name: Collect, analyse, report
         run: node agent/run.mjs ${{ github.event_name == 'schedule' && '--scheduled' || '' }}
       - name: Commit results

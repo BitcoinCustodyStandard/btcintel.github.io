@@ -572,6 +572,13 @@ export const FRED_SERIES = {
   JPNASSETS: { label: 'BoJ total assets', unit: 'JPY 100m', scale: 1, freq: 'monthly' },
   DEXUSEU: { label: 'USD per EUR', unit: 'rate', scale: 1, freq: 'daily' },
   DEXJPUS: { label: 'JPY per USD', unit: 'rate', scale: 1, freq: 'daily' },
+  // monthly / quarterly macro: a longer window so year-on-year changes can be computed
+  T10Y2Y: { label: '10y − 2y Treasury spread', unit: '%', scale: 1, freq: 'daily' },
+  M2SL: { label: 'US M2 money supply', unit: 'USD bn', scale: 1, freq: 'monthly', days: 800 },
+  CPIAUCSL: { label: 'CPI (all items)', unit: 'index', scale: 1, freq: 'monthly', days: 800 },
+  PCEPILFE: { label: 'Core PCE price index', unit: 'index', scale: 1, freq: 'monthly', days: 800 },
+  UNRATE: { label: 'Unemployment rate', unit: '%', scale: 1, freq: 'monthly', days: 800 },
+  A191RL1Q225SBEA: { label: 'Real GDP growth (q/q annualised)', unit: '%', scale: 1, freq: 'quarterly', days: 800 },
 };
 
 export function parseFredCsv(text) {
@@ -590,12 +597,12 @@ async function fred() {
   const errors = [];
   await Promise.all(Object.entries(FRED_SERIES).map(async ([id, meta]) => {
     try {
-      const t = await fetchText(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${id}&cosd=${since}`, { headers: UA }, 30000);
+      const t = await fetchText(`https://fred.stlouisfed.org/graph/fredgraph.csv?id=${id}&cosd=${meta.days ? isoDate(Date.now() - meta.days * DAY) : since}`, { headers: UA }, 30000);
       let pts = parseFredCsv(t);
       let scale = meta.scale;
       if (scale === 'auto') scale = pts.length && pts.at(-1)[1] > 1e5 ? 1e-3 : 1; // millions → billions
       pts = pts.map(([d, v]) => [d, v * scale]);
-      series[id] = { ...meta, scale: undefined, points: pts };
+      series[id] = { ...meta, scale: undefined, days: undefined, points: pts };
     } catch (e) {
       errors.push(`${id}: ${e.message}`.slice(0, 80));
     }

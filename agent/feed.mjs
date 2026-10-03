@@ -62,7 +62,7 @@ async function news() {
 
 // ---------- other blocks ----------
 async function fng() {
-  const j = await get('https://api.alternative.me/fng/?limit=90');
+  const j = await get('https://api.alternative.me/fng/?limit=400');
   const d = j.data.map((x) => ({ value: +x.value, label: x.value_classification, date: new Date(+x.timestamp * 1000).toISOString().slice(0, 10) }));
   const avg = (n) => (d.length >= n ? Math.round(d.slice(0, n).reduce((s, x) => s + x.value, 0) / n) : null);
   return { source: 'alternative.me Crypto Fear & Greed Index (third-party)', url: 'https://alternative.me/crypto/fear-and-greed-index/', asOf: d[0].date, value: d[0].value, label: d[0].label, d1: d[1]?.value ?? null, d7: d[7]?.value ?? null, d30: d[30]?.value ?? null, avg7: avg(7), avg30: avg(30), series: d.map((x) => [x.date, x.value]).reverse() };
@@ -234,13 +234,39 @@ async function etfs() {
   return { source: 'Yahoo Finance quotes (net assets, price, volume, fee); stockanalysis.com as fallback', fetchedAt: new Date().toISOString(), funds };
 }
 
+// ---------- stablecoins by issuer (DefiLlama, free) ----------
+// Current USD-pegged supply per stablecoin with DefiLlama's own day/week/month-ago values.
+async function stablecoins() {
+  const j = await get('https://stablecoins.llama.fi/stablecoins?includePrices=false', 'json', 30000);
+  const v = (o) => (typeof o?.peggedUSD === 'number' ? o.peggedUSD : null);
+  const list = (j.peggedAssets || []).filter((a) => a.pegType === 'peggedUSD')
+    .map((a) => ({ sym: a.symbol, name: a.name, now: v(a.circulating), d1: v(a.circulatingPrevDay), d7: v(a.circulatingPrevWeek), d30: v(a.circulatingPrevMonth) }))
+    .filter((a) => a.now > 0).sort((a, b) => b.now - a.now);
+  if (!list.length) throw new Error('no stablecoins');
+  const tot = (k) => list.reduce((s, a) => s + (a[k] || 0), 0);
+  const at = new Date().toISOString();
+  return { source: 'DefiLlama stablecoins API (USD-pegged supply)', url: 'https://defillama.com/stablecoins', fetchedAt: at, asOf: at, total: { now: tot('now'), d1: tot('d1'), d7: tot('d7'), d30: tot('d30') }, top: list.slice(0, 8) };
+}
+
+// ---------- retail attention: Wikipedia pageviews (free Wikimedia REST API) ----------
+// Daily human views of the English "Bitcoin" article, a public proxy for retail curiosity
+// (Google Trends has no free API).
+async function attention() {
+  const ymd = (t) => new Date(t).toISOString().slice(0, 10).replace(/-/g, '');
+  const url = `https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/user/Bitcoin/daily/${ymd(Date.now() - 400 * 864e5)}/${ymd(Date.now() - 864e5)}`;
+  const j = await get(url, 'json', 30000);
+  const rows = (j.items || []).map((i) => [`${i.timestamp.slice(0, 4)}-${i.timestamp.slice(4, 6)}-${i.timestamp.slice(6, 8)}`, i.views]).filter(([, v]) => Number.isFinite(v));
+  if (rows.length < 30) throw new Error('too few pageview rows');
+  return { source: 'Wikimedia pageviews API (English Wikipedia “Bitcoin” article, human traffic)', url: 'https://pageviews.wmcloud.org/?pages=Bitcoin&project=en.wikipedia.org', fetchedAt: new Date().toISOString(), asOf: rows.at(-1)[0], rows };
+}
+
 async function main() {
   let prev = null;
   try { prev = JSON.parse(await readFile(OUT, 'utf8')); } catch {}
   const out = { updated: new Date().toISOString() };
-  const blocks = { news, fng, treasuries, volume, flows, lightning, network, hashpower, pools, activity, cohorts, polymarket, distribution, correlations, etfs };
+  const blocks = { news, fng, treasuries, volume, flows, lightning, network, hashpower, pools, activity, cohorts, polymarket, distribution, correlations, etfs, stablecoins, attention };
   // minimum age before a block is fetched again (default: every run)
-  const EVERY = { hashpower: 55 * 60e3, pools: 55 * 60e3, activity: 6 * 3600e3, treasuries: 55 * 60e3, cohorts: 23 * 3600e3, polymarket: 3 * 3600e3 - 5 * 60e3, distribution: 20 * 3600e3, etfs: 2 * 3600e3 - 5 * 60e3 };
+  const EVERY = { hashpower: 55 * 60e3, pools: 55 * 60e3, activity: 6 * 3600e3, treasuries: 55 * 60e3, cohorts: 23 * 3600e3, polymarket: 3 * 3600e3 - 5 * 60e3, distribution: 20 * 3600e3, etfs: 2 * 3600e3 - 5 * 60e3, stablecoins: 55 * 60e3, attention: 6 * 3600e3 };
   await Promise.all(Object.entries(blocks).map(async ([k, fn]) => {
     const p = prev?.[k];
     if (EVERY[k] && p?.fetchedAt && !p.error && Date.now() - Date.parse(p.fetchedAt) < EVERY[k]) { out[k] = p; log(`${k}: cached`); return; }
