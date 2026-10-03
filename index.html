@@ -65,5 +65,18 @@
   </div>
 </footer>
 <script type="module" src="assets/app.js?v=20261003j"></script>
+<!-- GoatCounter (privacy-friendly, no cookies). Shares the bcs.goatcounter.com account;
+     every path is prefixed "btcintel.org" so this site's traffic stays separate there.
+     Hash routes (#analysis/…, #reports…) are counted as their own page views. -->
+<script>
+  window.gcCount = function () {
+    var gc = window.goatcounter; if (!gc || !gc.count) return;
+    var p = 'btcintel.org' + location.pathname + (location.hash || '');
+    if (p === window.gcLast) return; window.gcLast = p;
+    gc.count({ path: p, title: document.title });
+  };
+  window.addEventListener('hashchange', function () { setTimeout(window.gcCount, 300); });
+</script>
+<script data-goatcounter="https://bcs.goatcounter.com/count" data-goatcounter-settings='{"no_onload": true}' async src="//gc.zgo.at/count.js" onload="window.gcCount()"></script>
 </body>
 </html>
