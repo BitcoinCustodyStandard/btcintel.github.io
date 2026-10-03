@@ -4,9 +4,9 @@
 // data/latest.json (agent snapshot) and data/pi_cycle.json. Values that cannot be
 // obtained free are shown as such, never estimated.
 
-import { startNetwork, seedNetwork, refreshNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js?v=20261003d';
-import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js?v=20261003d';
-import { priceCardHtml, envelopeNow } from './pricechart.js?v=20261003d';
+import { startNetwork, seedNetwork, refreshNetwork, N, issuedSupply, subsidyBtc, nextHalving, hashprice, HALVING_INTERVAL } from './network.js?v=20261003f';
+import { startMoves, MIN_TRADE, MIN_LIQ, MIN_TX_BTC } from './moves.js?v=20261003f';
+import { priceCardHtml, envelopeNow } from './pricechart.js?v=20261003f';
 
 // ---------- formatting ----------
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -32,7 +32,7 @@ function ago(t, now = Date.now()) {
 const relShort = (t) => { const m = Math.round((Date.now() - t) / 60e3); return m < 1 ? 'now' : m < 60 ? `${m}m` : m < 1440 ? `${Math.floor(m / 60)}h` : `${Math.floor(m / 1440)}d`; };
 
 // ---------- state ----------
-const S = { a: null, dash: null, pi: null, live: null, cg: null, cgAt: null, glob: null, moves: [], moveStatus: {}, newsFilter: 'all', newsTone: 'all', newsAll: false, pmIdx: 0, pmAll: false, etfSort: 'assets', etfFlows: null, moveFilter: 'all', info: () => '' };
+const S = { a: null, dash: null, pi: null, live: null, cg: null, cgAt: null, glob: null, moves: [], moveStatus: {}, newsFilter: 'all', newsTone: 'all', newsAll: false, pmIdx: 0, pmAll: false, etfSort: 'assets', etfDir: 'desc', etfFlows: null, moveFilter: 'all', info: () => '' };
 const price = () => S.live?.price ?? S.a?.metrics?.price?.spot ?? null;
 const supplyNow = () => (N.height ? issuedSupply(N.height) : null);
 const cyM = (id) => S.a?.cycle?.metrics?.find((x) => x.id === id);
@@ -438,19 +438,32 @@ function etfFlowSums(sym) {
   const v = (r) => (sym ? r.funds?.[sym] ?? 0 : r.total ?? 0), sum = (n) => rows.slice(-n).reduce((a, r) => a + v(r), 0);
   return { d1: v(rows.at(-1)), d5: sum(5), d20: sum(20), all: sum(rows.length), n: rows.length, asOf: rows.at(-1).date, first: rows[0].date };
 }
-const ETF_SORT = [['assets', 'Market value'], ['d1', '1-day flow'], ['d5', '5-day flow'], ['d20', '20-day flow']];
+// issuer logo (stored in assets/etf/, fetched once from Google's favicon service) with a lettered
+// badge underneath that shows if the image is missing
+const ISSUER_SHORT = { BlackRock: 'BlackRock', 'ARK / 21Shares': 'ARK Invest', 'Invesco / Galaxy': 'Invesco / Galaxy', 'Franklin Templeton': 'Franklin Templeton' };
+const etfFund = (f) => {
+  const name = ISSUER_SHORT[f.issuer] || f.issuer, mono = name.replace(/[^A-Za-z ]/g, '').split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase();
+  return `<span class="ef"><span class="elogo" aria-hidden="true">${mono}<img src="assets/etf/${f.sym.toLowerCase()}.png" alt="" width="22" height="22" loading="lazy" onerror="this.remove()"></span><b class="ef-n" title="${esc(f.name)}">${esc(name)}${f.sym === 'BTC' ? ' <span class="dim">Mini</span>' : ''}</b><span class="ef-t">${esc(f.sym)}</span><a class="ef-x" href="https://finance.yahoo.com/quote/${encodeURIComponent(f.sym)}" target="_blank" rel="noopener" title="${esc(f.name)} on Yahoo Finance">↗</a>${f.sym === 'DEFI' ? '<span class="dim small"> not in Farside’s flow table</span>' : ''}</span>`;
+};
+const ETF_SORT = [['assets', 'Market value'], ['d1', '1-day flow'], ['d5', '5-day flow'], ['d20', '20-day flow'], ['all', 'Since start']];
+// value used for sorting each column (flows come from the stored Farside history)
+const ETF_KEY = { assets: (f) => f.assets, d1: (f) => f.fl.d1, d5: (f) => f.fl.d5, d20: (f) => f.fl.d20, all: (f) => f.fl.all, fee: (f) => f.feePct, vol: (f) => f.dollarVolume, ytd: (f) => f.ytdPct };
 function etfTable() {
   const E = S.dash?.etfs?.funds; if (!E?.length) return null;
   const p = price(), tot = E.reduce((a, f) => a + (f.assets || 0), 0);
-  const rows = E.map((f) => ({ ...f, fl: etfFlowSums(f.sym) || {} })).sort((a, b) => (S.etfSort === 'assets' ? (b.assets || 0) - (a.assets || 0) : (b.fl[S.etfSort] ?? -1e12) - (a.fl[S.etfSort] ?? -1e12)));
   const T = etfFlowSums(), n = T?.n || 0;
+  if (S.etfSort === 'd20' && n < 20) S.etfSort = 'all';
+  const key = ETF_KEY[S.etfSort] || ETF_KEY.assets, dir = S.etfDir === 'asc' ? 1 : -1;
+  // funds without a value for the chosen column (e.g. DEFI has no Farside flows) always sort last
+  const rows = E.map((f) => ({ ...f, fl: etfFlowSums(f.sym) || {} })).sort((a, b) => { const x = key(a), y = key(b); if (!ok(x) && !ok(y)) return (b.assets || 0) - (a.assets || 0); if (!ok(x)) return 1; if (!ok(y)) return -1; return (x - y) * dir; });
+  const th = (k, label, title) => `<th class="r"><button type="button" class="th-sort${S.etfSort === k ? ' on' : ''}" data-etfsort="${k}" title="Sort by ${title || label}">${label}${S.etfSort === k ? (S.etfDir === 'asc' ? ' ▲' : ' ▼') : ''}</button></th>`;
   const flowCell = (v) => `<td class="r num ${cls(v)}">${ok(v) ? sgnM(v) : '<span class="dim">—</span>'}</td>`;
-  const sortBtns = ETF_SORT.map(([k, l]) => `<button type="button" data-etfsort="${k}" aria-pressed="${S.etfSort === k}">${l}</button>`).join('');
+  const sortBtns = ETF_SORT.filter(([k]) => k !== 'd20' || n >= 20).map(([k, l]) => `<button type="button" data-etfsort="${k}" aria-pressed="${S.etfSort === k}">${k === 'all' ? `${n} days` : l}</button>`).join('');
   return { v: '', sub: `<div class="etf-tools"><span class="dim small">Rank by</span><div class="seg">${sortBtns}</div></div>
-    <div class="etf-wrap"><table class="pmt etft"><thead><tr><th>#</th><th>Fund</th><th class="r">Market value</th><th class="r">Share</th><th class="r">≈ BTC held</th><th class="r">Flow 1d</th><th class="r">5d</th><th class="r">20d</th><th class="r">Since ${dShort(T?.first)}</th><th class="r">Fee</th><th class="r">$ volume</th><th class="r">YTD</th></tr></thead><tbody>
-    ${rows.map((f, i) => `<tr><td class="dim">${i + 1}</td><td><b>${esc(f.sym)}</b> <span class="dim">${esc(f.issuer)}</span>${f.sym === 'DEFI' ? ' <span class="dim small">(not in Farside’s flow table)</span>' : ''}</td><td class="r num">${big(f.assets)}${f.assetsSrc && f.assetsSrc !== 'Yahoo Finance' ? '<sup title="from stockanalysis.com">*</sup>' : ''}</td><td class="r num">${f.assets ? ((f.assets / tot) * 100).toFixed(1) + '%' : '—'}</td><td class="r num">${f.assets && p ? num(f.assets / p) : '—'}</td>${flowCell(f.fl.d1)}${flowCell(f.fl.d5)}${n >= 20 ? flowCell(f.fl.d20) : '<td class="r dim">—</td>'}${flowCell(f.fl.all)}<td class="r num">${ok(f.feePct) ? f.feePct.toFixed(2) + '%' : '—'}</td><td class="r num">${big(f.dollarVolume)}</td><td class="r num ${cls(f.ytdPct)}">${pct(f.ytdPct)}</td></tr>`).join('')}
-    <tr class="tot"><td></td><td><b>All ${E.length} funds</b></td><td class="r num"><b>${big(tot)}</b></td><td class="r num">100%</td><td class="r num"><b>${p ? num(tot / p) : '—'}</b></td>${flowCell(T?.d1)}${flowCell(T?.d5)}${n >= 20 ? flowCell(T?.d20) : '<td class="r dim">—</td>'}${flowCell(T?.all)}<td></td><td class="r num">${big(E.reduce((a, f) => a + (f.dollarVolume || 0), 0))}</td><td></td></tr></tbody></table></div>
-    <p class="dim small etf-note">Market value is each fund’s reported net assets (Yahoo Finance${E.some((f) => f.assetsSrc === 'stockanalysis.com') ? '; * stockanalysis.com where Yahoo had none' : ''}) and can lag by a day or more. ≈ BTC held = market value ÷ live price, an estimate. Flows are Farside’s daily creations/redemptions in US$ millions${T ? `, latest ${dShort(T.asOf)}; history held: ${n} trading days since ${dShort(T.first)}${n < 20 ? ' (20-day column appears once 20 days are stored)' : ''}` : ''}.</p>`, src: 'Yahoo Finance · Farside Investors', at: S.dash.etfs.fetchedAt, max: 2 * DAY };
+    <div class="etf-wrap"><table class="pmt etft"><thead><tr><th>#</th><th>Fund</th>${th('assets', 'Market value')}<th class="r">Share</th><th class="r">≈ BTC held</th>${th('d1', 'Flow 1d', '1-day flow')}${th('d5', '5d', '5-day flow')}${n >= 20 ? th('d20', '20d', '20-day flow') : ''}${th('all', n >= 20 ? `Since ${dShort(T?.first)}` : `${n}d`, `flows over the ${n} trading days stored since ${dShort(T?.first)}`)}${th('fee', 'Fee')}${th('vol', '$ volume', 'dollar trading volume')}${th('ytd', 'YTD')}</tr></thead><tbody>
+    ${rows.map((f, i) => `<tr><td class="dim">${i + 1}</td><td>${etfFund(f)}</td><td class="r num">${big(f.assets)}${f.assetsSrc && f.assetsSrc !== 'Yahoo Finance' ? '<sup title="from stockanalysis.com">*</sup>' : ''}</td><td class="r num">${f.assets ? ((f.assets / tot) * 100).toFixed(1) + '%' : '—'}</td><td class="r num">${f.assets && p ? num(f.assets / p) : '—'}</td>${flowCell(f.fl.d1)}${flowCell(f.fl.d5)}${n >= 20 ? flowCell(f.fl.d20) : ''}${flowCell(f.fl.all)}<td class="r num">${ok(f.feePct) ? f.feePct.toFixed(2) + '%' : '—'}</td><td class="r num">${big(f.dollarVolume)}</td><td class="r num ${cls(f.ytdPct)}">${pct(f.ytdPct)}</td></tr>`).join('')}
+    <tr class="tot"><td></td><td><span class="ef"><span class="elogo tot">Σ</span><b class="ef-n">Total · all ${E.length} funds</b></span></td><td class="r num"><b>${big(tot)}</b></td><td class="r num">100%</td><td class="r num"><b>${p ? num(tot / p) : '—'}</b></td>${flowCell(T?.d1)}${flowCell(T?.d5)}${n >= 20 ? flowCell(T?.d20) : ''}${flowCell(T?.all)}<td></td><td class="r num">${big(E.reduce((a, f) => a + (f.dollarVolume || 0), 0))}</td><td></td></tr></tbody></table></div>
+    <p class="dim small etf-note">Market value is each fund’s reported net assets (Yahoo Finance${E.some((f) => f.assetsSrc === 'stockanalysis.com') ? '; * stockanalysis.com where Yahoo had none' : ''}) and can lag by a day or more. ≈ BTC held = market value ÷ live price, an estimate. Flows are Farside’s daily creations/redemptions in US$ millions${T ? `, latest ${dShort(T.asOf)}; history held: ${n} trading days since ${dShort(T.first)}${n < 20 ? `. A 20-day column appears automatically once 20 trading days are stored (${20 - n} to go): Farside’s full-history page blocks automated access, so history builds up one day at a time` : ''}` : ''}.</p>`, src: 'Yahoo Finance · Farside Investors', at: S.dash.etfs.fetchedAt, max: 2 * DAY };
 }
 
 // ---------- market posture ----------
@@ -642,7 +655,7 @@ export function dashTab({ a, pi, dash, info }) {
 let started = false, tickT = null, cgT = null;
 document.addEventListener('click', (e) => {
   if (e.target.closest?.('[data-treas-more]')) { S.treasAll = !S.treasAll; paintCards(); return; }
-  const es = e.target.closest?.('[data-etfsort]'); if (es) { S.etfSort = es.dataset.etfsort; paintCards(); return; }
+  const es = e.target.closest?.('[data-etfsort]'); if (es) { const k = es.dataset.etfsort; S.etfDir = S.etfSort === k && S.etfDir !== 'asc' ? 'asc' : 'desc'; S.etfSort = k; paintCards(); return; }
   const pmb = e.target.closest?.('[data-pm]');
   if (pmb) { S.pmIdx = +pmb.dataset.pm; S.pmAll = false; document.querySelectorAll('[data-pm]').forEach((x) => x.setAttribute('aria-pressed', String(x === pmb))); paintPm(); return; }
   if (e.target.closest?.('[data-pm-all]')) { S.pmAll = !S.pmAll; paintPm(); return; }
