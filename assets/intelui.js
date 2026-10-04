@@ -3,7 +3,7 @@
 //   intelligenceHtml — Intelligence tab: what matters now and why, valuation, market regime, risk
 // All text comes from the engine's evidence; nothing here adds figures of its own.
 
-import { DOMAIN_SLUG, DEF_BY_ID, indSlug, materialForces } from '../engine/intel.js?v=20261004c';
+import { DOMAIN_SLUG, DEF_BY_ID, indSlug, materialForces } from '../engine/intel.js?v=20261004d';
 
 const DLINK = (k) => `#analysis/${DOMAIN_SLUG[k]}`;
 const ILINK = (id) => (DEF_BY_ID[id] ? `${DLINK(DEF_BY_ID[id].domain)}/${indSlug(id)}` : '#analysis');
@@ -94,7 +94,7 @@ export function intelligenceHtml(I, info = () => '', opts = {}) {
   const gp = I.grade.parts;
   const mx = Math.max(...gp.map((p) => Math.abs(p.pts)), 6);
   const M = materialForces(I, 5, 4);
-  const li = (f) => `<li><span class="fdot t-${dirTone(f.dir)}"></span><span class="fn"><a href="${forceHref(f)}"><b>${esc(f.name)}</b></a> ${forceTag(f)}</span><span class="fmeta">${esc(f.label)} · ${esc(STR[f.strengthWord])} · ${esc(f.horizon)}${f.persistence >= 3 ? ` · ${f.persistence >= 30 ? '30+' : f.persistence} days` : ''}</span></li>`;
+  const fli = (f) => `<li><span class="fdot t-${dirTone(f.dir)}"></span><span class="fn"><a href="${forceHref(f)}"><b>${esc(f.name)}</b></a> <span class="muted">— ${esc(f.label)}</span></span></li>`;
   // the valuation evidence table lives inside the Valuation & holder profit force entry
   const valuationDetail = () => `<details class="fdet"><summary>Valuation read across the framework · ${V ? esc(V.state) : 'unavailable'}${info('i_valuation')}</summary>
       ${V ? `<div class="iconc"><div class="iconc-h"><div class="ipill t-${V.state === 'Fair' ? 'neu' : ['Depressed', 'Attractive'].includes(V.state) ? 'up' : 'warn'}">${esc(V.state)}</div>${conf(V.confidence)}<span class="vscale">${['Depressed', 'Attractive', 'Fair', 'Elevated', 'Extreme'].map((s) => `<i class="${s === V.state ? 'on' : ''}">${s}</i>`).join('')}</span></div>
@@ -102,7 +102,7 @@ export function intelligenceHtml(I, info = () => '', opts = {}) {
         <div class="tbl-wrap"><table class="itbl"><thead><tr><th>Evidence</th><th>Reading</th><th>Reads as</th><th>Weight</th></tr></thead><tbody>${V.evidence.map((e) => `<tr><td data-k="Evidence"><b>${esc(e.name)}</b><div class="xs dim">${esc(e.src)} · ${esc(ago(e.asOf))}</div></td><td data-k="Reading" class="num">${esc(e.disp)}</td><td data-k="Reads as">${pill(e.zone, e.score / 2)}</td><td data-k="Weight" class="num">${e.w}</td></tr>`).join('')}</tbody></table></div>
         <p class="xs dim">Each input is placed on a cheap-to-rich scale against its own historical zones; the weighted reading sets the state (MVRV carries the most weight; NUPL and realised price repeat MVRV and are not counted twice). MVRV Z-Score is shown on the Analysis pages; NVT is not available from free sources.</p></div>` : '<p class="muted">Valuation inputs unavailable.</p>'}</details>`;
   const detail = (f) => (f.id === 'valuation' ? valuationDetail() : '') + (opts.forceDetail ? opts.forceDetail(f) : '');
-  return `<section class="ihead"><div><h1>Intelligence</h1><p class="muted">One market read and how strong it is, the forces driving it, and what changed — every force links to its evidence.</p></div>
+  return `<section class="ihead"><div><h1>Intelligence</h1><p class="muted">Twelve forces driving Bitcoin right now — what is active, what is offsetting, what changed.</p><p class="xs dim ihead-fn">Domains = categories. Forces = mechanisms inside those categories. Same posture everywhere; different zoom.</p></div>
       <div class="ihead-r"><span class="muted small">Data as of ${esc(I.asOf)}</span></div></section>
 
     <section class="ihero">
@@ -126,10 +126,10 @@ export function intelligenceHtml(I, info = () => '', opts = {}) {
       <div class="ir-gcard"><h3>Fair Grade over time</h3><div data-gradechart><p class="small muted">Computing…</p></div></div>
     </div></section>
 
-    <section class="block" id="ir-forces"><div class="bh"><h2>Drivers and offsets${info('i_forces')}</h2><p class="aside">Active forces from the library below · same names on Analysis and the Dashboard</p></div>
+    <section class="block" id="ir-forces"><div class="bh"><h2>Drivers and offsets${info('i_forces')}</h2><p class="aside">Active forces from the force library.</p></div>
       <div class="ir-cols ovf">
-        <div><h3>Drivers</h3>${M.drivers.length ? `<ul class="ir-f">${M.drivers.map(li).join('')}</ul>` : '<p class="muted small">No active supportive force.</p>'}</div>
-        <div><h3>Offsets</h3>${M.offsets.length ? `<ul class="ir-f">${M.offsets.map(li).join('')}</ul>` : '<p class="muted small">No active offsetting force.</p>'}</div>
+        <div><h3>Drivers</h3>${M.drivers.length ? `<ul class="ir-f fnames">${M.drivers.map(fli).join('')}</ul>` : '<p class="muted small">No active supportive force.</p>'}</div>
+        <div><h3>Offsets</h3>${M.offsets.length ? `<ul class="ir-f fnames">${M.offsets.map(fli).join('')}</ul>` : '<p class="muted small">No active offsetting force.</p>'}</div>
       </div>
       <details class="more ir-why"><summary>Explain in plain English <span class="dim">— the reasoning behind the posture, as of ${esc(I.asOf)}</span></summary><div class="more-body">
         <div class="inarr">${I.narrative.map((p) => `<p>${rich(p)}</p>`).join('')}</div>
@@ -137,13 +137,13 @@ export function intelligenceHtml(I, info = () => '', opts = {}) {
 
       </div></details></section>
 
-    <section class="block" id="forces"><div class="bh"><h2>What is moving Bitcoin: the force library${info('i_forces')}</h2><p class="aside">Full force library. Drivers/offsets on Analysis and Dashboard are the material subset.</p></div>
+    <section class="block" id="forces"><div class="bh"><h2>What is moving Bitcoin: the force library${info('i_forces')}</h2><p class="aside">Full force library. Drivers/offsets on the Dashboard are the material subset; Analysis shows the chart evidence behind them.</p></div>
       <div class="lib-sum">${['tech', 'chain', 'mkt', 'sent', 'macro'].map((k) => { const fs = I.forces.filter((f) => f.domain === k); return `<span><b>${esc(fs[0]?.domainName || k)}</b> ${fs.map((f) => `<a href="${forceHref(f)}" class="lchip t-${f.active ? dirTone(f.dir) : 'ctx'}" title="${esc(f.label || f.name)}">${esc(f.name)}</a>`).join('')}</span>`; }).join('')}</div>
       <h3 class="rh3">Active forces · ranked by materiality (strength × confidence × horizon)</h3>
       ${I.forces.filter((f) => f.active).length ? `<div class="iforces lib">${I.forces.filter((f) => f.active).map((f) => forceCard(f, detail)).join('')}</div>` : '<p class="muted">No force is above its activation threshold.</p>'}
       <h3 class="rh3">Inactive forces · below their activation threshold</h3>
       <div class="iforces lib">${I.forces.filter((f) => !f.active).map((f) => forceCard(f, detail)).join('')}</div>
-      <p class="xs dim">${I.forces.length} forces, each in one domain, each built from indicators already on the site. A force is active when its score crosses its threshold: active supportive forces are the drivers, active adverse forces the offsets, ranked by materiality (strength × confidence × horizon). The Dashboard shows up to 3 of each, Analysis up to 5 drivers and 4 offsets — always the same forces, names and order as here. Inputs missing on a given run are listed on the force, never filled in. Volatility squeeze (Bollinger width) is not a force — it has no direction — and stays an indicator under Technical.</p></section>
+      <p class="xs dim">${I.forces.length} forces, each in one domain, each built from indicators already on the site. A force is active when its score crosses its threshold: active supportive forces are the drivers, active adverse forces the offsets, ranked by materiality (strength × confidence × horizon). The Dashboard shows up to 3 of each by name; Analysis shows the strongest chart reading behind up to 5 drivers and 4 offsets, tagged with the force it feeds — always the same forces, in the same order as here. Inputs missing on a given run are listed on the force, never filled in. Volatility squeeze (Bollinger width) is not a force — it has no direction — and stays an indicator under Technical.</p></section>
 
     <section class="block"><div class="bh"><h2>What changed${info('i_changes')}</h2><p class="aside">Current state versus 2, 7 and 30 days ago, on a like-for-like basis</p></div>
       <div class="ichgs">${changeCard(I.changes.d2, '2 days')}${changeCard(I.changes.d7, '7 days')}${changeCard(I.changes.d30, '30 days')}</div></section>

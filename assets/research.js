@@ -7,9 +7,9 @@
 // shows the same value the dashboard and Intelligence use. Heavy history work is deferred
 // until after the page skeleton is on screen.
 
-import { DOMAIN_META, DOMAIN_SLUG, SLUG_DOMAIN, DEF_BY_ID, indicatorsOf, indSlug, compSlug, indicatorHistory, domHistory, compHistory, gradeHistory, regimeTimeline, similarConditions, withArticle, materialForces } from '../engine/intel.js?v=20261004c';
-import { ZONES } from '../engine/cycle.js?v=20261004c';
-import { DOMAIN_DOCS, COMP_DOCS, IND_DOCS } from '../engine/indicator_docs.js?v=20261004c';
+import { DOMAIN_META, DOMAIN_SLUG, SLUG_DOMAIN, DEF_BY_ID, indicatorsOf, indSlug, compSlug, indicatorHistory, domHistory, compHistory, gradeHistory, regimeTimeline, similarConditions, withArticle, materialForces } from '../engine/intel.js?v=20261004d';
+import { ZONES } from '../engine/cycle.js?v=20261004d';
+import { DOMAIN_DOCS, COMP_DOCS, IND_DOCS } from '../engine/indicator_docs.js?v=20261004d';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ok = (v) => v !== null && v !== undefined && Number.isFinite(v);
@@ -194,8 +194,13 @@ function landing(I, ctx) {
   const factors = (dk) => { const ev = (G?.evidence || []).filter((e) => e.dk === dk); return ev.length ? `<div class="sfac"><span class="k">Structural factors</span>${ev.map((e) => { const w = SCALE5(e.score); return `<a class="hsum" href="${e.comp ? CLINK(e.dk, e.comp) : DSL(e.dk)}"><span class="hs-n">${esc(e.name)}</span><span class="hs-w t-${tone(w, e.score)}">${esc(w)}</span>${sbar(e.score)}</a>`; }).join('')}</div>` : ''; };
   const domHead = (dk, id, aside, extraId = '') => { const d = D(dk); return `${extraId ? `<span id="${extraId}" class="anchor"></span>` : ''}<div class="bh ovd-h" id="${id}"><h2>${esc(SHORT[dk])} ${pill(d.state, d.score)}</h2><p class="aside">${aside} · <a href="${DSL(dk)}">Research page →</a></p></div>`; };
   const dtag = (names) => names.map((n) => `<span class="dtag">${esc(n)}</span>`).join('');
-  const fItem = (f, cls) => `<li><span class="fdot t-${cls}"></span><span class="fn"><a href="#force-${f.id}"><b>${esc(f.name)}</b></a> ${dtag([f.domainName])} <span class="small muted">${esc(f.label)}</span></span><span class="fmeta">${esc(f.text)} <span class="xs dim">${esc(STRENGTH[f.strengthWord] || f.strengthWord)} · ${esc(f.horizon)} term${f.persistence >= 3 ? ` · ${f.persistence >= 30 ? '30+' : f.persistence} days` : ''}</span></span></li>`;
-  return `<section class="ihead"><div><h1>Analysis</h1><p class="muted">One market posture, the five domains it rests on, and the evidence behind each — every reading links to its research page.</p></div>
+  // drivers/offsets as chart evidence: for each active force, its strongest reading pointing the same
+  // way (largest |score| × weight), each indicator used once; the force is a small tag
+  const usedEv = new Set();
+  const SOLE = { stables: 'c_stab30', spot: 'm_cbp' }; // forces scored on one indicator show that indicator
+  const evOf = (f) => { const ev = f.evidence.map((e) => ({ ...e, r: I.readings[e.id] })).filter((e) => e.r && e.r.s !== null && !usedEv.has(e.id)); const sole = ev.find((e) => e.id === SOLE[f.id]); if (sole) { usedEv.add(sole.id); return sole; } const al = ev.filter((e) => Math.sign(e.r.s) === f.dir).sort((a, b) => Math.abs(b.r.s) * b.r.w - Math.abs(a.r.s) * a.r.w); const pick = (al.length ? al : ev)[0]; if (pick) usedEv.add(pick.id); return pick; };
+  const fItem = (f, cls) => { const e = evOf(f); return e ? `<li class="evi"><span class="fdot t-${cls}"></span><span class="fn">${dtag([f.domainName])} <a href="${ILINK(e.id)}"><b>${esc(e.name)}</b></a> <span class="num ev-v">${esc(e.disp)}</span></span><span class="fmeta">${esc(e.r.why || '')} <span class="xs dim">${esc(e.src)} · ${esc(e.asOf || '')} · feeds <a href="${'#force-' + f.id}">${esc(f.name)}</a></span></span></li>` : `<li class="evi"><span class="fdot t-${cls}"></span><span class="fn">${dtag([f.domainName])} <span class="muted">No chart reading available this run</span></span><span class="fmeta xs dim">feeds <a href="${'#force-' + f.id}">${esc(f.name)}</a></span></li>`; };
+  return `<section class="ihead"><div><h1>Analysis</h1><p class="muted">Five domains and the charts behind them — evidence for the market read.</p><p class="xs dim ihead-fn">Domains = categories. Forces = mechanisms inside those categories. Same posture everywhere; different zoom.</p></div>
       <div class="ihead-r"><span class="muted small">Data as of ${esc(I.asOf)}</span></div></section>
 
     <span id="assessment" class="anchor"></span><section class="mregime t-${RTONE[I.state] || 'neu'}" id="regime">
@@ -209,9 +214,9 @@ function landing(I, ctx) {
 
     <div class="atiles">${DOMAIN_META.map(tile).join('')}</div>
 
-    <span class="anchor" id="ov-forces"></span><section class="block"><div class="bh"><h2>Key drivers and offsets</h2><p class="aside">Material forces from the Intelligence force library (filtered). Full set on <a href="#forces">Intelligence →</a></p></div>
-      <div class="ir-cols ovf"><div><h3>Key drivers</h3><ul class="ir-f">${MF.drivers.map((f) => fItem(f, 'up')).join('') || '<li class="muted">No material supportive force.</li>'}</ul></div>
-        <div><h3>Key offsets</h3><ul class="ir-f">${MF.offsets.map((f) => fItem(f, 'down')).join('') || '<li class="muted">No material offsetting force.</li>'}</ul></div></div></section>
+    <span class="anchor" id="ov-forces"></span><section class="block"><div class="bh"><h2>Key drivers and offsets</h2><p class="aside">Material evidence from the charts below (feeds the force library on <a href="#forces">Intelligence</a>).</p></div>
+      <div class="ir-cols ovf"><div><h3>Key drivers</h3><ul class="ir-f">${MF.drivers.map((f) => fItem(f, 'up')).join('') || '<li class="muted">No supportive evidence above threshold.</li>'}</ul></div>
+        <div><h3>Key offsets</h3><ul class="ir-f">${MF.offsets.map((f) => fItem(f, 'down')).join('') || '<li class="muted">No offsetting evidence above threshold.</li>'}</ul></div></div></section>
 
     <section class="block ovd">${domHead('tech', 'ov-tech', 'Trend, momentum, price structure, highs and lows, extension', 'structure')}
       ${factors('tech')}

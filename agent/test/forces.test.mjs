@@ -107,11 +107,12 @@ for (const I of [world({ trend: 1 }), world({ trend: -1, mvrv: 0.9, fng: 18, etf
   const ui = src('intelui.js'), ov = src('research.js');
   assert.match(ui, /materialForces\(I, 3, 3\)/, 'Dashboard Market Read uses the shared subset');
   assert.match(ov, /materialForces\(I, 5, 4\)/, 'Analysis Overview uses the shared subset');
-  assert.match(ov, /Material forces from the Intelligence force library \(filtered\)\. Full set on/, 'Analysis helper text');
-  assert.match(ui, /Full force library\. Drivers\/offsets on Analysis and Dashboard are the material subset\./, 'Intelligence helper text');
+  assert.match(ov, /Material evidence from the charts below \(feeds the force library on/, 'Analysis helper text');
+  assert.match(ui, /Full force library\. Drivers\/offsets on the Dashboard are the material subset; Analysis shows the chart evidence behind them\./, 'Intelligence helper text');
   assert.match(ui, /Volatility squeeze \(Bollinger width\) is not a force/, 'Intelligence footnote explains the squeeze');
   // driver/offset rows render the library object's own name and label, never a typed string
   assert.match(ui, /const li = \(f\) => .*esc\(f\.name\).*esc\(f\.label\)/, 'Dashboard rows use f.name / f.label');
-  assert.match(ov, /const fItem = \(f, cls\) => .*esc\(f\.name\).*esc\(f\.label\)/, 'Analysis rows use f.name / f.label');
+  assert.match(ov, /const fItem = \(f, cls\) => .*f\.domainName.*ILINK\(e\.id\).*'#force-' \+ f\.id.*esc\(f\.name\)/, 'Analysis rows: domain + chart evidence, tagged with the library force name');
+  assert.match(ui, /const fli = \(f\) => .*forceHref\(f\).*esc\(f\.name\).*esc\(f\.label\)/, 'Intelligence rows: force name — label, linked to the force card');
 }
 console.log('forces.test: ok — 12 locked forces, decisions and wiring verified');

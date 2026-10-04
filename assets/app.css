@@ -1576,3 +1576,6 @@ html.panel-open { overflow: hidden; }
 .ir-gcard .range button { padding: 2px 8px; font-size: 11px; }
 .ir-gcard .hc-body svg { width: 100%; height: auto; }
 @media (max-width: 900px) { .ir-gcols { grid-template-columns: minmax(0, 1fr); } }
+.ihead-fn { margin-top: 4px !important; }
+.ir-f.fnames li { grid-template-columns: 12px minmax(0, 1fr); }
+.ir-f li.evi .ev-v { color: var(--text); font-size: 13px; margin-left: 2px; }
