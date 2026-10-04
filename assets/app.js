@@ -6,14 +6,14 @@ import { briefReport } from '../engine/report.js';
 import { brief } from '../engine/brief.js';
 import { ZONES } from '../engine/cycle.js';
 import { explain, EXPLAIN, REMINDER } from '../engine/explain.js';
-import { startLivePrice } from './live.js?v=20261004d';
-import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261004d';
-import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261004d';
-import { intelligence } from '../engine/intel.js?v=20261004d';
-import { reportModel } from '../engine/reportmodel.js?v=20261004d';
-import { intelligenceHtml, crossMarketHtml, riskContextHtml, wireIntel } from './intelui.js?v=20261004d';
-import { analysisRoute, indicatorPanel, idFromHref, ribbonMenu, fillGradeChart } from './research.js?v=20261004d';
-import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261004d';
+import { startLivePrice } from './live.js?v=20261004e';
+import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261004e';
+import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261004e';
+import { intelligence } from '../engine/intel.js?v=20261004e';
+import { reportModel } from '../engine/reportmodel.js?v=20261004e';
+import { intelligenceHtml, crossMarketHtml, riskContextHtml, wireIntel } from './intelui.js?v=20261004e';
+import { analysisRoute, indicatorPanel, idFromHref, ribbonMenu, fillGradeChart } from './research.js?v=20261004e';
+import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261004e';
 import { fmtUsd, fmtUsdSigned, fmtPrice, fmtPct, fmtNum, fmtK, ordinal } from '../engine/util.js';
 
 const state = { a: null, rows: [], runs: [], index: null, snapshot: null, range: 90, pi: null, dash: null, live: null, liveState: 'init' };
@@ -220,6 +220,8 @@ function drawCharts(root = document) { root.querySelectorAll('[data-chart],[data
 let resizeT;
 window.addEventListener('resize', () => { clearTimeout(resizeT); resizeT = setTimeout(() => { drawCharts(document); if (tabFromHash() === 'dashboard') drawPriceChart($('#pc-chart'), state.pi, state.live); if (tabFromHash() === 'dca') redrawDcaChart(); }, 200); });
 document.addEventListener('toggle', (e) => { if (e.target.matches?.('details') && e.target.open) drawCharts(e.target); }, true);
+// Dashboard → Market Read: the Fair Grade history is computed when its panel is first opened
+document.addEventListener('toggle', (e) => { if (e.target.id === 'fair-grade' && e.target.open) fillGradeChart(e.target, state.intel, wireChart); }, true);
 const chartEl = (key) => h`<div class="chart" data-chart="${key}"></div>`;
 const sparkEl = (key) => h`<div class="chart spark" data-spark="${key}"></div>`;
 const rangeBar = () => h`<div class="range" role="group" aria-label="Chart range">${[[30, '30D'], [90, '90D'], [180, '6M'], [365, '1Y']].map(([r, l]) => h`<button type="button" data-range="${r}" aria-pressed="${state.range === r}">${l}</button>`)}</div>`;
@@ -246,7 +248,6 @@ function showTab(scroll) {
   document.querySelectorAll('[data-tab-link]').forEach((x) => x.setAttribute('aria-current', x.dataset.tabLink === t ? 'page' : 'false'));
   drawCharts($(`[data-tab="${t}"]`) || document);
   if (t === 'dashboard') drawPriceChart($('#pc-chart'), state.pi, state.live);
-  if (t === 'overview') fillGradeChart($('#intel-main'), state.intel, wireChart);
   if (t === 'dca') mountDcaPage({ pi: state.pi, getLive: () => state.live });
   if (k.startsWith('force-')) openForce(k);
   else if (LEGACY[k]) document.getElementById(k)?.scrollIntoView();
@@ -639,7 +640,6 @@ function updateIntel() {
   // the Analysis pages re-render only on their landing page, so a reader is never moved mid-page
   analysisKey = null; if (tabFromHash() === 'analysis' && location.hash === '#analysis') renderAnalysis(false);
   if (im) { im.innerHTML = intelligenceHtml(state.intel, infoS, { forceDetail }); drawCharts(im); }
-  if (im && tabFromHash() === 'overview') fillGradeChart(im, state.intel, wireChart);
   const ic = $('#intel-cross'), ir = $('#intel-risk');
   if (ic) ic.innerHTML = crossMarketHtml(state.intel, infoS);
   if (ir) ir.innerHTML = riskContextHtml(state.intel, infoS);

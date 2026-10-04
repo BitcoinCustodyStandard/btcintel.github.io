@@ -7,9 +7,9 @@
 // shows the same value the dashboard and Intelligence use. Heavy history work is deferred
 // until after the page skeleton is on screen.
 
-import { DOMAIN_META, DOMAIN_SLUG, SLUG_DOMAIN, DEF_BY_ID, indicatorsOf, indSlug, compSlug, indicatorHistory, domHistory, compHistory, gradeHistory, regimeTimeline, similarConditions, withArticle, materialForces } from '../engine/intel.js?v=20261004d';
-import { ZONES } from '../engine/cycle.js?v=20261004d';
-import { DOMAIN_DOCS, COMP_DOCS, IND_DOCS } from '../engine/indicator_docs.js?v=20261004d';
+import { DOMAIN_META, DOMAIN_SLUG, SLUG_DOMAIN, DEF_BY_ID, indicatorsOf, indSlug, compSlug, indicatorHistory, domHistory, compHistory, gradeHistory, regimeTimeline, similarConditions, withArticle, materialForces } from '../engine/intel.js?v=20261004e';
+import { ZONES } from '../engine/cycle.js?v=20261004e';
+import { DOMAIN_DOCS, COMP_DOCS, IND_DOCS } from '../engine/indicator_docs.js?v=20261004e';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ok = (v) => v !== null && v !== undefined && Number.isFinite(v);
@@ -206,7 +206,7 @@ function landing(I, ctx) {
     <span id="assessment" class="anchor"></span><section class="mregime t-${RTONE[I.state] || 'neu'}" id="regime">
       <div class="rg-l"><span class="k">Market posture${ctx?.info ? ctx.info('i_read') : ''}</span><div class="rg-label">${esc(I.state)}</div>
         ${C ? `<p class="rg-c">Structure consistent with ${esc(withArticle(C.phase))}${C.transitional && C.runnerUp ? `, bordering on ${esc(withArticle(C.runnerUp.phase))}` : ''}</p>` : ''}
-        <div class="rg-meta">${conf(I.confidence.level)}<span class="small muted">Fair Grade <b class="num">${I.grade.value}</b>/100 · ${I.breadth.n} of ${I.breadth.of} domains Constructive or better</span></div></div>
+        <div class="rg-meta">${conf(I.confidence.level)}<span class="small muted">${I.breadth.n} of ${I.breadth.of} domains Constructive or better</span></div></div>
       <div class="rg-r"><p>${esc(A ? A.why : '')}</p>
         <p class="xs dim">The same posture, on the same data, as the Market Read on the BTC Dashboard. Scale: Adverse · Cautionary · Neutral · Constructive · Supportive.</p>
         ${C ? `<details class="rg-more"><summary>What the structure description is based on</summary><div class="icyc"><div><h3>Consistent</h3><ul class="ichk">${C.met.map((m) => `<li class="y">${esc(m)}</li>`).join('') || '<li>—</li>'}</ul></div><div><h3>Not consistent</h3><ul class="ichk">${C.unmet.map((m) => `<li class="n">${esc(m)}</li>`).join('') || '<li class="muted">None</li>'}</ul></div></div><p class="xs dim">${esc(C.desc)} ${G ? esc(G.why) + ' ' : ''}The description uses structural, medium- and long-horizon factors (shown under each domain below); it is context for the posture, not a second verdict, and it never uses time since the halving.</p></details>` : ''}
@@ -403,7 +403,7 @@ export function ribbonMenu(dslug) {
 }
 
 // ---------------------------------------------------------------- deferred fills
-// Intelligence → Current read: the Fair Grade through time (same synthesis as today's grade).
+// Dashboard → Market Read (Fair Grade detail): the Fair Grade through time (same synthesis as today's grade).
 // Computed lazily (about half a second) once the Intelligence view is open.
 export function fillGradeChart(root, I, wireChart) {
   const el = root?.querySelector('[data-gradechart]'); if (!el || !I?.inputs || el.dataset.done) return;
