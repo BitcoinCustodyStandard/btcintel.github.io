@@ -3,7 +3,7 @@
 //   intelligenceHtml — Intelligence tab: what matters now and why, valuation, market regime, risk
 // All text comes from the engine's evidence; nothing here adds figures of its own.
 
-import { DOMAIN_SLUG, DEF_BY_ID, indSlug, materialForces } from '../engine/intel.js?v=20261004b';
+import { DOMAIN_SLUG, DEF_BY_ID, indSlug, materialForces } from '../engine/intel.js?v=20261004c';
 
 const DLINK = (k) => `#analysis/${DOMAIN_SLUG[k]}`;
 const ILINK = (id) => (DEF_BY_ID[id] ? `${DLINK(DEF_BY_ID[id].domain)}/${indSlug(id)}` : '#analysis');
@@ -102,9 +102,12 @@ export function intelligenceHtml(I, info = () => '', opts = {}) {
         <div class="tbl-wrap"><table class="itbl"><thead><tr><th>Evidence</th><th>Reading</th><th>Reads as</th><th>Weight</th></tr></thead><tbody>${V.evidence.map((e) => `<tr><td data-k="Evidence"><b>${esc(e.name)}</b><div class="xs dim">${esc(e.src)} · ${esc(ago(e.asOf))}</div></td><td data-k="Reading" class="num">${esc(e.disp)}</td><td data-k="Reads as">${pill(e.zone, e.score / 2)}</td><td data-k="Weight" class="num">${e.w}</td></tr>`).join('')}</tbody></table></div>
         <p class="xs dim">Each input is placed on a cheap-to-rich scale against its own historical zones; the weighted reading sets the state (MVRV carries the most weight; NUPL and realised price repeat MVRV and are not counted twice). MVRV Z-Score is shown on the Analysis pages; NVT is not available from free sources.</p></div>` : '<p class="muted">Valuation inputs unavailable.</p>'}</details>`;
   const detail = (f) => (f.id === 'valuation' ? valuationDetail() : '') + (opts.forceDetail ? opts.forceDetail(f) : '');
-  return `<section class="ihero">
+  return `<section class="ihead"><div><h1>Intelligence</h1><p class="muted">One market read and how strong it is, the forces driving it, and what changed — every force links to its evidence.</p></div>
+      <div class="ihead-r"><span class="muted small">Data as of ${esc(I.asOf)}</span></div></section>
+
+    <section class="ihero">
       <div class="ihero-l">
-        <span class="k">Market intelligence · current read${info('i_read')}</span>
+        <span class="k">Current read${info('i_read')}</span>
         <div class="ir-state big t-${toneOf(I.state)}">${esc(I.state)}</div>
         <div class="ir-gtile" title="Fair Grade: how strong today’s read is, 0–100 — the quantitative strength of the same posture, not a forecast">
           <div class="ir-grade lg"><span class="k">Fair Grade${info('i_grade')}</span><b class="num">${I.grade.value}</b><span class="of">/ 100 · ${gradeWord(I.grade.value)}</span><span class="gbar2"><i style="width:${I.grade.value}%"></i></span></div>
