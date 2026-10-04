@@ -3,7 +3,7 @@
 //   intelligenceHtml — Intelligence tab: what matters now and why, valuation, market regime, risk
 // All text comes from the engine's evidence; nothing here adds figures of its own.
 
-import { DOMAIN_SLUG, DEF_BY_ID, indSlug, materialForces } from '../engine/intel.js?v=20261003w';
+import { DOMAIN_SLUG, DEF_BY_ID, indSlug, materialForces } from '../engine/intel.js?v=20261003x';
 
 const DLINK = (k) => `#analysis/${DOMAIN_SLUG[k]}`;
 const ILINK = (id) => (DEF_BY_ID[id] ? `${DLINK(DEF_BY_ID[id].domain)}/${indSlug(id)}` : '#analysis');
@@ -40,17 +40,13 @@ export function marketReadHtml(I, info = () => '') {
       <div class="ir-grade" title="Fair Grade: the engine’s score of today’s overall market configuration (not a forecast)"><span class="k">Fair Grade${info('i_grade')}</span><b class="num">${I.grade.value}</b><span class="of">/ 100</span><span class="gbar2"><i style="width:${I.grade.value}%"></i></span></div>
     </div>
     <p class="ir-sub"><b>${I.breadth.n} of ${I.breadth.of}</b> domains Constructive or better${I.breadth.neg ? ` · ${I.breadth.neg} Cautionary or worse` : ''} · ${conf(I.confidence.level)}</p>
+    ${I.cycle ? `<p class="ir-struct">Structure: ${esc(I.cycle.phase.toLowerCase())}${I.cycle.transitional && I.cycle.runnerUp ? `, bordering on ${esc(I.cycle.runnerUp.phase.toLowerCase())}` : ''}${info('i_cycle')}</p>` : ''}
     <div class="ir-doms">${I.domains.map((d) => `<a class="ir-dom t-${toneOf(d.state, d.score)}" href="${DLINK(d.key)}" title="${esc(d.question)}"><span class="n">${esc(d.name)}</span><span class="a">${d.arrow}</span><span class="s">${esc(d.state)}</span></a>`).join('')}</div>
     <div class="ir-cols ovf">
       <div><h3>Key drivers${info('i_forces')}</h3>${M.drivers.length ? `<ul class="ir-f">${M.drivers.map(li).join('')}</ul>` : '<p class="muted small">No material supportive force right now.</p>'}${more(I.drivers.length - M.drivers.length)}</div>
       <div><h3>Key offsets</h3>${M.offsets.length ? `<ul class="ir-f">${M.offsets.map(li).join('')}</ul>` : '<p class="muted small">No material offsetting force right now.</p>'}${more(I.offsets.length - M.offsets.length)}</div>
     </div>
     ${c2 ? `<p class="ir-chg"><span class="k">What changed${info('i_changes')}</span><span class="ir-hz">${[['2d', I.changes.d2], ['7d', I.changes.d7], ['30d', I.changes.d30]].map(([l, c]) => (c?.domains ? `<span title="${esc(c.text)}"><i>${l}</i>${pill(c.label, c.label === 'Improving' ? 1 : c.label === 'Deteriorating' ? -0.5 : 0)}</span>` : '')).join('')}</span>${esc(c2.text)}</p>` : ''}
-    <div class="ir-concl">
-      ${I.valuation ? `<span><span class="k">Valuation${info('i_valuation')}</span><b>${esc(I.valuation.state)}</b></span>` : ''}
-      ${I.regime ? `<span><span class="k">Market regime${info('i_cycle')}</span><b><a href="#analysis/regime">${esc(I.regime.label)}</a></b></span>` : ''}
-      <span><span class="k">Risk regime${info('i_risk')}</span><b>${esc(I.risk.level)}</b></span>
-    </div>
     <p class="tr-n">Rules-based synthesis of free public data across five domains — not investment advice and not a forecast.</p>`;
 }
 
@@ -106,14 +102,12 @@ export function intelligenceHtml(I, info = () => '', opts = {}) {
         <div class="tbl-wrap"><table class="itbl"><thead><tr><th>Evidence</th><th>Reading</th><th>Reads as</th><th>Weight</th></tr></thead><tbody>${V.evidence.map((e) => `<tr><td data-k="Evidence"><b>${esc(e.name)}</b><div class="xs dim">${esc(e.src)} · ${esc(ago(e.asOf))}</div></td><td data-k="Reading" class="num">${esc(e.disp)}</td><td data-k="Reads as">${pill(e.zone, e.score / 2)}</td><td data-k="Weight" class="num">${e.w}</td></tr>`).join('')}</tbody></table></div>
         <p class="xs dim">Each input is placed on a cheap-to-rich scale against its own historical zones; the weighted reading sets the state (MVRV carries the most weight; NUPL and realised price repeat MVRV and are not counted twice). MVRV Z-Score is shown on the Analysis pages; NVT is not available from free sources.</p></div>` : '<p class="muted">Valuation inputs unavailable.</p>'}</details>`;
   const detail = (f) => (f.id === 'valuation' ? valuationDetail() : '') + (opts.forceDetail ? opts.forceDetail(f) : '');
-  const RK = { Low: 'up', Moderate: 'neu', Elevated: 'warn', High: 'down' };
   return `<section class="ihero">
       <div class="ihero-l">
         <span class="k">Market intelligence · current read${info('i_read')}</span>
         <div class="ir-state big t-${toneOf(I.state)}">${esc(I.state)}</div>
         <p class="ir-sub">Fair Grade <b class="num">${I.grade.value}</b> / 100 (${gradeWord(I.grade.value)}) · ${I.breadth.n} of ${I.breadth.of} domains Constructive or better · ${conf(I.confidence.level)}</p>
         ${C ? `<p class="ir-struct">Structure: ${esc(C.phase.toLowerCase())}${C.transitional && C.runnerUp ? `, bordering on ${esc(C.runnerUp.phase.toLowerCase())}` : ''}${info('i_cycle')}</p>` : ''}
-        <p class="ir-meta">${V ? `<a href="#force-valuation"><span class="k">Valuation</span> ${esc(V.state)}</a>` : ''}<a href="#overview/risk"><span class="k">Risk context</span> <span class="t-${RK[K.level] || 'neu'} rk">${esc(K.level)}</span></a></p>
       </div>
       <div class="ihero-r"><p class="xs dim" style="margin:0 0 6px">The five analytical domains — open one for its research page:</p><div class="imatrix sm">${I.domains.map((d) => `<a href="${DLINK(d.key)}" class="imx t-${toneOf(d.state, d.score)}"><span class="n">${esc(d.name)}</span><b>${d.arrow} ${esc(d.state)}</b></a>`).join('')}</div></div>
     </section>

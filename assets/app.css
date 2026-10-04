@@ -1544,11 +1544,6 @@ html.panel-open { overflow: hidden; }
 
 /* ---- Intelligence: current read hierarchy + sub-pages ---- */
 .ir-struct { margin: 6px 0 0; font-size: 14px; color: var(--text2); }
-.ir-meta { display: flex; flex-wrap: wrap; gap: 4px 16px; margin: 8px 0 0; font-size: 12.5px; color: var(--muted); }
-.ir-meta a { color: var(--text2); text-decoration: none; border-bottom: 1px dotted var(--line2); }
-.ir-meta a:hover { color: var(--orange-ink); }
-.ir-meta .k { color: var(--dim); font-size: 10.5px; letter-spacing: 0.06em; text-transform: uppercase; margin-right: 3px; }
-.ir-meta .rk { color: var(--tone, var(--text2)); }
 .ir-why { margin-top: 12px; }
 .ir-sev { display: flex; flex-wrap: wrap; gap: 6px; margin: 4px 0 8px; font-size: 12.5px; }
 .ir-links { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 10px; }
