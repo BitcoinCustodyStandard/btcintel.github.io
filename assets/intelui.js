@@ -3,7 +3,7 @@
 //   intelligenceHtml — Intelligence tab: what matters now and why, valuation, market regime, risk
 // All text comes from the engine's evidence; nothing here adds figures of its own.
 
-import { DOMAIN_SLUG, DEF_BY_ID, indSlug, materialForces } from '../engine/intel.js?v=20261004a';
+import { DOMAIN_SLUG, DEF_BY_ID, indSlug, materialForces } from '../engine/intel.js?v=20261004b';
 
 const DLINK = (k) => `#analysis/${DOMAIN_SLUG[k]}`;
 const ILINK = (id) => (DEF_BY_ID[id] ? `${DLINK(DEF_BY_ID[id].domain)}/${indSlug(id)}` : '#analysis');
@@ -116,10 +116,12 @@ export function intelligenceHtml(I, info = () => '', opts = {}) {
       <div class="ihero-r"><p class="xs dim" style="margin:0 0 6px">The five analytical domains — open one for its research page:</p><div class="imatrix sm">${I.domains.map((d) => `<a href="${DLINK(d.key)}" class="imx t-${toneOf(d.state, d.score)}"><span class="n">${esc(d.name)}</span><b>${d.arrow} ${esc(d.state)}</b></a>`).join('')}</div></div>
     </section>
 
-    <section class="block ir-gcalc" id="fair-grade"><div class="bh"><h2>Inside the Fair Grade${info('i_grade')}</h2><p class="aside">50 + the contributions below = ${Number.isFinite(I.grade.raw) ? `${I.grade.raw.toFixed(1)} → <b>${I.grade.value}</b> (rounded)` : `<b>${I.grade.value}</b>`}</p></div>
-      <div class="ir-gcols"><div><div class="igrade">${gp.map((p) => `<div class="igr"><span class="gl">${esc(p.label)}</span><span class="gb"><i class="${p.pts >= 0 ? 'p' : 'n'}" style="${p.pts >= 0 ? 'left:50%' : `left:${50 + (p.pts / mx) * 50}%`};width:${(Math.abs(p.pts) / mx) * 50}%"></i></span><span class="gv num">${p.pts > 0 ? '+' : p.pts < 0 ? '−' : ''}${Math.abs(p.pts).toFixed(1)}</span><span class="gn xs dim">${esc(p.note)}</span></div>`).join('')}</div>
-      <p class="xs dim">The grade weighs breadth, strength, conflicts, risk and valuation; each contribution is scaled by the confidence of the data behind it. It describes today’s configuration and is not a probability or a price forecast.</p></div>
-      <div><h3 class="rh3">Fair Grade over time</h3><div data-gradechart><p class="small muted">Computing…</p></div></div></div></section>
+    <section class="ir-gcalc" id="fair-grade"><div class="ir-gcols">
+      <div class="ir-gcard"><h3>Inside the Fair Grade${info('i_grade')}</h3><p class="xs dim">50 + contributions = ${Number.isFinite(I.grade.raw) ? `${I.grade.raw.toFixed(1)} → <b>${I.grade.value}</b>` : `<b>${I.grade.value}</b>`}</p>
+        <div class="igrade sm">${gp.map((p) => `<div class="igr" title="${esc(p.note)}"><span class="gl">${esc(p.label)}</span><span class="gb"><i class="${p.pts >= 0 ? 'p' : 'n'}" style="${p.pts >= 0 ? 'left:50%' : `left:${50 + (p.pts / mx) * 50}%`};width:${(Math.abs(p.pts) / mx) * 50}%"></i></span><span class="gv num">${p.pts > 0 ? '+' : p.pts < 0 ? '−' : ''}${Math.abs(p.pts).toFixed(1)}</span></div>`).join('')}</div>
+        <p class="xs dim">Each contribution is scaled by the confidence of its data; hover a row for detail. Not a probability or a forecast.</p></div>
+      <div class="ir-gcard"><h3>Fair Grade over time</h3><div data-gradechart><p class="small muted">Computing…</p></div></div>
+    </div></section>
 
     <section class="block" id="ir-forces"><div class="bh"><h2>Drivers and offsets${info('i_forces')}</h2><p class="aside">Active forces from the library below · same names on Analysis and the Dashboard</p></div>
       <div class="ir-cols ovf">

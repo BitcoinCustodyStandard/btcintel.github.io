@@ -1563,7 +1563,16 @@ html.panel-open { overflow: hidden; }
 .ir-gcalc-l:hover { color: var(--orange-ink); }
 .ir-gcalc { padding-top: 18px; }
 @media (max-width: 560px) { .igr { grid-template-columns: 110px minmax(0, 1fr) 44px; } .igr .gn { grid-column: 1 / -1; margin-top: -2px; } }
-.ir-gcols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px 28px; align-items: start; }
-.ir-gcols .igr { grid-template-columns: 140px minmax(80px, 1fr) 46px; }
-.ir-gcols .igr .gn { grid-column: 1 / -1; margin: -3px 0 2px; }
+/* Intelligence: Fair Grade breakdown + history as two compact cards */
+.ir-gcalc { padding-top: 14px; }
+.ir-gcols { display: grid; grid-template-columns: repeat(2, minmax(0, 420px)); gap: 12px; }
+.ir-gcard { background: var(--card); border: 1px solid var(--line); border-radius: 6px; padding: 10px 12px; min-width: 0; }
+.ir-gcard h3 { margin: 0; font: 600 10.5px/1.3 var(--sans); letter-spacing: 0.12em; text-transform: uppercase; color: var(--muted); display: flex; align-items: center; }
+.ir-gcard > .xs { margin: 2px 0 6px; }
+.igrade.sm { gap: 1px; }
+.igrade.sm .igr { grid-template-columns: 112px minmax(60px, 1fr) 36px; font-size: 12px; padding: 1px 0; gap: 2px 8px; }
+.igrade.sm .igr .gb { height: 6px; }
+.ir-gcard .range { margin: 4px 0; }
+.ir-gcard .range button { padding: 2px 8px; font-size: 11px; }
+.ir-gcard .hc-body svg { width: 100%; height: auto; }
 @media (max-width: 900px) { .ir-gcols { grid-template-columns: minmax(0, 1fr); } }
