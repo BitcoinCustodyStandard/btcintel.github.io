@@ -6,14 +6,14 @@ import { briefReport } from '../engine/report.js';
 import { brief } from '../engine/brief.js';
 import { ZONES } from '../engine/cycle.js';
 import { explain, EXPLAIN, REMINDER } from '../engine/explain.js';
-import { startLivePrice } from './live.js?v=20261003y';
-import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003y';
-import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261003y';
-import { intelligence } from '../engine/intel.js?v=20261003y';
-import { reportModel } from '../engine/reportmodel.js?v=20261003y';
-import { intelligenceHtml, crossMarketHtml, riskContextHtml, wireIntel } from './intelui.js?v=20261003y';
-import { analysisRoute, indicatorPanel, idFromHref, ribbonMenu } from './research.js?v=20261003y';
-import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003y';
+import { startLivePrice } from './live.js?v=20261004a';
+import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261004a';
+import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261004a';
+import { intelligence } from '../engine/intel.js?v=20261004a';
+import { reportModel } from '../engine/reportmodel.js?v=20261004a';
+import { intelligenceHtml, crossMarketHtml, riskContextHtml, wireIntel } from './intelui.js?v=20261004a';
+import { analysisRoute, indicatorPanel, idFromHref, ribbonMenu, fillGradeChart } from './research.js?v=20261004a';
+import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261004a';
 import { fmtUsd, fmtUsdSigned, fmtPrice, fmtPct, fmtNum, fmtK, ordinal } from '../engine/util.js';
 
 const state = { a: null, rows: [], runs: [], index: null, snapshot: null, range: 90, pi: null, dash: null, live: null, liveState: 'init' };
@@ -246,6 +246,7 @@ function showTab(scroll) {
   document.querySelectorAll('[data-tab-link]').forEach((x) => x.setAttribute('aria-current', x.dataset.tabLink === t ? 'page' : 'false'));
   drawCharts($(`[data-tab="${t}"]`) || document);
   if (t === 'dashboard') drawPriceChart($('#pc-chart'), state.pi, state.live);
+  if (t === 'overview') fillGradeChart($('#intel-main'), state.intel, wireChart);
   if (t === 'dca') mountDcaPage({ pi: state.pi, getLive: () => state.live });
   if (k.startsWith('force-')) openForce(k);
   else if (LEGACY[k]) document.getElementById(k)?.scrollIntoView();
@@ -638,6 +639,7 @@ function updateIntel() {
   // the Analysis pages re-render only on their landing page, so a reader is never moved mid-page
   analysisKey = null; if (tabFromHash() === 'analysis' && location.hash === '#analysis') renderAnalysis(false);
   if (im) { im.innerHTML = intelligenceHtml(state.intel, infoS, { forceDetail }); drawCharts(im); }
+  if (im && tabFromHash() === 'overview') fillGradeChart(im, state.intel, wireChart);
   const ic = $('#intel-cross'), ir = $('#intel-risk');
   if (ic) ic.innerHTML = crossMarketHtml(state.intel, infoS);
   if (ir) ir.innerHTML = riskContextHtml(state.intel, infoS);

@@ -1559,3 +1559,11 @@ html.panel-open { overflow: hidden; }
 .ir-grade.lg .of { font-size: 13px; }
 .ir-grade.lg .gbar2 { width: 220px; height: 6px; margin-top: 8px; }
 .ir-grade.lg { grid-template-columns: auto 1fr; column-gap: 6px; }
+.ir-gcalc-l { display: block; margin-top: 6px; color: var(--muted); }
+.ir-gcalc-l:hover { color: var(--orange-ink); }
+.ir-gcalc { padding-top: 18px; }
+@media (max-width: 560px) { .igr { grid-template-columns: 110px minmax(0, 1fr) 44px; } .igr .gn { grid-column: 1 / -1; margin-top: -2px; } }
+.ir-gcols { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px 28px; align-items: start; }
+.ir-gcols .igr { grid-template-columns: 140px minmax(80px, 1fr) 46px; }
+.ir-gcols .igr .gn { grid-column: 1 / -1; margin: -3px 0 2px; }
+@media (max-width: 900px) { .ir-gcols { grid-template-columns: minmax(0, 1fr); } }

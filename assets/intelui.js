@@ -3,7 +3,7 @@
 //   intelligenceHtml — Intelligence tab: what matters now and why, valuation, market regime, risk
 // All text comes from the engine's evidence; nothing here adds figures of its own.
 
-import { DOMAIN_SLUG, DEF_BY_ID, indSlug, materialForces } from '../engine/intel.js?v=20261003y';
+import { DOMAIN_SLUG, DEF_BY_ID, indSlug, materialForces } from '../engine/intel.js?v=20261004a';
 
 const DLINK = (k) => `#analysis/${DOMAIN_SLUG[k]}`;
 const ILINK = (id) => (DEF_BY_ID[id] ? `${DLINK(DEF_BY_ID[id].domain)}/${indSlug(id)}` : '#analysis');
@@ -108,12 +108,18 @@ export function intelligenceHtml(I, info = () => '', opts = {}) {
         <div class="ir-state big t-${toneOf(I.state)}">${esc(I.state)}</div>
         <div class="ir-gtile" title="Fair Grade: how strong today’s read is, 0–100 — the quantitative strength of the same posture, not a forecast">
           <div class="ir-grade lg"><span class="k">Fair Grade${info('i_grade')}</span><b class="num">${I.grade.value}</b><span class="of">/ 100 · ${gradeWord(I.grade.value)}</span><span class="gbar2"><i style="width:${I.grade.value}%"></i></span></div>
+          <a class="xs ir-gcalc-l" href="#overview" data-jump="fair-grade">How it is calculated ↓</a>
         </div>
         <p class="ir-sub">${I.breadth.n} of ${I.breadth.of} domains Constructive or better · ${conf(I.confidence.level)}</p>
         ${C ? `<p class="ir-struct">Structure: ${esc(C.phase.toLowerCase())}${C.transitional && C.runnerUp ? `, bordering on ${esc(C.runnerUp.phase.toLowerCase())}` : ''}${info('i_cycle')}</p>` : ''}
       </div>
       <div class="ihero-r"><p class="xs dim" style="margin:0 0 6px">The five analytical domains — open one for its research page:</p><div class="imatrix sm">${I.domains.map((d) => `<a href="${DLINK(d.key)}" class="imx t-${toneOf(d.state, d.score)}"><span class="n">${esc(d.name)}</span><b>${d.arrow} ${esc(d.state)}</b></a>`).join('')}</div></div>
     </section>
+
+    <section class="block ir-gcalc" id="fair-grade"><div class="bh"><h2>Inside the Fair Grade${info('i_grade')}</h2><p class="aside">50 + the contributions below = ${Number.isFinite(I.grade.raw) ? `${I.grade.raw.toFixed(1)} → <b>${I.grade.value}</b> (rounded)` : `<b>${I.grade.value}</b>`}</p></div>
+      <div class="ir-gcols"><div><div class="igrade">${gp.map((p) => `<div class="igr"><span class="gl">${esc(p.label)}</span><span class="gb"><i class="${p.pts >= 0 ? 'p' : 'n'}" style="${p.pts >= 0 ? 'left:50%' : `left:${50 + (p.pts / mx) * 50}%`};width:${(Math.abs(p.pts) / mx) * 50}%"></i></span><span class="gv num">${p.pts > 0 ? '+' : p.pts < 0 ? '−' : ''}${Math.abs(p.pts).toFixed(1)}</span><span class="gn xs dim">${esc(p.note)}</span></div>`).join('')}</div>
+      <p class="xs dim">The grade weighs breadth, strength, conflicts, risk and valuation; each contribution is scaled by the confidence of the data behind it. It describes today’s configuration and is not a probability or a price forecast.</p></div>
+      <div><h3 class="rh3">Fair Grade over time</h3><div data-gradechart><p class="small muted">Computing…</p></div></div></div></section>
 
     <section class="block" id="ir-forces"><div class="bh"><h2>Drivers and offsets${info('i_forces')}</h2><p class="aside">Active forces from the library below · same names on Analysis and the Dashboard</p></div>
       <div class="ir-cols ovf">
@@ -123,9 +129,7 @@ export function intelligenceHtml(I, info = () => '', opts = {}) {
       <details class="more ir-why"><summary>Explain in plain English <span class="dim">— the reasoning behind the posture, as of ${esc(I.asOf)}</span></summary><div class="more-body">
         <div class="inarr">${I.narrative.map((p) => `<p>${rich(p)}</p>`).join('')}</div>
         ${I.regime ? `<h3 class="rh3">What the structure description rests on</h3><div class="ir-sev">${I.regime.evidence.map((e) => `<span class="lchip t-${toneOf(e.word, e.score)}">${esc(e.name)} · ${esc(e.word)}</span>`).join('')}</div>${C ? `<p class="xs dim">Consistent: ${esc(C.met.join('; ') || '—')}. Not consistent: ${esc(C.unmet.join('; ') || '—')}. Classified from structural evidence across the five domains — not from a cycle clock or time since the halving. <a href="#analysis/regime">Historical context on Analysis →</a></p>` : ''}` : ''}
-        <h3 class="rh3">How the Fair Grade is built${info('i_grade')}</h3><p class="xs dim">${I.grade.value} = 50 + the contributions below</p>
-        <div class="igrade">${gp.map((p) => `<div class="igr"><span class="gl">${esc(p.label)}</span><span class="gb"><i class="${p.pts >= 0 ? 'p' : 'n'}" style="${p.pts >= 0 ? 'left:50%' : `left:${50 + (p.pts / mx) * 50}%`};width:${(Math.abs(p.pts) / mx) * 50}%"></i></span><span class="gv num">${p.pts > 0 ? '+' : p.pts < 0 ? '−' : ''}${Math.abs(p.pts).toFixed(1)}</span><span class="gn xs dim">${esc(p.note)}</span></div>`).join('')}</div>
-      <p class="xs dim">The grade weighs breadth, strength, conflicts, risk and valuation; each contribution is scaled by the confidence of the data behind it. It describes today’s configuration and is not a probability or a price forecast.</p>
+
       </div></details></section>
 
     <section class="block" id="forces"><div class="bh"><h2>What is moving Bitcoin: the force library${info('i_forces')}</h2><p class="aside">Full force library. Drivers/offsets on Analysis and Dashboard are the material subset.</p></div>

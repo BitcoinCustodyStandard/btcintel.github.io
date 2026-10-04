@@ -1,7 +1,7 @@
 // Offline checks for the Market Intelligence Engine (engine/intel.js).
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { intelligence, indicatorHistory, domHistory, INDICATORS, DOMAIN_SLUG, indSlug, regimeTimeline, similarConditions, materialForces, FORCE_LIBRARY } from '../../engine/intel.js';
+import { intelligence, gradeHistory, indicatorHistory, domHistory, INDICATORS, DOMAIN_SLUG, indSlug, regimeTimeline, similarConditions, materialForces, FORCE_LIBRARY } from '../../engine/intel.js';
 import { IND_DOCS, COMP_DOCS, DOMAIN_DOCS } from '../../engine/indicator_docs.js';
 import { compact } from '../../engine/longhist.js';
 import { reportModel } from '../../engine/reportmodel.js';
@@ -137,4 +137,18 @@ console.log('intel.test: ok');
     assert.equal(c.gradeNow - c.gradeThen, c.lfl.gradeNow - c.lfl.gradeThen, 'the change itself stays like-for-like');
   }
   console.log('fair grade consistency: ok');
+}
+{ // the Fair Grade breakdown adds up exactly to the stated total
+  for (const W of [intelligence(world({ trend: 1 })), intelligence(world({ trend: -1, mvrv: 0.9, fng: 18 }))]) {
+    const sum = Math.round((50 + W.grade.parts.reduce((a, p) => a + p.pts, 0)) * 10) / 10;
+    assert.equal(sum, W.grade.raw, 'visible contributions sum to the raw grade'); assert.equal(W.grade.value, Math.round(Math.max(0, Math.min(100, W.grade.raw))));
+    assert.ok(W.grade.parts.every((p) => Math.round(p.pts * 10) === p.pts * 10 || Math.abs(Math.round(p.pts * 10) - p.pts * 10) < 1e-9), 'every contribution has one decimal');
+  }
+  console.log('fair grade breakdown: ok');
+}
+{ // Fair Grade history: same calculation, last point = today's grade
+  const W = intelligence(world({ trend: 1 })), h = gradeHistory(W.inputs);
+  assert.ok(h.length > 50 && h.every((p) => p[1] >= 0 && p[1] <= 100), 'grade history in range');
+  assert.equal(h.at(-1)[1], W.grade.value, 'last history point equals the Fair Grade');
+  console.log('fair grade history: ok');
 }

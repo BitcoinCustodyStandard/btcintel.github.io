@@ -628,14 +628,14 @@ function fairGrade(Dm, V, risk, divCount, breadth) {
     { key: 'liquidity', label: 'Liquidity', max: 10, x: (0.7 * sc('macro') + 0.3 * c('chain', 'On-chain liquidity')) * cf('macro'), note: 'Macro liquidity, rates, dollar and stablecoins.' },
     { key: 'positioning', label: 'Positioning', max: 8, x: (0.4 * c('mkt', 'Leverage') + 0.3 * c('mkt', 'Derivatives') + 0.3 * sc('sent')) * Math.min(cf('mkt'), cf('sent') || 1), note: 'Leverage, derivatives and sentiment.' },
   ].map((p) => ({ ...p, pts: Math.round(clamp(p.x, -1, 1) * p.max * 10) / 10 }));
-  const breadthPts = clamp((breadth.n - 2.5) * 1.5, -4, 4);
+  const breadthPts = Math.round(clamp((breadth.n - 2.5) * 1.5, -4, 4) * 10) / 10;
   const riskPts = -(Math.min(3, divCount) * 1.5) - ({ High: 4, Elevated: 2 }[risk.level] || 0);
   const valPts = V ? VAL_ADJ[V.state] : 0;
   parts.push({ key: 'breadth', label: 'Breadth', max: 4, pts: breadthPts, note: `${breadth.n} of ${breadth.of} domains Constructive or better.` });
   parts.push({ key: 'risk', label: 'Risk adjustment', max: 8.5, pts: riskPts, note: `${divCount} divergence(s); risk regime ${risk.level.toLowerCase()}.` });
   parts.push({ key: 'valuation', label: 'Valuation adjustment', max: 8, pts: valPts, note: V ? `Valuation ${V.state.toLowerCase()}.` : 'Valuation unavailable.' });
   const raw = 50 + parts.reduce((a, p) => a + p.pts, 0);
-  return { value: Math.round(clamp(raw, 0, 100)), parts };
+  return { value: Math.round(clamp(raw, 0, 100)), raw: Math.round(raw * 10) / 10, parts };
 }
 
 // full synthesis for one date (optionally restricted to a set of indicator ids)
@@ -822,6 +822,15 @@ export function domHistory(X, dk) {
 // HISTORICAL CONTEXT: prior Bitcoin regimes and similar past conditions, as context only.
 // Long-run regimes use the inputs that have full history (price vs its 200-day average and
 // that average's slope); recent regimes use the full engine.
+// FAIR GRADE THROUGH TIME: the same synthesis (synth → fairGrade) re-run as of each past date on the
+// indicators that had readings then — weekly for three years, daily for the last 90 days. The last
+// point is today's Fair Grade exactly. Coverage was thinner further back; values are point-in-time.
+export function gradeHistory(X) {
+  if (X._c.gh) return X._c.gh;
+  const pts = [];
+  for (const d of grid(X, shiftDate(X.today, -3 * 365), 90)) { try { const S = synth(X, d, readingsAt(X, d)); if (ok(S.grade?.value)) pts.push([d, S.grade.value, S.state]); } catch { /* not enough inputs that day */ } }
+  return (X._c.gh = pts);
+}
 export function regimeTimeline(X) {
   if (X._c.rt) return X._c.rt;
   const a = new Map(indicatorHistory(X, 't_ma200').pts.map((p) => [p[0], p[1]])), b = indicatorHistory(X, 't_slope200').pts;

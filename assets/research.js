@@ -7,9 +7,9 @@
 // shows the same value the dashboard and Intelligence use. Heavy history work is deferred
 // until after the page skeleton is on screen.
 
-import { DOMAIN_META, DOMAIN_SLUG, SLUG_DOMAIN, DEF_BY_ID, indicatorsOf, indSlug, compSlug, indicatorHistory, domHistory, compHistory, regimeTimeline, similarConditions, withArticle, materialForces } from '../engine/intel.js?v=20261003y';
-import { ZONES } from '../engine/cycle.js?v=20261003y';
-import { DOMAIN_DOCS, COMP_DOCS, IND_DOCS } from '../engine/indicator_docs.js?v=20261003y';
+import { DOMAIN_META, DOMAIN_SLUG, SLUG_DOMAIN, DEF_BY_ID, indicatorsOf, indSlug, compSlug, indicatorHistory, domHistory, compHistory, gradeHistory, regimeTimeline, similarConditions, withArticle, materialForces } from '../engine/intel.js?v=20261004a';
+import { ZONES } from '../engine/cycle.js?v=20261004a';
+import { DOMAIN_DOCS, COMP_DOCS, IND_DOCS } from '../engine/indicator_docs.js?v=20261004a';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ok = (v) => v !== null && v !== undefined && Number.isFinite(v);
@@ -398,6 +398,21 @@ export function ribbonMenu(dslug) {
 }
 
 // ---------------------------------------------------------------- deferred fills
+// Intelligence → Current read: the Fair Grade through time (same synthesis as today's grade).
+// Computed lazily (about half a second) once the Intelligence view is open.
+export function fillGradeChart(root, I, wireChart) {
+  const el = root?.querySelector('[data-gradechart]'); if (!el || !I?.inputs || el.dataset.done) return;
+  el.dataset.done = '1';
+  setTimeout(() => {
+    try {
+      const pts = gradeHistory(I.inputs).map((p) => [p[0], p[1]]);
+      if (pts.length) pts[pts.length - 1] = [pts.at(-1)[0], I.grade.value];
+      el.innerHTML = chartBlock('fairgrade', pts, { fmt: (v) => String(Math.round(v)), refs: false, zero: false, label: 'Fair Grade history', base: null, guides: [['Strong', 70], ['Constructive', 58], ['Balanced', 45], ['Fragile', 33]] }, 365)
+        + '<p class="xs dim">The same calculation re-run as of each past date (weekly, daily for the last 90 days) on the indicators that had readings then; coverage is thinner further back. The last point is today’s grade. Description, not a forecast.</p>';
+      wireRanges(el, wireChart);
+    } catch (e) { console.error('grade history', e); el.innerHTML = '<p class="small muted">Grade history unavailable.</p>'; }
+  }, 30);
+}
 const defer = (fn) => new Promise((res) => setTimeout(() => { try { fn(); } catch (e) { console.error(e); } res(); }, 0));
 async function fill(root, I, ctx) {
   const X = I.inputs, wc = ctx.wireChart;
