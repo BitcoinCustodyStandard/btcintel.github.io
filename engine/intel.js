@@ -714,7 +714,10 @@ export function intelligence(input) {
     const bit = (m) => `${m.name} (${m.from.split(' (')[0]} → ${m.to.split(' (')[0]})`;
     const text = label === 'Little changed' ? `No domain moved meaningfully${movers[0] ? `; the largest single change was ${bit(movers[0])}` : ''}.`
       : `${up.length ? `${joinAnd(up.map((x) => x.name))} improved${pos[0] ? ` as ${bit(pos[0])}` : ''}` : ''}${up.length && dn.length ? ', while ' : ''}${dn.length ? `${joinAnd(dn.map((x) => x.name))} ${up.length ? 'weakened' : 'weakened'}${neg[0] ? ` as ${bit(neg[0])}` : ''}` : ''}.`;
-    changes['d' + h] = { h, label, text: cap(text), stateNow: A.state, stateThen: B.state, gradeNow: A.grade.value, gradeThen: B.grade.value, domains: doms, movers: { up: pos, down: neg }, n: common.size, of: Object.values(R).filter((r) => r.s !== null).length };
+    // "now" is always the site's one Fair Grade and posture (S); "then" applies the like-for-like
+    // change (same indicators on both dates) to it, so coverage differences never move the result
+    const gradeThen = Math.round(clamp(S.grade.value - (A.grade.value - B.grade.value), 0, 100));
+    changes['d' + h] = { h, label, text: cap(text), stateNow: S.state, stateThen: A.state === B.state ? S.state : B.state, gradeNow: S.grade.value, gradeThen, lfl: { gradeNow: A.grade.value, gradeThen: B.grade.value, stateNow: A.state }, domains: doms, movers: { up: pos, down: neg }, n: common.size, of: Object.values(R).filter((r) => r.s !== null).length };
   }
   const C = cycle(X, d, R, S.Dm, S.V);
   const REG = marketRegime(S.Dm, C);

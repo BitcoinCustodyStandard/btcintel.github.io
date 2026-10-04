@@ -1553,3 +1553,9 @@ html.panel-open { overflow: hidden; }
 .ir-links a span { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
 .isub-h { margin-bottom: 4px; }
 [data-isub] section, .iforce.lib { scroll-margin-top: 96px; }
+/* Intelligence hero: Fair Grade tile directly under the posture (same treatment as the Dashboard, larger) */
+.ir-gtile { display: inline-block; margin: 2px 0 10px; padding: 10px 14px 12px; border: 1px solid var(--line); border-radius: 6px; background: var(--card); }
+.ir-grade.lg b { font-size: 38px; }
+.ir-grade.lg .of { font-size: 13px; }
+.ir-grade.lg .gbar2 { width: 220px; height: 6px; margin-top: 8px; }
+.ir-grade.lg { grid-template-columns: auto 1fr; column-gap: 6px; }

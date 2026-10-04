@@ -3,7 +3,7 @@
 //   intelligenceHtml — Intelligence tab: what matters now and why, valuation, market regime, risk
 // All text comes from the engine's evidence; nothing here adds figures of its own.
 
-import { DOMAIN_SLUG, DEF_BY_ID, indSlug, materialForces } from '../engine/intel.js?v=20261003x';
+import { DOMAIN_SLUG, DEF_BY_ID, indSlug, materialForces } from '../engine/intel.js?v=20261003y';
 
 const DLINK = (k) => `#analysis/${DOMAIN_SLUG[k]}`;
 const ILINK = (id) => (DEF_BY_ID[id] ? `${DLINK(DEF_BY_ID[id].domain)}/${indSlug(id)}` : '#analysis');
@@ -106,7 +106,10 @@ export function intelligenceHtml(I, info = () => '', opts = {}) {
       <div class="ihero-l">
         <span class="k">Market intelligence · current read${info('i_read')}</span>
         <div class="ir-state big t-${toneOf(I.state)}">${esc(I.state)}</div>
-        <p class="ir-sub">Fair Grade <b class="num">${I.grade.value}</b> / 100 (${gradeWord(I.grade.value)}) · ${I.breadth.n} of ${I.breadth.of} domains Constructive or better · ${conf(I.confidence.level)}</p>
+        <div class="ir-gtile" title="Fair Grade: how strong today’s read is, 0–100 — the quantitative strength of the same posture, not a forecast">
+          <div class="ir-grade lg"><span class="k">Fair Grade${info('i_grade')}</span><b class="num">${I.grade.value}</b><span class="of">/ 100 · ${gradeWord(I.grade.value)}</span><span class="gbar2"><i style="width:${I.grade.value}%"></i></span></div>
+        </div>
+        <p class="ir-sub">${I.breadth.n} of ${I.breadth.of} domains Constructive or better · ${conf(I.confidence.level)}</p>
         ${C ? `<p class="ir-struct">Structure: ${esc(C.phase.toLowerCase())}${C.transitional && C.runnerUp ? `, bordering on ${esc(C.runnerUp.phase.toLowerCase())}` : ''}${info('i_cycle')}</p>` : ''}
       </div>
       <div class="ihero-r"><p class="xs dim" style="margin:0 0 6px">The five analytical domains — open one for its research page:</p><div class="imatrix sm">${I.domains.map((d) => `<a href="${DLINK(d.key)}" class="imx t-${toneOf(d.state, d.score)}"><span class="n">${esc(d.name)}</span><b>${d.arrow} ${esc(d.state)}</b></a>`).join('')}</div></div>

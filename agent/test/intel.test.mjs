@@ -130,3 +130,11 @@ console.log('intel.test: ok');
   }
   console.log('force finalization: ok');
 }
+{ // one Fair Grade: "What changed" reports the site's grade and posture as "now"
+  for (const W of [intelligence(world({ trend: 1 })), intelligence(world({ trend: -1, mvrv: 0.9, fng: 18 }))]) for (const c of Object.values(W.changes)) if (c.domains) {
+    assert.equal(c.gradeNow, W.grade.value, 'What changed "now" grade equals the Fair Grade');
+    assert.equal(c.stateNow, W.state, 'What changed "now" state equals the posture');
+    assert.equal(c.gradeNow - c.gradeThen, c.lfl.gradeNow - c.lfl.gradeThen, 'the change itself stays like-for-like');
+  }
+  console.log('fair grade consistency: ok');
+}
