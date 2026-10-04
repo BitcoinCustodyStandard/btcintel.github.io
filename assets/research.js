@@ -7,9 +7,9 @@
 // shows the same value the dashboard and Intelligence use. Heavy history work is deferred
 // until after the page skeleton is on screen.
 
-import { DOMAIN_META, DOMAIN_SLUG, SLUG_DOMAIN, DEF_BY_ID, indicatorsOf, indSlug, compSlug, indicatorHistory, domHistory, compHistory, regimeTimeline, similarConditions, withArticle } from '../engine/intel.js?v=20261003r';
-import { ZONES } from '../engine/cycle.js?v=20261003r';
-import { DOMAIN_DOCS, COMP_DOCS, IND_DOCS } from '../engine/indicator_docs.js?v=20261003r';
+import { DOMAIN_META, DOMAIN_SLUG, SLUG_DOMAIN, DEF_BY_ID, indicatorsOf, indSlug, compSlug, indicatorHistory, domHistory, compHistory, regimeTimeline, similarConditions, withArticle, materialForces } from '../engine/intel.js?v=20261003s';
+import { ZONES } from '../engine/cycle.js?v=20261003s';
+import { DOMAIN_DOCS, COMP_DOCS, IND_DOCS } from '../engine/indicator_docs.js?v=20261003s';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ok = (v) => v !== null && v !== undefined && Number.isFinite(v);
@@ -158,7 +158,7 @@ function domainBlock(d) {
 
 // ---------------------------------------------------------------- landing
 // the one scale used for every verdict on this page (and by the engine)
-const STRENGTH = { Strong: 'high strength', Moderate: 'moderate strength', Mild: 'low strength' };
+const STRENGTH = { Strong: 'high strength', Moderate: 'moderate strength', Weak: 'low strength' };
 const SCALE5 = (s) => (!ok(s) ? 'No data' : s >= 0.4 ? 'Supportive' : s >= 0.15 ? 'Constructive' : s > -0.15 ? 'Neutral' : s > -0.4 ? 'Cautionary' : 'Adverse');
 const RTONE = { Supportive: 'up', Constructive: 'up', Neutral: 'neu', Cautionary: 'warn', Adverse: 'down' };
 const rd = (I, id) => I.readings[id];
@@ -188,13 +188,13 @@ function landing(I, ctx) {
   const G = I.regime, C = I.cycle, A = I.assessment, a = ctx?.a;
   const cyM = (id) => a?.cycle?.metrics?.find((x) => x.id === id);
   const zoneTxt = (id) => { const m = cyM(id); return m?.zone ? `${esc(m.zone.label.replace(' / mid-cycle', ''))}${m.move?.length ? `<div class="xs dim">Changes zone ${esc(m.move.join(' · '))}</div>` : ''}` : '—'; };
-  const lev = I.forces.find((f) => f.id === 'leverage'), stress = I.forces.find((f) => f.id === 'stress');
+  const levF = I.forces.find((f) => f.id === 'leverage' && f.active), MF = materialForces(I, 5, 4);
   const thr = (id, unit = '') => ZONES[id].map((z, i, t) => `${i === 0 ? '< ' + t[1].min : i === t.length - 1 ? '≥ ' + z.min : z.min + '–' + t[i + 1].min}${unit} ${z.label}`).join(' · ');
   // structural factors (formerly the "market regime" chips), placed under their own domain
   const factors = (dk) => { const ev = (G?.evidence || []).filter((e) => e.dk === dk); return ev.length ? `<div class="sfac"><span class="k">Structural factors</span>${ev.map((e) => { const w = SCALE5(e.score); return `<a class="hsum" href="${e.comp ? CLINK(e.dk, e.comp) : DSL(e.dk)}"><span class="hs-n">${esc(e.name)}</span><span class="hs-w t-${tone(w, e.score)}">${esc(w)}</span>${sbar(e.score)}</a>`; }).join('')}</div>` : ''; };
   const domHead = (dk, id, aside, extraId = '') => { const d = D(dk); return `${extraId ? `<span id="${extraId}" class="anchor"></span>` : ''}<div class="bh ovd-h" id="${id}"><h2>${esc(SHORT[dk])} ${pill(d.state, d.score)}</h2><p class="aside">${aside} · <a href="${DSL(dk)}">Research page →</a></p></div>`; };
   const dtag = (names) => names.map((n) => `<span class="dtag">${esc(n)}</span>`).join('');
-  const fItem = (f, cls) => `<li><span class="fdot t-${cls}"></span><span class="fn"><b>${esc(f.name)}</b> ${dtag(f.domains)}</span><span class="fmeta">${esc(f.text)} <span class="xs dim">${esc(STRENGTH[f.strengthWord] || f.strengthWord)} · ${esc(f.horizon)} term${f.persistence >= 3 ? ` · ${f.persistence >= 30 ? '30+' : f.persistence} days` : ''}</span></span></li>`;
+  const fItem = (f, cls) => `<li><span class="fdot t-${cls}"></span><span class="fn"><a href="#force-${f.id}"><b>${esc(f.name)}</b></a> ${dtag([f.domainName])} <span class="small muted">${esc(f.label)}</span></span><span class="fmeta">${esc(f.text)} <span class="xs dim">${esc(STRENGTH[f.strengthWord] || f.strengthWord)} · ${esc(f.horizon)} term${f.persistence >= 3 ? ` · ${f.persistence >= 30 ? '30+' : f.persistence} days` : ''}</span></span></li>`;
   return `<section class="ihead"><div><h1>Analysis</h1><p class="muted">One market posture, the five domains it rests on, and the evidence behind each — every reading links to its research page.</p></div>
       <div class="ihead-r"><span class="muted small">Data as of ${esc(I.asOf)}</span></div></section>
 
@@ -209,9 +209,9 @@ function landing(I, ctx) {
 
     <div class="atiles">${DOMAIN_META.map(tile).join('')}</div>
 
-    <section class="block"><div class="bh"><h2>Key drivers and offsets</h2><p class="aside">Forces detected across the domains, tagged by domain · <a href="#overview">full reasoning on Intelligence →</a></p></div>
-      <div class="ir-cols ovf"><div><h3>Key drivers</h3><ul class="ir-f">${I.drivers.slice(0, 5).map((f) => fItem(f, 'up')).join('') || '<li class="muted">No strong supportive force.</li>'}</ul></div>
-        <div><h3>Key offsets</h3><ul class="ir-f">${I.offsets.slice(0, 5).map((f) => fItem(f, 'down')).join('') || '<li class="muted">No strong offsetting force.</li>'}</ul></div></div></section>
+    <section class="block"><div class="bh"><h2>Key drivers and offsets</h2><p class="aside">Material forces from the Intelligence force library (filtered). Full set on <a href="#forces">Intelligence →</a></p></div>
+      <div class="ir-cols ovf"><div><h3>Key drivers</h3><ul class="ir-f">${MF.drivers.map((f) => fItem(f, 'up')).join('') || '<li class="muted">No material supportive force.</li>'}</ul></div>
+        <div><h3>Key offsets</h3><ul class="ir-f">${MF.offsets.map((f) => fItem(f, 'down')).join('') || '<li class="muted">No material offsetting force.</li>'}</ul></div></div></section>
 
     <section class="block ovd">${domHead('tech', 'ov-tech', 'Trend, momentum, price structure, highs and lows, extension', 'structure')}
       ${factors('tech')}
@@ -244,7 +244,7 @@ function landing(I, ctx) {
       ${evTable(I, [['m_etf5'], ['m_etf20'], ['m_cbp'], ['m_taker'], ['m_depth', 'Order-book depth within ±1%'], ['m_dom'], ['m_breadth']])}
       <h3 class="rh3" id="derivatives">Derivatives and positioning</h3>
       ${evTable(I, [['m_funding'], ['m_oigrowth'], ['m_oimcap'], ['m_basis'], ['m_skew'], ['m_dvol'], ['m_pcr'], ['m_ls'], ['m_cftcam'], ['m_liq']])}
-      ${lev || stress ? `<p class="small">${[lev, stress].filter(Boolean).map((f) => `<b>${esc(f.name)}</b> (${esc(STRENGTH[f.strengthWord] || f.strengthWord)}, ${esc(f.horizon)} term): ${esc(f.text)}`).join(' ')}</p>` : '<p class="small muted">No leverage or derivatives-stress force is active.</p>'}
+      ${levF ? `<p class="small"><a href="#force-${levF.id}"><b>${esc(levF.name)}</b></a> — ${esc(levF.label.toLowerCase())} (${esc(STRENGTH[levF.strengthWord] || levF.strengthWord)}, ${esc(levF.horizon)} term): ${esc(levF.text)}</p>` : '<p class="small muted">The leverage &amp; derivatives force is inactive (below its threshold).</p>'}
       <p class="small">Order-book depth by venue, order impact, options expiries and the $5K band map: <a href="#analysis/liquidity">Liquidity Detail →</a></p></section>
 
     <section class="block ovd">${domHead('sent', 'ov-sent', 'Fear & greed, news tone and public attention')}

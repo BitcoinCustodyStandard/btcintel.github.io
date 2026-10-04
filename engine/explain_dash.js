@@ -351,10 +351,10 @@ export const DASH_EXPLAIN = {
     caveat: () => 'Not a probability and not a price forecast: a summary of how supportive the current configuration is.',
   },
   i_forces: {
-    title: 'Market forces',
-    what: 'Forces are patterns the engine detects across indicators and domains — for example “Uptrend intact”, “Institutional demand”, “Leverage building” or “Macro tightening”. Only the forces active today are listed.',
-    why: 'Each has a direction, strength, confidence, time horizon, persistence (how many days in a row it has been active) and whether it is strengthening or weakening. Ranking weighs strength by confidence and horizon, so a short-term derivatives signal cannot outweigh a long-term structural one on its own.',
-    caveat: () => 'Detected by fixed published rules from free data; a force describes pressure, not an outcome.',
+    title: 'Force library',
+    what: 'One fixed library of 12 forces, each tied to one of the five domains: trend, momentum, exchange flows, valuation, network, ETF flows, leverage, US spot premium, sentiment, macro conditions, stablecoin liquidity and risk appetite. Every force is scored every day from existing indicators; a force is active when its score passes its published threshold.',
+    why: 'Each active force has a direction, strength, confidence, horizon, persistence and trend. Ranking weighs strength by confidence and horizon. The drivers and offsets on Analysis and the Dashboard are the material subset of this same list, so the three pages cannot disagree.',
+    caveat: () => 'Fixed published rules from free data; a force describes pressure, not an outcome.',
   },
   i_changes: {
     title: 'What changed',

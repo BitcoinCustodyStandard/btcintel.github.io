@@ -1512,3 +1512,27 @@ html.panel-open { overflow: hidden; }
 .ovd + .ovd { padding-top: 22px; }
 .anchor { display: block; height: 0; }
 .ovf .ir-f .fn { grid-column: 2; } .ovf .ir-f .fmeta { grid-column: 2; }
+
+/* ---- force library (Intelligence) ---- */
+.iforces.lib { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+.iforce.lib { padding: 0; }
+.iforce.lib > summary { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 10px 14px; color: var(--text); list-style: none; }
+.iforce.lib > summary::-webkit-details-marker { display: none; }
+.iforce.lib > summary .sbar { grid-column: 1 / -1; }
+.iforce.lib[open] > summary { border-bottom: 1px solid var(--line); }
+.iforce.lib > :not(summary) { margin-left: 14px; margin-right: 14px; }
+.iforce.lib > :last-child { margin-bottom: 12px; }
+.lf-n { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; min-width: 0; }
+.lf-n b { font-size: 15px; }
+.lf-s { display: flex; align-items: center; gap: 8px; justify-content: flex-end; flex-wrap: wrap; }
+.iforce.off { border-left-color: var(--line2); opacity: 0.82; }
+.iforce.off .lf-n b { color: var(--text2); }
+.lib-sum { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 4px 0 14px; font-size: 12.5px; }
+.lib-sum > span { display: flex; flex-wrap: wrap; align-items: center; gap: 4px; }
+.lib-sum > span > b { color: var(--dim); font-weight: 600; margin-right: 2px; }
+.lchip { display: inline-block; padding: 2px 7px; border-radius: 10px; border: 1px solid var(--line2); color: var(--tone, var(--text2)); background: var(--tone-bg, transparent); text-decoration: none; white-space: nowrap; }
+.lchip.t-ctx { color: var(--dim); }
+.fdet { margin-top: 10px; border-top: 1px dashed var(--line); padding-top: 8px; }
+.fdet > summary { cursor: pointer; color: var(--orange-ink); font-size: 12.5px; }
+.fdet-b { margin-top: 8px; display: grid; gap: 10px; min-width: 0; }
+@media (max-width: 560px) { .iforce.lib > summary { grid-template-columns: minmax(0, 1fr); } .lf-s { justify-content: flex-start; } }

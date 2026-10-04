@@ -16,8 +16,8 @@ export function reportModel(I, a = null) {
     date: I.asOf,
     sections: [
       { title: 'Executive market read', lines: [`${I.state}. Fair Grade ${I.grade.value}/100. ${I.breadth.n} of ${I.breadth.of} domains supportive; ${I.confidence.level.toLowerCase()} confidence.`, ...(I.narrative?.[0] ? [I.narrative[0].replace(/<\/?b>/g, '')] : [])] },
-      { title: 'Key drivers', lines: I.drivers.slice(0, 5).map((f) => `${f.name} (${f.strengthWord.toLowerCase()}, ${f.horizon} term, ${f.persistence >= 30 ? '30+' : f.persistence} days): ${f.text}`) },
-      { title: 'Key offsets', lines: I.offsets.slice(0, 5).map((f) => `${f.name} (${f.strengthWord.toLowerCase()}, ${f.horizon} term): ${f.text}`) },
+      { title: 'Key drivers', lines: I.drivers.slice(0, 5).map((f) => `${f.name} — ${f.label} (${f.strengthWord.toLowerCase()}, ${f.horizon} term, ${f.persistence >= 30 ? '30+' : f.persistence} days): ${f.text}`) },
+      { title: 'Key offsets', lines: I.offsets.slice(0, 5).map((f) => `${f.name} — ${f.label} (${f.strengthWord.toLowerCase()}, ${f.horizon} term): ${f.text}`) },
       dom('tech', 'Technical'), dom('chain', 'On-Chain'), dom('mkt', 'Market Structure'), dom('sent', 'Sentiment'), dom('macro', 'Macro & Liquidity'),
       { title: 'Market structure context', lines: I.regime ? [`${I.cycle ? `Consistent with ${I.cycle.phase.toLowerCase()}. ` : ''}${I.regime.why}`] : [] },
       { title: 'Valuation', lines: I.valuation ? [`${I.valuation.state}. ${I.valuation.context}`, I.valuation.evidence.map((e) => `${e.name} ${e.disp} (${e.zone})`).join(' · ')] : [] },

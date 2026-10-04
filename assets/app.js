@@ -6,14 +6,14 @@ import { briefReport } from '../engine/report.js';
 import { brief } from '../engine/brief.js';
 import { ZONES } from '../engine/cycle.js';
 import { explain, EXPLAIN, REMINDER } from '../engine/explain.js';
-import { startLivePrice } from './live.js?v=20261003r';
-import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003r';
-import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261003r';
-import { intelligence } from '../engine/intel.js?v=20261003r';
-import { reportModel } from '../engine/reportmodel.js?v=20261003r';
-import { intelligenceHtml, wireIntel } from './intelui.js?v=20261003r';
-import { analysisRoute, indicatorPanel, idFromHref, ribbonMenu } from './research.js?v=20261003r';
-import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003r';
+import { startLivePrice } from './live.js?v=20261003s';
+import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003s';
+import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261003s';
+import { intelligence } from '../engine/intel.js?v=20261003s';
+import { reportModel } from '../engine/reportmodel.js?v=20261003s';
+import { intelligenceHtml, wireIntel } from './intelui.js?v=20261003s';
+import { analysisRoute, indicatorPanel, idFromHref, ribbonMenu } from './research.js?v=20261003s';
+import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003s';
 import { fmtUsd, fmtUsdSigned, fmtPrice, fmtPct, fmtNum, fmtK, ordinal } from '../engine/util.js';
 
 const state = { a: null, rows: [], runs: [], index: null, snapshot: null, range: 90, pi: null, dash: null, live: null, liveState: 'init' };
@@ -345,9 +345,8 @@ let openMenu = function (a) {
   const _open = openMenu; openMenu = (a) => { _open(a); openedAtY = window.scrollY; };
 })();
 function openForce(id) {
-  const d = document.getElementById(id);
+  const k = id.replace(/^force-/, ''), d = document.getElementById('force-' + (AGENT_TO_LIB[k] || k));
   if (!d) return;
-  if (d.classList.contains('extra') && !$('#flist').classList.contains('all')) $('#btn-allforces')?.click();
   d.open = true;
   d.scrollIntoView();
 }
@@ -373,51 +372,23 @@ function execStrip(b) {
 }
 
 // 2. Today's three most important variables.
-function top3(b) {
-  return sec('top3', 'Today’s three most important variables', null, h`<div class="vars">${b.top.map((t, i) => h`<article class="var ${dirClass(t.direction)}">
-    <div class="var-h"><span class="n">${i + 1}</span><b>${t.name}</b>${hasExplain('force:' + t.id) ? info('force:' + t.id) : ''}</div>
-    <div>${chip(t.dirNote, dirClass(t.direction))}</div>
-    <p>${t.summary}</p>
-    <p class="watch"><span class="k">Watch</span>${t.watch}</p>
-  </article>`)}</div>`);
-}
-
-// 3. Ranked forces: top 5 by default, each row expands to the full existing detail.
+// Daily-analysis detail inside each force-library entry on Intelligence: the agent's observed
+// state, evidence table, mechanism, invalidation, watch and charts for the matching topic. It is
+// supporting detail only — the library (engine/intel.js FORCE_LIBRARY) is the one force ranking.
 const FORCE_CHARTS = { etf: ['etf'], depth: ['depth'], leverage: ['oi', 'oiAgg'], funding: ['funding'], spot: ['premium'], macro: ['netliq', 'real10y'], dollar: ['dxy', 'us10y'], options: ['dvol'], onchain: ['stables', 'mvrv'], riskappetite: ['corr', 'vix'] };
-const TOP_N = 5;
-function forcesBlock(b) {
-  const a = state.a;
+const LIB_DETAIL = { valuation: { a: ['onchain'], c: ['mvrv'] }, stables: { c: ['stables'] }, macro: { a: ['macro', 'dollar'], c: ['netliq', 'real10y', 'dxy', 'us10y'] }, risk: { a: ['riskappetite'], c: ['corr', 'vix'] }, etf: { a: ['etf'], c: ['etf'] }, leverage: { a: ['leverage', 'funding', 'options'], c: ['oi', 'oiAgg', 'funding', 'dvol'] }, spot: { a: ['spot', 'depth'], c: ['premium', 'depth'] } };
+const AGENT_TO_LIB = { onchain: 'valuation', macro: 'macro', dollar: 'macro', riskappetite: 'risk', etf: 'etf', leverage: 'leverage', funding: 'leverage', options: 'leverage', spot: 'spot', depth: 'spot' };
+function forceDetail(f) {
+  const m = LIB_DETAIL[f.id]; if (!m || !state.a) return '';
+  const af = (m.a || []).map((id) => state.a.forces?.find((x) => x.id === id)).filter((x) => x && !x.unavailable);
   const ev = (e) => h`<tr><td>${e.label}</td><td>${e.value}${e.source || e.derived ? raw(`<span class="srcl">${e.derived ? 'Derived by this system' : ''}${e.derived && e.source ? ' from ' : ''}${e.source ? esc(e.source) : ''}${e.asOf ? ' · ' + esc(fmtTime(e.asOf)) : ''}${e.frequency ? ' · ' + esc(e.frequency) : ''}${e.status && e.status !== 'ok' && e.status !== 'unavailable' ? ' · ' + esc(e.status.toUpperCase()) : ''}</span>`) : ''}</td></tr>`;
-  const row = (f, i) => {
-    const x = b.forces.find((y) => y.id === f.id) || {};
-    return h`<details class="force${i >= TOP_N ? ' extra' : ''}" id="force-${f.id}">
-      <summary>
-        <span class="rank">${f.unavailable ? '–' : f.rank}</span>
-        <span class="fname">${f.name}${hasExplain('force:' + f.id) ? info('force:' + f.id) : ''}${x.moved ? h` <span class="moved" title="${x.moved.label}: ${x.moved.from} → ${x.moved.to}">${fmtNum(x.moved.z, 1)}σ move</span>` : ''}</span>
-        <span>${chip(x.dirNote || f.direction, dirClass(f.direction))}</span>
-        <span class="ev-col">${evMeter(f.confidence)}</span>
-        <span class="fstate">${f.unavailable ? f.state : x.line}</span>
-        <span class="caret">›</span>
-      </summary>
-      ${f.unavailable ? h`<div class="fbody"><p class="full">${f.state}</p></div>` : h`<div class="fbody">
-        <div class="full"><h4>Current state <span class="tag">observed</span></h4><p>${f.state}</p></div>
-        ${FORCE_CHARTS[f.id] ? h`<div class="full fcharts">${FORCE_CHARTS[f.id].map(chartEl)}</div>` : ''}
-        <div class="full"><h4>Evidence</h4><div class="tbl-wrap"><table class="ev"><tbody>${f.evidence.map(ev)}</tbody></table></div></div>
-        <div class="full"><h4>Transmission mechanism</h4><p class="mech">${f.mechanism}</p></div>
-        <div><h4>Interpretation <span class="tag">analysis</span></h4><p>${f.interpretation}</p></div>
-        <div><h4>Direction · evidence strength</h4><p>${dirChip(f.direction)} ${chip(f.confidence, 'ev')}</p></div>
-        <div><h4>Change from yesterday</h4><p>${f.d1}</p></div>
-        <div><h4>Change from 1 week ago</h4><p>${f.d7}</p></div>
-        <div><h4>What would invalidate it</h4><p>${f.invalidation}</p></div>
-        <div><h4>What to watch next</h4><p>${f.watch}</p></div>
-      </div>`}
-    </details>`;
-  };
-  const more = a.forces.length - TOP_N;
-  return sec('forces', 'What is moving BTC', 'Ranked by current importance, not direction.', h`
-    <div class="fhead"><span>#</span><span>Force</span><span>Direction</span><span class="ev-col">Evidence${info('evidence')}</span><span class="fstate">Summary</span><span></span></div>
-    <div class="flist" id="flist">${a.forces.map(row)}</div>
-    <div class="block-foot"><p class="note">Expand any row for full evidence, mechanism, invalidation conditions and charts.</p>${more > 0 ? h`<button type="button" class="btn ghost mini" id="btn-allforces" aria-expanded="false" data-more="${more}">Show all ${a.forces.length} forces</button>` : ''}</div>`);
+  return h`<details class="fdet"><summary>Daily analysis detail${af.length ? ` · ${af.map((x) => x.name).join(', ')}` : ''}</summary>
+    ${m.c?.length ? h`<div class="fcharts">${m.c.map(chartEl)}</div>` : ''}
+    ${af.map((x) => h`<div class="fdet-b"><h4>${x.name} <span class="tag">observed</span></h4><p>${x.state}</p>
+      ${x.evidence?.length ? h`<div class="tbl-wrap"><table class="ev"><tbody>${x.evidence.map(ev)}</tbody></table></div>` : ''}
+      <p class="small"><b>Mechanism.</b> ${x.mechanism}</p>
+      <p class="small"><b>What would invalidate it.</b> ${x.invalidation} <b>Watch next.</b> ${x.watch}</p></div>`)}
+    <p class="xs dim">From the daily server analysis (${fmtTime(state.a.dataThrough)}); its own direction wording is not shown, because the force score above is the single read.</p></details>`.s;
 }
 
 // 4. Liquidity ladder (key levels), full band table on expand.
@@ -508,9 +479,9 @@ function dashboard() {
 }
 
 function overviewTab(b) {
-  return h`<div id="intel-main">${raw(intelligenceHtml(state.intel, infoS))}</div>
+  return h`<div id="intel-main">${raw(intelligenceHtml(state.intel, infoS, { forceDetail }))}</div>
     <section class="block research"><div class="bh"><h2>Research detail: the daily force analysis</h2><p class="aside">The agent’s morning analysis that feeds several of the inputs above</p></div></section>
-    ${execStrip(b)}${top3(b)}${forcesBlock(b)}${ladderBlock(b)}${accelBlock(b)}${watchBlock(b)}${dashboard()}<p class="foot-note">${b.footer}</p>`;
+    ${execStrip(b)}${ladderBlock(b)}${accelBlock(b)}${watchBlock(b)}${dashboard()}<p class="foot-note">${b.footer}</p>`;
 }
 
 const TONE_CHIP = { bull: 'bull', neu: 'neu', warn: 'caut', bear: 'bear' };
@@ -650,7 +621,7 @@ function updateIntel() {
   const im = $('#intel-main');
   // the Analysis pages re-render only on their landing page, so a reader is never moved mid-page
   analysisKey = null; if (tabFromHash() === 'analysis' && location.hash === '#analysis') renderAnalysis(false);
-  if (im) im.innerHTML = intelligenceHtml(state.intel, infoS);
+  if (im) { im.innerHTML = intelligenceHtml(state.intel, infoS, { forceDetail }); drawCharts(im); }
   setIntel(state.intel);
 }
 setInterval(() => { if (!document.hidden) updateIntel(); }, 10 * 60e3);
@@ -730,13 +701,6 @@ function wireSections() {
     document.querySelectorAll('[data-range]').forEach((x) => x.setAttribute('aria-pressed', String(+x.dataset.range === state.range)));
     drawCharts($('#app'));
   }));
-  const all = $('#btn-allforces');
-  all?.addEventListener('click', () => {
-    const on = $('#flist').classList.toggle('all');
-    all.setAttribute('aria-expanded', String(on));
-    all.textContent = on ? `Show top ${TOP_N} only` : `Show all ${state.a.forces.length} forces`;
-  });
-  // deep links to a force open it (and reveal it if it is outside the top 5)
   const setDl = (el, text) => { el.href = URL.createObjectURL(new Blob([text], { type: 'text/markdown' })); };
   setDl($('#rep-dl'), reportText(state.a));
 }

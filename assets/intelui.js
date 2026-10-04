@@ -3,7 +3,7 @@
 //   intelligenceHtml — Intelligence tab: what matters now and why, valuation, market regime, risk
 // All text comes from the engine's evidence; nothing here adds figures of its own.
 
-import { DOMAIN_SLUG, DEF_BY_ID, indSlug } from '../engine/intel.js?v=20261003r';
+import { DOMAIN_SLUG, DEF_BY_ID, indSlug, materialForces } from '../engine/intel.js?v=20261003s';
 
 const DLINK = (k) => `#analysis/${DOMAIN_SLUG[k]}`;
 const ILINK = (id) => (DEF_BY_ID[id] ? `${DLINK(DEF_BY_ID[id].domain)}/${indSlug(id)}` : '#analysis');
@@ -20,11 +20,19 @@ const sbar = (s) => (s === null || s === undefined ? '<span class="sbar off"></s
 const ago = (d) => { if (!d) return ''; const t = Date.parse(d.length === 10 ? d + 'T00:00:00Z' : d); const h = (Date.now() - t) / 36e5; return h < 36 ? (d.length === 10 ? d : new Date(t).toISOString().slice(0, 16).replace('T', ' ') + ' UTC') : d.slice(0, 10); };
 const gradeWord = (g) => (g >= 70 ? 'strong' : g >= 58 ? 'constructive' : g >= 45 ? 'balanced' : g >= 33 ? 'fragile' : 'weak');
 
+// ---------------------------------------------------------------- force library (shared bits)
+// Every force row on the site comes from I.forces (the engine's FORCE_LIBRARY); drivers/offsets are
+// its material subset. A force chip always carries its domain tag and links to its library entry.
+export const forceTag = (f) => `<span class="dtag">${esc(f.domainName)}</span>`;
+export const forceHref = (f) => `#force-${f.id}`;
+const STR = { Strong: 'high strength', Moderate: 'moderate strength', Weak: 'low strength' };
+
 // ---------------------------------------------------------------- dashboard
 export function marketReadHtml(I, info = () => '') {
   if (!I) return `<div class="dc-h"><h2>Market read${info('i_read')}</h2></div><p class="muted small">Waiting for enough data.</p>`;
   const c2 = I.changes?.d2;
-  const li = (f) => `<li><span class="fdot t-${dirTone(f.dir)}"></span><b>${esc(f.name)}</b><span class="fmeta">${esc(f.strengthWord)} · ${esc(f.horizon)}${f.persistence >= 3 ? ` · ${f.persistence >= 30 ? '30+' : f.persistence} days` : ''}</span></li>`;
+  const M = materialForces(I, 3, 3);
+  const li = (f) => `<li><span class="fdot t-${dirTone(f.dir)}"></span><span class="fn"><a href="${forceHref(f)}"><b>${esc(f.name)}</b></a> ${forceTag(f)}</span><span class="fmeta">${esc(f.label)} · ${esc(STR[f.strengthWord])} · ${esc(f.horizon)}${f.persistence >= 3 ? ` · ${f.persistence >= 30 ? '30+' : f.persistence} days` : ''}</span></li>`;
   return `<div class="dc-h"><h2>Market read${info('i_read')}</h2><a class="ps-more" href="#overview">Full intelligence →</a></div>
     <div class="ir-top">
       <div class="ir-state t-${toneOf(I.state)}">${esc(I.state)}</div>
@@ -32,9 +40,9 @@ export function marketReadHtml(I, info = () => '') {
     </div>
     <p class="ir-sub"><b>${I.breadth.n} of ${I.breadth.of}</b> domains Constructive or better${I.breadth.neg ? ` · ${I.breadth.neg} Cautionary or worse` : ''} · ${conf(I.confidence.level)}</p>
     <div class="ir-doms">${I.domains.map((d) => `<a class="ir-dom t-${toneOf(d.state, d.score)}" href="${DLINK(d.key)}" title="${esc(d.question)}"><span class="n">${esc(d.name)}</span><span class="a">${d.arrow}</span><span class="s">${esc(d.state)}</span></a>`).join('')}</div>
-    <div class="ir-cols">
-      <div><h3>Key drivers${info('i_forces')}</h3>${I.drivers.length ? `<ul class="ir-f">${I.drivers.slice(0, 3).map(li).join('')}</ul>` : '<p class="muted small">No strong supportive force right now.</p>'}</div>
-      <div><h3>Key offsets</h3>${I.offsets.length ? `<ul class="ir-f">${I.offsets.slice(0, 3).map(li).join('')}</ul>` : '<p class="muted small">No strong offsetting force right now.</p>'}</div>
+    <div class="ir-cols ovf">
+      <div><h3>Key drivers${info('i_forces')}</h3>${M.drivers.length ? `<ul class="ir-f">${M.drivers.map(li).join('')}</ul>` : '<p class="muted small">No material supportive force right now.</p>'}</div>
+      <div><h3>Key offsets</h3>${M.offsets.length ? `<ul class="ir-f">${M.offsets.map(li).join('')}</ul>` : '<p class="muted small">No material offsetting force right now.</p>'}</div>
     </div>
     ${c2 ? `<p class="ir-chg"><span class="k">What changed${info('i_changes')}</span><span class="ir-hz">${[['2d', I.changes.d2], ['7d', I.changes.d7], ['30d', I.changes.d30]].map(([l, c]) => (c?.domains ? `<span title="${esc(c.text)}"><i>${l}</i>${pill(c.label, c.label === 'Improving' ? 1 : c.label === 'Deteriorating' ? -0.5 : 0)}</span>` : '')).join('')}</span>${esc(c2.text)}</p>` : ''}
     <div class="ir-concl">
@@ -46,19 +54,24 @@ export function marketReadHtml(I, info = () => '') {
 }
 
 // ---------------------------------------------------------------- intelligence
-function forceCard(f) {
-  return `<article class="iforce t-${dirTone(f.dir)}">
-    <header><b>${esc(f.name)}</b><span class="xs dim">${esc(f.domains.join(' · '))}</span></header>
+function forceCard(f, detail = () => '') {
+  const st = f.active ? (f.dir > 0 ? 'Supportive' : 'Adverse') : 'Inactive';
+  return `<details class="iforce lib t-${f.active ? dirTone(f.dir) : 'ctx'}${f.active ? '' : ' off'}" id="force-${f.id}"${f.material ? ' open' : ''}>
+    <summary><span class="lf-n"><b>${esc(f.name)}</b> ${forceTag(f)}</span><span class="lf-s">${pill(st, f.active ? f.dir : null)}${f.score !== null ? `<span class="small muted">${esc(f.label)}</span>` : '<span class="small muted">no data</span>'}</span>${sbar(f.score)}</summary>
     <p>${esc(f.text)}</p>
     <div class="ifm">
-      <span><span class="k">Strength</span>${esc(f.strengthWord)}<span class="mtr"><i style="width:${Math.round(f.strength * 100)}%"></i></span></span>
+      <span><span class="k">Score</span>${f.score === null ? '—' : `${f.score >= 0 ? '+' : '−'}${Math.abs(f.score).toFixed(2)}`} <span class="xs dim">active at ±${f.threshold.toFixed(2)}</span></span>
+      <span><span class="k">Strength</span>${esc(STR[f.strengthWord])}<span class="mtr"><i style="width:${Math.round(f.strength * 100)}%"></i></span></span>
       <span><span class="k">Confidence</span>${esc(f.confidence)}</span>
       <span><span class="k">Horizon</span>${esc(f.horizonText)}</span>
-      <span><span class="k">Persistence</span>${f.persistence >= 30 ? '30+ days' : f.persistence ? `${f.persistence} day${f.persistence > 1 ? 's' : ''}` : 'new today'}</span>
-      <span><span class="k">Trend</span>${esc(f.trend)}</span>
+      <span><span class="k">Persistence</span>${!f.active ? '—' : f.persistence >= 30 ? '30+ days' : f.persistence ? `${f.persistence} day${f.persistence > 1 ? 's' : ''}` : 'new today'}</span>
+      <span><span class="k">Trend</span>${esc(f.trend || '—')}</span>
+      <span><span class="k">Materiality</span>${f.materiality.toFixed(2)}${f.material ? ' · shown as driver/offset' : ''}</span>
     </div>
+    <p class="xs dim"><b>Rule.</b> ${esc(f.rule)}</p>
     <details><summary>Evidence</summary><ul class="iev">${f.evidence.map((e) => `<li>${pill(e.state, null)} <a href="${ILINK(e.id)}"><b>${esc(e.name)}</b></a> ${esc(e.disp)} <span class="xs dim">${esc(e.src)} · ${esc(ago(e.asOf))}</span></li>`).join('')}</ul></details>
-  </article>`;
+    ${detail(f)}
+  </details>`;
 }
 function changeCard(c, title) {
   if (!c) return '';
@@ -72,7 +85,7 @@ function changeCard(c, title) {
     <p class="xs dim">Like-for-like: compared on the ${c.n} of ${c.of} indicators that have readings on both dates.</p>
   </article>`;
 }
-export function intelligenceHtml(I, info = () => '') {
+export function intelligenceHtml(I, info = () => '', opts = {}) {
   if (!I) return '<div class="empty-state"><p>The intelligence read needs the published data files; it will appear once they load.</p></div>';
   const V = I.valuation, C = I.cycle, K = I.risk, X = I.confirmation;
   const gp = I.grade.parts;
@@ -90,12 +103,13 @@ export function intelligenceHtml(I, info = () => '') {
     <section class="block"><div class="bh"><h2>Why</h2><p class="aside">Data as of ${esc(I.asOf)} · plain-English synthesis of the evidence below</p></div>
       <div class="inarr">${I.narrative.map((p) => `<p>${rich(p)}</p>`).join('')}</div></section>
 
-    <section class="block"><div class="bh"><h2>What is driving Bitcoin${info('i_forces')}</h2><p class="aside">Forces detected across domains, ranked by strength × confidence × horizon</p></div>
-      ${I.drivers.length ? `<div class="iforces">${I.drivers.slice(0, 5).map(forceCard).join('')}</div>` : '<p class="muted">No strong supportive force is active.</p>'}</section>
-
-    <section class="block"><div class="bh"><h2>What is holding it back</h2><p class="aside">The offsets, ranked the same way</p></div>
-      ${I.offsets.length ? `<div class="iforces">${I.offsets.slice(0, 5).map(forceCard).join('')}</div>` : '<p class="muted">No strong offsetting force is active.</p>'}
-      ${I.watch.length ? `<div class="iwatch"><span class="k">Two-way watch</span>${I.watch.map((w) => `<p><b>${esc(w.name)}.</b> ${esc(w.text)}</p>`).join('')}</div>` : ''}</section>
+    <section class="block" id="forces"><div class="bh"><h2>What is moving Bitcoin: the force library${info('i_forces')}</h2><p class="aside">Full force library. Drivers/offsets on Analysis and Dashboard are the material subset.</p></div>
+      <div class="lib-sum">${['tech', 'chain', 'mkt', 'sent', 'macro'].map((k) => { const fs = I.forces.filter((f) => f.domain === k); return `<span><b>${esc(fs[0]?.domainName || k)}</b> ${fs.map((f) => `<a href="${forceHref(f)}" class="lchip t-${f.active ? dirTone(f.dir) : 'ctx'}" title="${esc(f.label || f.name)}">${esc(f.name)}</a>`).join('')}</span>`; }).join('')}</div>
+      <h3 class="rh3">Active forces · ranked by materiality (strength × confidence × horizon)</h3>
+      ${I.forces.filter((f) => f.active).length ? `<div class="iforces lib">${I.forces.filter((f) => f.active).map((f) => forceCard(f, opts.forceDetail)).join('')}</div>` : '<p class="muted">No force is above its activation threshold.</p>'}
+      <h3 class="rh3">Inactive forces · below their activation threshold</h3>
+      <div class="iforces lib">${I.forces.filter((f) => !f.active).map((f) => forceCard(f, opts.forceDetail)).join('')}</div>
+      <p class="xs dim">${I.forces.length} forces, each in one domain, each built from indicators already on the site. A force is active when its score crosses its threshold; it counts as a driver (supportive) or offset (adverse) when its materiality is at least 0.20. The Dashboard shows up to 3 of each, Analysis up to 5 drivers and 4 offsets — always the same forces, names and order as here.</p></section>
 
     <section class="block"><div class="bh"><h2>By time horizon</h2><p class="aside">The same signals grouped by the horizon they work on</p></div>
       <div class="ihz">${(I.horizons || []).map((x) => `<div class="ihz-c t-${toneOf(x.state, x.score)}"><span class="k">${esc(x.label)}</span><b>${esc(x.state)}</b>${sbar(x.score)}<span class="xs dim">${x.sup} supportive · ${x.cau} cautionary of ${x.n}</span></div>`).join('')}</div>

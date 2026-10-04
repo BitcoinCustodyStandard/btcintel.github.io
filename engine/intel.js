@@ -411,76 +411,76 @@ function synthDomains(R, only) {
 // LAYER 5: market forces (detected from combinations of indicators across domains)
 const HZW = { long: 1, medium: 0.9, short: 0.75 };
 const CONFW = { High: 1, Moderate: 0.8, Low: 0.6 };
-const FORCES = [
-  { id: 'trend', domains: ['tech'], horizon: 'medium', ev: ['t_ma200', 't_ma50_200', 't_slope200', 't_hhhl'], name: (d) => (d > 0 ? 'Uptrend intact' : 'Downtrend in force'),
-    detect: (R, Dm) => { const t = comp(Dm, 'tech', 'Trend'); return t !== null && Math.abs(t) >= 0.3 ? { dir: Math.sign(t), str: Math.abs(t) } : null; },
-    text: (d, R) => d > 0 ? `Price ${R.t_ma200?.disp ? `is ${R.t_ma200.disp.split(' (')[0]} versus its 200-day average` : 'holds above its long-term average'}, the 50-day sits ${R.t_ma50_200?.value >= 0 ? 'above' : 'below'} the 200-day and the long-term average is ${R.t_slope200?.value > 0 ? 'rising' : 'flat'}.` : `Price trades below its long-term average and the trend structure points down.` },
-  { id: 'momentum', domains: ['tech'], horizon: 'short', ev: ['t_rsi', 't_macd', 't_roc30', 't_volume'], name: (d) => (d > 0 ? 'Momentum building' : 'Momentum fading'),
-    detect: (R, Dm) => { const m = comp(Dm, 'tech', 'Momentum'); return m !== null && Math.abs(m) >= 0.35 ? { dir: Math.sign(m), str: Math.abs(m) } : null; },
-    text: (d, R) => `RSI ${R.t_rsi ? f(R.t_rsi.value, 0) : '—'}, MACD ${R.t_macd?.value >= 0 ? 'above' : 'below'} zero, 30-day change ${R.t_roc30 ? pc(R.t_roc30.value) : '—'}.` },
-  { id: 'stretch', domains: ['tech'], horizon: 'short', ev: ['t_mayer', 't_bbz', 't_rsiext'], name: (d) => (d < 0 ? 'Price stretched' : 'Washed out'),
-    detect: (R, Dm) => { const e = comp(Dm, 'tech', 'Extension'), t = comp(Dm, 'tech', 'Trend'); if (e === null) return null; if (e <= -0.4) return { dir: -1, str: Math.abs(e) }; if (e >= 0.4 && (t ?? 0) <= 0) return { dir: 1, str: e * 0.8 }; return null; },
-    text: (d, R) => d < 0 ? `Mayer Multiple ${R.t_mayer ? f(R.t_mayer.value, 2) : '—'}, price ${R.t_bbz ? R.t_bbz.disp.split(' (')[0] : '—'} from its 20-day mean: the move has run ahead of its averages.` : `Price sits ${R.t_bbz ? R.t_bbz.disp.split(' (')[0] : 'well'} below its 20-day mean with RSI ${R.t_rsi ? f(R.t_rsi.value, 0) : '—'}: selling looks exhausted short term.` },
-  { id: 'squeeze', domains: ['tech', 'mkt'], horizon: 'short', ev: ['t_bbw', 't_rv', 'm_dvol'], name: () => 'Volatility compressed',
-    detect: (R) => (R.t_bbw?.pctile !== null && R.t_bbw?.pctile <= 15 ? { dir: 0, str: 1 - R.t_bbw.pctile / 15 * 0.5 } : null),
-    text: (d, R) => `Bollinger Band width is at the ${ord(R.t_bbw.pctile)} percentile of the past year. Compressed ranges tend to resolve in a larger move; the direction is not known in advance.` },
-  { id: 'etf', domains: ['mkt'], horizon: 'medium', ev: ['m_etf5', 'm_etf20', 'm_etfacc'], name: (d) => (d > 0 ? 'Institutional demand' : 'Institutional outflows'),
-    detect: (R) => { const a = R.m_etf5?.s, b = R.m_etf20?.s; const x = ok(b) ? 0.4 * (a ?? 0) + 0.6 * b : a; return ok(x) && Math.abs(x) >= 0.25 ? { dir: Math.sign(x), str: Math.min(1, Math.abs(x) * 1.2) } : null; },
-    text: (d, R) => `US spot ETFs: ${R.m_etf5 ? R.m_etf5.disp : '—'} over five trading days${R.m_etf20 ? `, ${R.m_etf20.disp} over twenty` : ''}.` },
-  { id: 'accum', domains: ['chain'], horizon: 'medium', ev: ['c_exnet', 'c_exbal', 'c_whales'], name: (d) => (d > 0 ? 'Coins leaving exchanges' : 'Coins moving to exchanges'),
-    detect: (R) => { const a = R.c_exnet?.s, b = R.c_exbal?.s; if (!ok(a) && !ok(b)) return null; const x = mean([a, b].filter(ok)); return Math.abs(x) >= 0.3 ? { dir: Math.sign(x), str: Math.min(1, Math.abs(x)) } : null; },
-    text: (d, R) => `Exchange netflow ${R.c_exnet ? R.c_exnet.disp : '—'} over 30 days; exchange balance ${R.c_exbal ? R.c_exbal.disp.split(' (')[0] : '—'}.` },
-  { id: 'profit', domains: ['chain'], horizon: 'medium', ev: ['c_sopr', 'c_profit', 'c_lth'], name: () => 'Profit-taking / distribution',
-    detect: (R) => { const a = R.c_sopr?.s, b = R.c_profit?.s, c = R.c_lth?.s; const x = Math.min(...[a, b, c].filter(ok)); return Number.isFinite(x) && x <= -0.35 ? { dir: -1, str: Math.min(1, -x) } : null; },
-    text: (d, R) => `SOPR ${R.c_sopr ? R.c_sopr.disp : '—'}, ${R.c_profit ? R.c_profit.disp : '—'} of supply in profit, long-term holders at ${R.c_lth ? R.c_lth.disp.split(' (')[0] : '—'} their cost basis.` },
-  { id: 'value', domains: ['chain', 'tech'], horizon: 'long', ev: ['c_mvrv', 'c_puell', 't_mayer'], name: (d) => (d > 0 ? 'Valuation reset' : 'Valuation stretched'),
-    detect: (R, Dm) => { const v = comp(Dm, 'chain', 'Valuation'); return v !== null && Math.abs(v) >= 0.4 ? { dir: Math.sign(v), str: Math.min(1, Math.abs(v)) } : null; },
-    text: (d, R) => `MVRV ${R.c_mvrv ? R.c_mvrv.disp : '—'}; Puell ${R.c_puell ? R.c_puell.disp : '—'}.` },
-  { id: 'holders', domains: ['chain'], horizon: 'medium', ev: ['c_sth', 'c_sopr'], name: (d) => (d > 0 ? 'Recent buyers in profit' : 'Recent buyers underwater'),
-    detect: (R) => { const x = R.c_sth?.s; return ok(x) && Math.abs(x) >= 0.4 ? { dir: Math.sign(x), str: Math.min(1, Math.abs(x)) } : null; },
-    text: (d, R) => `Price is ${R.c_sth.disp}. ${d > 0 ? 'That cost basis tends to act as support on pullbacks.' : 'That cost basis tends to cap rallies as buyers get their money back.'}` },
-  { id: 'leverage', domains: ['mkt'], horizon: 'short', ev: ['m_funding', 'm_oigrowth', 'm_oimcap', 'm_basis'], name: (d) => (d < 0 ? 'Leverage building' : 'Leverage flushed'),
-    detect: (R) => { const a = R.m_funding?.s, b = R.m_oigrowth?.s, c = R.m_oimcap?.s; const lo = Math.min(...[a, b, c].filter(ok)); if (Number.isFinite(lo) && lo <= -0.3) return { dir: -1, str: Math.min(1, -lo) }; if (ok(b) && b >= 0.4 && (R.m_funding?.value ?? 0) <= 8) return { dir: 1, str: b * 0.8 }; return null; },
-    text: (d, R) => `Funding ${R.m_funding ? R.m_funding.disp : '—'}; ${R.m_oigrowth ? R.m_oigrowth.disp : 'OI change n/a'}; OI ÷ market cap ${R.m_oimcap ? R.m_oimcap.disp.split(' (')[0] : '—'}.` },
-  { id: 'stress', domains: ['mkt'], horizon: 'short', ev: ['m_skew', 'm_dvol', 'm_pcr'], name: () => 'Hedging demand / derivatives stress',
-    detect: (R) => { const x = Math.min(...[R.m_skew?.s, R.m_dvol?.s].filter(ok)); return Number.isFinite(x) && x <= -0.4 ? { dir: -1, str: Math.min(1, -x) } : null; },
-    text: (d, R) => `Skew ${R.m_skew ? R.m_skew.disp : '—'}; implied volatility ${R.m_dvol ? R.m_dvol.disp : '—'}.` },
-  { id: 'spot', domains: ['mkt'], horizon: 'short', ev: ['m_cbp', 'm_taker', 'm_depth'], name: (d) => (d > 0 ? 'Spot buyers in control' : 'Spot selling pressure'),
-    detect: (R, Dm) => { const s = comp(Dm, 'mkt', 'Spot demand'); return s !== null && Math.abs(s) >= 0.35 ? { dir: Math.sign(s), str: Math.min(1, Math.abs(s)) } : null; },
-    text: (d, R) => `Coinbase premium ${R.m_cbp ? R.m_cbp.disp : '—'}; spot taker ratio ${R.m_taker ? R.m_taker.disp : '—'}.` },
-  { id: 'stables', domains: ['chain', 'macro'], horizon: 'medium', ev: ['c_stab30', 'c_stab7', 'c_usdt'], name: (d) => (d > 0 ? 'Stablecoin liquidity expanding' : 'Stablecoin liquidity contracting'),
-    detect: (R) => { const x = R.c_stab30?.s; return ok(x) && Math.abs(x) >= 0.25 ? { dir: Math.sign(x), str: Math.min(1, Math.abs(x)) } : null; },
-    text: (d, R) => `Stablecoin supply ${R.c_stab30.disp} over 30 days${R.c_usdt ? `; ${R.c_usdt.disp}` : ''}.` },
-  { id: 'liquidity', domains: ['macro'], horizon: 'long', ev: ['x_netliq4', 'x_netliq13', 'x_m2', 'x_g3'], name: (d) => (d > 0 ? 'Liquidity expanding' : 'Liquidity draining'),
-    detect: (R, Dm) => { const l = comp(Dm, 'macro', 'Liquidity'); return l !== null && Math.abs(l) >= 0.3 ? { dir: Math.sign(l), str: Math.min(1, Math.abs(l)) } : null; },
-    text: (d, R) => `US net liquidity ${R.x_netliq4 ? R.x_netliq4.disp.split(' (')[0] : '—'} over 4 weeks${R.x_m2 ? `; M2 ${R.x_m2.disp.split(' (')[0]} year on year` : ''}.` },
-  { id: 'conditions', domains: ['macro'], horizon: 'medium', ev: ['x_dxy', 'x_real', 'x_2y'], name: (d) => (d < 0 ? 'Macro tightening' : 'Financial conditions easing'),
-    detect: (R, Dm) => { const r = comp(Dm, 'macro', 'Rates & policy'), u = comp(Dm, 'macro', 'Dollar'); if (r === null || u === null) return null; if (r <= -0.2 && u <= -0.2) return { dir: -1, str: Math.min(1, -(r + u) / 1.4) }; if (r >= 0.2 && u >= 0.2) return { dir: 1, str: Math.min(1, (r + u) / 1.4) }; return null; },
-    text: (d, R) => `Dollar ${R.x_dxy ? R.x_dxy.disp.split(' (')[0] : '—'} over 4 weeks; 10-year real yield ${R.x_real ? R.x_real.disp.split(' (')[0] : '—'}.` },
-  { id: 'risk', domains: ['macro'], horizon: 'medium', ev: ['x_nfci', 'x_vix', 'x_hy', 'x_ndx', 'x_acwi', 'x_corr'], name: (d) => (d > 0 ? 'Risk appetite firm' : 'Risk appetite deteriorating'),
-    detect: (R, Dm) => { const a = comp(Dm, 'macro', 'Risk appetite'), b = comp(Dm, 'macro', 'Financial conditions'), v = [a, b].filter((y) => y !== null), x = v.length ? mean(v) : null; if (x === null || Math.abs(x) < 0.35) return null; const c = Math.abs(R.x_corr?.value ?? 0.3); return { dir: Math.sign(x), str: Math.min(1, Math.abs(x) * (0.6 + 0.4 * c)) }; },
-    text: (d, R) => `${R.x_nfci ? `Financial conditions index ${R.x_nfci.disp.split(' (')[0]}; ` : ''}VIX ${R.x_vix ? R.x_vix.disp : '—'}; high-yield spreads ${R.x_hy ? R.x_hy.disp.split(' (')[0] : '—'}; Nasdaq ${R.x_ndx ? R.x_ndx.disp : '—'} over 4 weeks${R.x_corr ? `; BTC–Nasdaq correlation ${R.x_corr.disp}` : ''}.` },
-  { id: 'heat', domains: ['sent'], horizon: 'medium', ev: ['s_fng', 's_fngchg', 's_wiki'], name: (d) => (d < 0 ? 'Sentiment overheating' : 'Extreme fear (contrarian)'),
-    detect: (R, Dm, X, d) => { const v = R.s_fng?.value; if (!ok(v)) return null; const a7 = mean(vals(X.fng, d, 7)); if (v >= 78 && a7 >= 72) return { dir: -1, str: Math.min(1, (v - 70) / 20) }; if (v <= 25 && a7 <= 30) return { dir: 1, str: Math.min(1, (35 - v) / 20) }; return null; },
-    text: (d, R) => `Fear & Greed ${R.s_fng.disp.split(' ·')[0]}${R.s_wiki ? `; public attention ${R.s_wiki.disp.split(' (')[0]} its 90-day norm` : ''}.` },
-  { id: 'network', domains: ['chain'], horizon: 'long', ev: ['c_active', 'c_tx', 'c_hash'], name: (d) => (d > 0 ? 'Network activity growing' : 'Network activity slowing'),
-    detect: (R, Dm) => { const x = comp(Dm, 'chain', 'Network activity'); return x !== null && Math.abs(x) >= 0.3 ? { dir: Math.sign(x), str: Math.min(1, Math.abs(x)) } : null; },
-    text: (d, R) => `Active addresses ${R.c_active ? R.c_active.disp.split(' (')[0] : '—'} versus their 90-day average; hash rate ${R.c_hash ? R.c_hash.disp : '—'} over 30 days.` },
-  { id: 'miners', domains: ['chain'], horizon: 'medium', ev: ['c_hashprice', 'c_puell'], name: () => 'Miner revenue squeeze',
-    detect: (R) => (ok(R.c_hashprice?.s) && R.c_hashprice.s <= -0.4 ? { dir: -1, str: Math.min(1, -R.c_hashprice.s) } : null),
-    text: (d, R) => `Hashprice ${R.c_hashprice.disp}. Squeezed miners sell more of what they mine.` },
+// THE FORCE LIBRARY — the single source for every "force", "driver" and "offset" on the site.
+// Intelligence lists the whole library; Analysis and the Dashboard show the material subset
+// (materialForces). Each force has one domain, a signed score (−1…+1, + = supportive for BTC,
+// − = adverse) built from existing indicators, and an activation threshold. Nothing else ranks forces.
+const S_ = (R, id) => (ok(R[id]?.s) ? R[id].s : null);
+const avg = (xs) => { const v = xs.filter(ok); return v.length ? mean(v) : null; };
+const wavg = (pairs) => { const v = pairs.filter(([x]) => ok(x)); const W = v.reduce((a, [, w]) => a + w, 0); return W ? v.reduce((a, [x, w]) => a + x * w, 0) / W : null; };
+export const FORCE_LIBRARY = [
+  { id: 'trend', name: 'Trend structure', domain: 'tech', horizon: 'medium', thr: 0.3, ev: ['t_ma200', 't_ma50_200', 't_slope200', 't_hhhl'],
+    rule: 'Technical trend component (price vs the 20/50/100/200-day averages, the 200-day slope, highs and lows). Active at ±0.30.',
+    score: (R, Dm) => comp(Dm, 'tech', 'Trend'), label: (x) => (x > 0 ? 'Uptrend intact' : 'Downtrend in force'),
+    text: (x, R) => (x > 0 ? `Price ${R.t_ma200?.disp ? `is ${R.t_ma200.disp.split(' (')[0]} versus its 200-day average` : 'holds above its long-term average'}, the 50-day sits ${R.t_ma50_200?.value >= 0 ? 'above' : 'below'} the 200-day and the long-term average is ${R.t_slope200?.value > 0 ? 'rising' : 'flat'}.` : `Price trades ${R.t_ma200?.disp ? `${R.t_ma200.disp.split(' (')[0]} versus` : 'below'} its long-term average and the trend structure points down.`) },
+  { id: 'momentum', name: 'Momentum & extension', domain: 'tech', horizon: 'short', thr: 0.35, ev: ['t_rsi', 't_macd', 't_roc30', 't_mayer', 't_bbz'],
+    rule: 'Momentum component (RSI, MACD, rates of change, volume); when the extension component is stretched (≤ −0.40) the extension reading takes over. Active at ±0.35.',
+    score: (R, Dm) => { const m = comp(Dm, 'tech', 'Momentum'), e = comp(Dm, 'tech', 'Extension'); return ok(e) && e <= -0.4 ? e : m; },
+    label: (x, R, Dm) => (x > 0 ? 'Momentum building' : ok(comp(Dm, 'tech', 'Extension')) && comp(Dm, 'tech', 'Extension') <= -0.4 ? 'Price stretched' : 'Momentum fading'),
+    text: (x, R) => `RSI ${R.t_rsi ? f(R.t_rsi.value, 0) : '—'}, MACD ${R.t_macd?.value >= 0 ? 'above' : 'below'} zero, 30-day change ${R.t_roc30 ? pc(R.t_roc30.value) : '—'}; Mayer Multiple ${R.t_mayer ? f(R.t_mayer.value, 2) : '—'}.` },
+  { id: 'exflows', name: 'Exchange flows', domain: 'chain', horizon: 'medium', thr: 0.3, ev: ['c_exnet', 'c_exbal', 'c_whales'],
+    rule: 'Average of the 30-day exchange netflow and exchange-balance readings (outflows = supportive). Active at ±0.30.',
+    score: (R) => avg([S_(R, 'c_exnet'), S_(R, 'c_exbal')]), label: (x) => (x > 0 ? 'Coins leaving exchanges' : 'Coins moving to exchanges'),
+    text: (x, R) => `Exchange netflow ${R.c_exnet ? R.c_exnet.disp : '—'} over 30 days; exchange balance ${R.c_exbal ? R.c_exbal.disp.split(' (')[0] : '—'}.` },
+  { id: 'valuation', name: 'Valuation & holder profit', domain: 'chain', horizon: 'long', thr: 0.3, ev: ['c_mvrv', 'c_sth', 'c_sopr', 'c_profit', 'c_lth'],
+    rule: 'Valuation component (MVRV, MVRV Z, Puell) 50%, price vs short-term holder cost basis 30%, the weakest of SOPR / supply in profit / long-term holder multiple 20%. Active at ±0.30.',
+    score: (R, Dm) => wavg([[comp(Dm, 'chain', 'Valuation'), 0.5], [S_(R, 'c_sth'), 0.3], [Math.min(...[S_(R, 'c_sopr'), S_(R, 'c_profit'), S_(R, 'c_lth')].filter(ok)), 0.2]]),
+    label: (x) => (x > 0 ? 'Valuation room' : 'Valuation stretched'),
+    text: (x, R) => `MVRV ${R.c_mvrv ? R.c_mvrv.disp.split(' ·')[0] : '—'}; price ${R.c_sth ? R.c_sth.disp : '—'}; SOPR ${R.c_sopr ? R.c_sopr.disp : '—'}, ${R.c_profit ? R.c_profit.disp : '—'} of supply in profit.` },
+  { id: 'network', name: 'Network & miners', domain: 'chain', horizon: 'long', thr: 0.3, ev: ['c_active', 'c_tx', 'c_hash', 'c_ribbons', 'c_hashprice'],
+    rule: 'Network-activity component (active addresses, transactions, fees, hash rate, Hash Ribbons, hashprice). Active at ±0.30.',
+    score: (R, Dm) => comp(Dm, 'chain', 'Network activity'), label: (x) => (x > 0 ? 'Network and miners healthy' : 'Network or miner stress'),
+    text: (x, R) => `Active addresses ${R.c_active ? R.c_active.disp.split(' (')[0] : '—'} versus their 90-day average; hash rate ${R.c_hash ? R.c_hash.disp.split(' (')[0] : '—'} over 30 days; Hash Ribbons ${R.c_ribbons ? R.c_ribbons.disp.split(' (')[0] : '—'}; hashprice ${R.c_hashprice ? R.c_hashprice.disp.split(' (')[1]?.replace(')', '') || R.c_hashprice.disp : '—'}.` },
+  { id: 'etf', name: 'Spot ETF flow impulse', domain: 'mkt', horizon: 'medium', thr: 0.25, ev: ['m_etf5', 'm_etf20', 'm_etfacc'],
+    rule: '5-day ETF net flow 40% and 20-day 60% (5-day alone until 20 days are stored); ±$1bn over 5 days or ±$3bn over 20 days = full strength. Active at ±0.25.',
+    score: (R) => { const a5 = S_(R, 'm_etf5'), b20 = S_(R, 'm_etf20'); return ok(b20) ? 0.4 * (a5 ?? 0) + 0.6 * b20 : a5; }, label: (x) => (x > 0 ? 'ETF inflows' : 'ETF outflows'),
+    text: (x, R) => `US spot ETFs: ${R.m_etf5 ? R.m_etf5.disp : '—'} over five trading days${R.m_etf20 ? `, ${R.m_etf20.disp} over twenty` : ''}.` },
+  { id: 'leverage', name: 'Leverage & derivatives', domain: 'mkt', horizon: 'short', thr: 0.3, ev: ['m_funding', 'm_oigrowth', 'm_oimcap', 'm_basis', 'm_skew', 'm_dvol'],
+    rule: 'If any of funding, OI growth vs price, OI ÷ market cap, options skew or implied volatility reads ≤ −0.35, that reading sets the force (crowding or stress); a leverage flush (OI falling vs price with funding ≤ 8%) is supportive; otherwise leverage 65% / derivatives 35%. Active at ±0.30.',
+    score: (R, Dm) => { const ids = ['m_funding', 'm_oigrowth', 'm_oimcap', 'm_skew', 'm_dvol'], lo = Math.min(...ids.map((i) => S_(R, i)).filter(ok)); if (Number.isFinite(lo) && lo <= -0.35) return lo; const og = S_(R, 'm_oigrowth'); if (ok(og) && og >= 0.4 && (R.m_funding?.value ?? 0) <= 8) return og * 0.8; return wavg([[comp(Dm, 'mkt', 'Leverage'), 0.65], [comp(Dm, 'mkt', 'Derivatives'), 0.35]]); },
+    label: (x, R) => { if (x > 0) return 'Leverage flushed or healthy'; const st = Math.min(...['m_skew', 'm_dvol'].map((i) => S_(R, i)).filter(ok)); return Number.isFinite(st) && st <= -0.35 ? 'Derivatives stress' : 'Leverage crowded'; },
+    text: (x, R) => `Funding ${R.m_funding ? R.m_funding.disp : '—'}; ${R.m_oigrowth ? R.m_oigrowth.disp : 'OI change n/a'}; OI ÷ market cap ${R.m_oimcap ? R.m_oimcap.disp.split(' (')[0] : '—'}; skew ${R.m_skew ? R.m_skew.disp.split(' (')[0] : '—'}.` },
+  { id: 'spot', name: 'US spot premium', domain: 'mkt', horizon: 'short', thr: 0.3, ev: ['m_cbp', 'm_taker', 'm_depth'],
+    rule: 'Spot-demand component: the Coinbase premium, spot taker buy/sell ratio and order-book balance. Active at ±0.30.',
+    score: (R, Dm) => comp(Dm, 'mkt', 'Spot demand'), label: (x) => (x > 0 ? 'US spot buyers paying up' : 'US spot at a discount'),
+    text: (x, R) => `Coinbase premium ${R.m_cbp ? R.m_cbp.disp : '—'}; spot taker ratio ${R.m_taker ? R.m_taker.disp : '—'}.` },
+  { id: 'sentiment', name: 'Risk sentiment', domain: 'sent', horizon: 'medium', thr: 0.3, ev: ['s_fng', 's_fngchg', 's_news', 's_wiki'],
+    rule: 'Extreme greed (Fear & Greed ≥ 78 with a 7-day average ≥ 72) is adverse and extreme fear (≤ 25, 7-day average ≤ 30) is supportive (contrarian); otherwise the sentiment domain score (Fear & Greed, news tone, attention). Active at ±0.30.',
+    score: (R, Dm, X, d) => { const v = R.s_fng?.value; if (ok(v)) { const a7 = mean(vals(X.fng, d, 7)); if (v >= 78 && a7 >= 72) return -Math.min(1, (v - 70) / 20); if (v <= 25 && a7 <= 30) return Math.min(1, (35 - v) / 20); } return Dm.find((x) => x.key === 'sent')?.score ?? null; },
+    label: (x, R) => (x > 0 ? ((R.s_fng?.value ?? 50) <= 30 ? 'Extreme fear (contrarian)' : 'Sentiment supportive') : (R.s_fng?.value ?? 50) >= 75 ? 'Sentiment overheating' : 'Sentiment souring'),
+    text: (x, R) => `Fear & Greed ${R.s_fng ? R.s_fng.disp.split(' ·')[0] : '—'}${R.s_news ? `; news ${R.s_news.disp}` : ''}${R.s_wiki ? `; public attention ${R.s_wiki.disp.split(' (')[0]} its 90-day norm` : ''}.` },
+  { id: 'macro', name: 'Macro conditions', domain: 'macro', horizon: 'medium', thr: 0.25, ev: ['x_dxy', 'x_real', 'x_2y', 'x_netliq4', 'x_m2', 'x_g3'],
+    rule: 'Average of the rates & policy, dollar and liquidity components (real and nominal yields, rate expectations, DXY, US net liquidity, M2, central-bank balance sheets). Active at ±0.25.',
+    score: (R, Dm) => avg([comp(Dm, 'macro', 'Rates & policy'), comp(Dm, 'macro', 'Dollar'), comp(Dm, 'macro', 'Liquidity')]), label: (x) => (x > 0 ? 'Macro easing' : 'Macro tightening'),
+    text: (x, R) => `Dollar ${R.x_dxy ? R.x_dxy.disp.split(' (')[0] : '—'} over 4 weeks; 10-year real yield ${R.x_real ? R.x_real.disp.split(' (')[0] : '—'}; US net liquidity ${R.x_netliq4 ? R.x_netliq4.disp.split(' (')[0] : '—'} over 4 weeks.` },
+  { id: 'stables', name: 'Stablecoin liquidity', domain: 'macro', horizon: 'medium', thr: 0.25, ev: ['c_stab30', 'c_stab7', 'c_usdt'],
+    rule: '30-day change in total dollar-stablecoin supply (±3% = full strength). Active at ±0.25.',
+    score: (R) => S_(R, 'c_stab30'), label: (x) => (x > 0 ? 'Expanding' : 'Contracting'),
+    text: (x, R) => `Stablecoin supply ${R.c_stab30 ? R.c_stab30.disp : '—'} over 30 days${R.c_usdt ? `; ${R.c_usdt.disp}` : ''}.` },
+  { id: 'risk', name: 'Risk appetite', domain: 'macro', horizon: 'medium', thr: 0.3, ev: ['x_nfci', 'x_vix', 'x_hy', 'x_ndx', 'x_acwi', 'x_corr'],
+    rule: 'Average of the risk-appetite (equities) and financial-conditions (NFCI, credit spreads, VIX) components, scaled up when BTC trades closely with the Nasdaq. Active at ±0.30.',
+    score: (R, Dm) => { const x = avg([comp(Dm, 'macro', 'Risk appetite'), comp(Dm, 'macro', 'Financial conditions')]); return ok(x) ? clamp(x * (0.6 + 0.4 * Math.abs(R.x_corr?.value ?? 0.3)) / 0.72, -1, 1) : null; },
+    label: (x) => (x > 0 ? 'Risk appetite firm' : 'Risk appetite deteriorating'),
+    text: (x, R) => `${R.x_nfci ? `Financial conditions index ${R.x_nfci.disp.split(' (')[0]}; ` : ''}VIX ${R.x_vix ? R.x_vix.disp : '—'}; high-yield spreads ${R.x_hy ? R.x_hy.disp.split(' (')[0] : '—'}; Nasdaq ${R.x_ndx ? R.x_ndx.disp : '—'} over 4 weeks.` },
 ];
+// how much a force matters now: strength × data confidence × horizon weight
+export const MATERIAL = 0.2;
 const comp = (Dm, dk, c) => Dm.find((x) => x.key === dk)?.comps.find((y) => y.name === c)?.score ?? null;
-function detectForces(X, d, R, Dm) {
-  const out = [];
-  for (const F of FORCES) {
-    let r = null;
-    try { r = F.detect(R, Dm, X, d); } catch { r = null; }
-    if (!r || !ok(r.str)) continue;
-    out.push({ id: F.id, dir: r.dir, strength: clamp(r.str, 0, 1) });
-  }
-  return out;
+function scoreForces(X, d, R, Dm) {
+  return FORCE_LIBRARY.map((F) => { let x = null; try { x = F.score(R, Dm, X, d); } catch { x = null; } return { id: F.id, x: ok(x) ? clamp(x, -1, 1) : null }; });
 }
+// the filtered views used by Analysis and the Dashboard (same forces, same names, capped)
+export function materialForces(I, nDrivers = 5, nOffsets = 4) { return { drivers: (I.drivers || []).slice(0, nDrivers), offsets: (I.offsets || []).slice(0, nOffsets) }; }
 
 // ---------------------------------------------------------------------------
 // LAYERS 6–7: conclusions
@@ -552,9 +552,9 @@ function marketRegime(Dm, C) {
   return { label, score, confidence, evidence: ev.map((x) => ({ ...x, word: LBL(x.score) })), why, character: C };
 }
 function overallAssessment(state, overall, drivers, offsets, regime, mixed) {
-  const f = (xs) => xs.slice(0, 3).map((x) => x.name);
+  const f = (xs) => xs.slice(0, 3).map((x) => `${x.name} (${x.label.toLowerCase()})`);
   return { label: state, state, score: overall, drivers: f(drivers), offsets: f(offsets),
-    why: `${state} on balance${mixed ? ', with domains pulling in opposite directions' : ''}. ${drivers.length ? `Principal supports: ${joinAnd(f(drivers).map((x) => x.toLowerCase()))}.` : 'No strong supportive force.'} ${offsets.length ? `Principal offsets: ${joinAnd(f(offsets).map((x) => x.toLowerCase()))}.` : 'No strong offsetting force.'}` };
+    why: `${state} on balance${mixed ? ', with domains pulling in opposite directions' : ''}. ${drivers.length ? `Principal supports: ${joinAnd(f(drivers))}.` : 'No strong supportive force.'} ${offsets.length ? `Principal offsets: ${joinAnd(f(offsets))}.` : 'No strong offsetting force.'}` };
 }
 
 function riskRegime(R, Dm, V, divergences) {
@@ -668,22 +668,29 @@ export function intelligence(input) {
   // indicator deterioration vs 7 days ago
   const R7 = readingsAt(X, shiftDate(d, -7));
   for (const r of Object.values(R)) { r.state = STATE(r.s); const p = R7[r.id]?.s; r.prev7 = ok(p) ? p : null; if (r.s !== null && (r.s <= -0.7 || (r.s <= -0.2 && ok(p) && r.s - p <= -0.25))) r.state = 'Deteriorating'; }
-  // forces: today, plus persistence and trend from daily re-evaluation over 30 days
-  const today = detectForces(X, d, R, S.Dm);
+  // the force library: today's scores, plus persistence and trend from daily re-evaluation
+  const today = scoreForces(X, d, R, S.Dm);
   const hist = {};
-  for (let k = 1; k <= 30; k++) { const dk = shiftDate(d, -k), Rk = readingsAt(X, dk); hist[k] = detectForces(X, dk, Rk, synthDomains(Rk)); }
-  const forces = today.map((F) => {
-    const def = FORCES.find((x) => x.id === F.id);
-    let persist = 0; for (let k = 1; k <= 30; k++) { if (hist[k].some((y) => y.id === F.id && y.dir === F.dir)) persist++; else break; }
-    const prev = hist[7]?.find((y) => y.id === F.id && y.dir === F.dir)?.strength ?? null;
-    const trend = prev === null ? 'new' : F.strength - prev >= 0.1 ? 'strengthening' : F.strength - prev <= -0.1 ? 'weakening' : 'steady';
-    const evR = def.ev.map((id) => R[id]).filter(Boolean);
-    const qn = evR.length ? mean(evR.map((r) => r.q)) : 0;
-    const confidence = evR.length >= 3 && qn >= 0.9 ? 'High' : evR.length >= 2 && qn >= 0.7 ? 'Moderate' : 'Low';
-    const rank = F.strength * CONFW[confidence] * HZW[def.horizon] * (persist >= 5 ? 1.05 : 1);
-    return { id: F.id, name: def.name(F.dir), dir: F.dir, strength: F.strength, strengthWord: F.strength >= 0.7 ? 'Strong' : F.strength >= 0.45 ? 'Moderate' : 'Mild', confidence, horizon: def.horizon, horizonText: { short: 'Short term (days)', medium: 'Medium term (weeks)', long: 'Long term (months)' }[def.horizon], domains: def.domains.map((k) => DOMAINS.find((x) => x.key === k).name), persistence: persist, trend, rank, text: def.text(F.dir, R), evidence: evR.map((r) => ({ id: r.id, name: r.name, disp: r.disp, state: r.state, asOf: r.asOf, src: r.src })) };
-  }).sort((a, b) => b.rank - a.rank);
-  const drivers = forces.filter((x) => x.dir > 0), offsets = forces.filter((x) => x.dir < 0), watch = forces.filter((x) => x.dir === 0);
+  for (let k = 1; k <= 30; k++) { const dk = shiftDate(d, -k), Rk = readingsAt(X, dk); hist[k] = scoreForces(X, dk, Rk, synthDomains(Rk)); }
+  const forces = FORCE_LIBRARY.map((F) => {
+    const x = today.find((y) => y.id === F.id).x, active = ok(x) && Math.abs(x) >= F.thr, dir = active ? Math.sign(x) : 0;
+    const on = (k) => { const v = hist[k]?.find((y) => y.id === F.id)?.x; return ok(v) && Math.abs(v) >= F.thr && Math.sign(v) === dir; };
+    let persist = 0; if (active) for (let k = 1; k <= 30; k++) { if (on(k)) persist++; else break; }
+    const prevX = hist[7]?.find((y) => y.id === F.id)?.x;
+    const trend = !active ? null : !on(7) ? 'new' : Math.abs(x) - Math.abs(prevX) >= 0.1 ? 'strengthening' : Math.abs(x) - Math.abs(prevX) <= -0.1 ? 'weakening' : 'steady';
+    const evR = F.ev.map((id) => R[id]).filter(Boolean), qn = evR.length ? mean(evR.map((r) => r.q)) : 0;
+    const confidence = !ok(x) ? 'None' : evR.length >= 3 && qn >= 0.9 ? 'High' : evR.length >= 2 && qn >= 0.7 ? 'Moderate' : 'Low';
+    const strength = ok(x) ? Math.abs(x) : 0;
+    const materiality = active ? strength * (CONFW[confidence] || 0.5) * HZW[F.horizon] * (persist >= 5 ? 1.05 : 1) : 0;
+    const dname = DOMAINS.find((y) => y.key === F.domain).name;
+    let label = null, text = null; try { label = ok(x) ? F.label(x, R, S.Dm) : null; text = ok(x) ? F.text(x, R) : null; } catch { /* missing inputs */ }
+    return { id: F.id, name: F.name, label, domain: F.domain, domainName: dname, domains: [dname], score: x, active, dir, direction: dir > 0 ? 'supportive' : dir < 0 ? 'adverse' : 'inactive',
+      strength, strengthWord: strength >= 0.7 ? 'Strong' : strength >= 0.45 ? 'Moderate' : 'Weak', threshold: F.thr, rule: F.rule, confidence, horizon: F.horizon,
+      horizonText: { short: 'Short term (days)', medium: 'Medium term (weeks)', long: 'Long term (months)' }[F.horizon], persistence: persist, trend, materiality, material: materiality >= MATERIAL,
+      text: text || 'Inputs unavailable from the free sources this run.', evidence: evR.map((r) => ({ id: r.id, name: r.name, disp: r.disp, state: r.state, asOf: r.asOf, src: r.src })) };
+  }).sort((a, b) => b.materiality - a.materiality || Math.abs(b.score ?? 0) - Math.abs(a.score ?? 0));
+  // drivers and offsets: active, material forces only — the subset Analysis and the Dashboard show
+  const drivers = forces.filter((x) => x.material && x.dir > 0), offsets = forces.filter((x) => x.material && x.dir < 0), watch = [];
   // what changed: like-for-like over 2, 7 and 30 days
   const changes = {};
   for (const h of [2, 7, 30]) {
@@ -725,8 +732,8 @@ function narrative(I) {
   const P = [], D = (k) => I.domains.find((x) => x.key === k);
   const sup = I.domains.filter((x) => x.score >= 0.15).map((x) => x.name.toLowerCase()), neg = I.domains.filter((x) => x.score !== null && x.score <= -0.15).map((x) => x.name.toLowerCase());
   P.push(`Bitcoin’s overall market configuration reads <b>${I.state.toLowerCase()}</b>, with a Fair Grade of ${I.grade.value} out of 100. ${I.breadth.n} of the ${I.breadth.of} analytical domains read Constructive or better${sup.length ? ` (${joinAnd(sup)})` : ''}${neg.length ? `, while ${joinAnd(neg)} ${neg.length > 1 ? 'lean' : 'leans'} against it` : ''}. ${I.cycle ? `The structure is consistent with <b>${withArticle(I.cycle.phase)}</b>` : ''}${I.valuation ? `${I.regime ? ', with valuation' : 'Valuation is'} <b>${I.valuation.state.toLowerCase()}</b>` : ''}.`);
-  if (I.drivers.length) P.push(`The strongest supports right now: ${I.drivers.slice(0, 3).map((x) => `<b>${x.name.toLowerCase()}</b> — ${x.text.replace(/\.$/, '')}`).join('; ')}.${I.drivers[0].persistence >= 7 ? ` The lead support has held for ${I.drivers[0].persistence >= 30 ? 'at least 30' : I.drivers[0].persistence} days, so it is not a one-day blip.` : ''}`);
-  if (I.offsets.length) P.push(`Holding it back: ${I.offsets.slice(0, 3).map((x) => `<b>${x.name.toLowerCase()}</b> — ${x.text.replace(/\.$/, '')}`).join('; ')}.${I.offsets.some((x) => x.horizon === 'short') && I.drivers.some((x) => x.horizon !== 'short') ? ' Some of these offsets are short-term in nature, while the main supports work over weeks to months; the engine weighs them accordingly.' : ''}`);
+  if (I.drivers.length) P.push(`The strongest supports right now: ${I.drivers.slice(0, 3).map((x) => `<b>${x.name.toLowerCase()}</b> (${x.label.toLowerCase()}) — ${x.text.replace(/\.$/, '')}`).join('; ')}.${I.drivers[0].persistence >= 7 ? ` The lead support has held for ${I.drivers[0].persistence >= 30 ? 'at least 30' : I.drivers[0].persistence} days, so it is not a one-day blip.` : ''}`);
+  if (I.offsets.length) P.push(`Holding it back: ${I.offsets.slice(0, 3).map((x) => `<b>${x.name.toLowerCase()}</b> (${x.label.toLowerCase()}) — ${x.text.replace(/\.$/, '')}`).join('; ')}.${I.offsets.some((x) => x.horizon === 'short') && I.drivers.some((x) => x.horizon !== 'short') ? ' Some of these offsets are short-term in nature, while the main supports work over weeks to months; the engine weighs them accordingly.' : ''}`);
   const cr = I.confirmation;
   if (cr.agree.length || cr.diverge.length) P.push(`${cr.agree.length ? cr.agree[0].text + ' ' : ''}${cr.diverge.length ? `Where the picture disagrees: ${cr.diverge.slice(0, 2).map((x) => x.text.replace(/\.$/, '')).join('; ')}.` : 'There are no notable divergences between domains.'}`);
   const c2 = I.changes.d2, c7 = I.changes.d7;

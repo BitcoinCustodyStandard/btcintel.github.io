@@ -1,7 +1,7 @@
 // Offline checks for the Market Intelligence Engine (engine/intel.js).
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { intelligence, indicatorHistory, domHistory, INDICATORS, DOMAIN_SLUG, indSlug, regimeTimeline, similarConditions } from '../../engine/intel.js';
+import { intelligence, indicatorHistory, domHistory, INDICATORS, DOMAIN_SLUG, indSlug, regimeTimeline, similarConditions, materialForces, FORCE_LIBRARY } from '../../engine/intel.js';
 import { IND_DOCS, COMP_DOCS, DOMAIN_DOCS } from '../../engine/indicator_docs.js';
 import { compact } from '../../engine/longhist.js';
 import { reportModel } from '../../engine/reportmodel.js';
@@ -47,13 +47,13 @@ assert.ok(m2.score < 0, `macro should lean negative with a rising dollar and rea
 assert.ok(dn.grade.value < up.grade.value, 'grade lower in the weak world');
 assert.ok(dn.offsets.some((f) => f.id === 'trend'), 'downtrend force detected');
 assert.ok(['Adverse', 'Cautionary'].includes(dn.regime.label), 'structural evidence in a falling market reads cautionary or worse');
-assert.ok(dn.drivers.some((f) => f.id === 'heat'), 'extreme fear read as contrarian support');
+assert.ok(dn.drivers.some((f) => f.id === 'sentiment'), 'extreme fear read as contrarian support');
 assert.ok(['Depressed', 'Attractive'].includes(dn.valuation.state), `MVRV 0.9 reads cheap (${dn.valuation.state})`);
 
 // 3. Extreme greed is read as crowding, not strength
 const hot = intelligence(world({ trend: 1, fng: 92 }));
 assert.ok(hot.domains.find((d) => d.key === 'sent').score <= -0.15, 'extreme greed caps sentiment');
-assert.ok(hot.offsets.some((f) => f.id === 'heat'), 'sentiment overheating force');
+assert.ok(hot.offsets.some((f) => f.id === 'sentiment'), 'sentiment overheating force');
 
 // 4. Price only: everything else is "No data", nothing is invented, the engine still answers
 const bare = world();
@@ -94,5 +94,15 @@ if (latest?.metrics) {
   assert.ok(similarConditions(X, up) !== null, 'similar-conditions search runs');
   const M = reportModel(up);
   assert.ok(M.sections.length >= 10 && M.sections.find((x) => x.title === 'Key drivers').lines.length >= 1, 'report model from the same engine output');
+}
+// 9. One force library: every view is a filtered subset of the same list
+for (const R of [up, dn, hot]) {
+  assert.equal(R.forces.length, FORCE_LIBRARY.length, 'all library forces are reported');
+  assert.ok(FORCE_LIBRARY.length >= 10 && FORCE_LIBRARY.length <= 12, 'library holds 10-12 forces');
+  assert.ok(R.forces.every((f) => f.domainName && f.name && (f.score === null || f.label)), 'every force carries a domain tag; scored forces carry a label');
+  assert.ok([...R.drivers, ...R.offsets].every((f) => R.forces.includes(f) && f.material), 'drivers/offsets are material library forces');
+  const M = materialForces(R, 3, 3);
+  assert.ok(M.drivers.length <= 3 && M.offsets.length <= 3, 'material subset is capped');
+  assert.deepEqual(M.drivers.map((f) => f.id), R.drivers.slice(0, 3).map((f) => f.id), 'subset keeps library order');
 }
 console.log('intel.test: ok');
