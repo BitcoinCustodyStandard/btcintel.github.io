@@ -3,7 +3,7 @@
 //   intelligenceHtml — Intelligence tab: what matters now and why, valuation, market regime, risk
 // All text comes from the engine's evidence; nothing here adds figures of its own.
 
-import { DOMAIN_SLUG, DEF_BY_ID, indSlug, materialForces } from '../engine/intel.js?v=20261003u';
+import { DOMAIN_SLUG, DEF_BY_ID, indSlug, materialForces } from '../engine/intel.js?v=20261003v';
 
 const DLINK = (k) => `#analysis/${DOMAIN_SLUG[k]}`;
 const ILINK = (id) => (DEF_BY_ID[id] ? `${DLINK(DEF_BY_ID[id].domain)}/${indSlug(id)}` : '#analysis');
@@ -32,6 +32,7 @@ export function marketReadHtml(I, info = () => '') {
   if (!I) return `<div class="dc-h"><h2>Market read${info('i_read')}</h2></div><p class="muted small">Waiting for enough data.</p>`;
   const c2 = I.changes?.d2;
   const M = materialForces(I, 3, 3);
+  const more = (n) => (n > 0 ? `<p class="xs dim ir-more"><a href="#analysis/drivers">+${n} more on Analysis</a></p>` : '');
   const li = (f) => `<li><span class="fdot t-${dirTone(f.dir)}"></span><span class="fn"><a href="${forceHref(f)}"><b>${esc(f.name)}</b></a> ${forceTag(f)}</span><span class="fmeta">${esc(f.label)} · ${esc(STR[f.strengthWord])} · ${esc(f.horizon)}${f.persistence >= 3 ? ` · ${f.persistence >= 30 ? '30+' : f.persistence} days` : ''}</span></li>`;
   return `<div class="dc-h"><h2>Market read${info('i_read')}</h2><a class="ps-more" href="#overview">Full intelligence →</a></div>
     <div class="ir-top">
@@ -41,8 +42,8 @@ export function marketReadHtml(I, info = () => '') {
     <p class="ir-sub"><b>${I.breadth.n} of ${I.breadth.of}</b> domains Constructive or better${I.breadth.neg ? ` · ${I.breadth.neg} Cautionary or worse` : ''} · ${conf(I.confidence.level)}</p>
     <div class="ir-doms">${I.domains.map((d) => `<a class="ir-dom t-${toneOf(d.state, d.score)}" href="${DLINK(d.key)}" title="${esc(d.question)}"><span class="n">${esc(d.name)}</span><span class="a">${d.arrow}</span><span class="s">${esc(d.state)}</span></a>`).join('')}</div>
     <div class="ir-cols ovf">
-      <div><h3>Key drivers${info('i_forces')}</h3>${M.drivers.length ? `<ul class="ir-f">${M.drivers.map(li).join('')}</ul>` : '<p class="muted small">No material supportive force right now.</p>'}</div>
-      <div><h3>Key offsets</h3>${M.offsets.length ? `<ul class="ir-f">${M.offsets.map(li).join('')}</ul>` : '<p class="muted small">No material offsetting force right now.</p>'}</div>
+      <div><h3>Key drivers${info('i_forces')}</h3>${M.drivers.length ? `<ul class="ir-f">${M.drivers.map(li).join('')}</ul>` : '<p class="muted small">No material supportive force right now.</p>'}${more(I.drivers.length - M.drivers.length)}</div>
+      <div><h3>Key offsets</h3>${M.offsets.length ? `<ul class="ir-f">${M.offsets.map(li).join('')}</ul>` : '<p class="muted small">No material offsetting force right now.</p>'}${more(I.offsets.length - M.offsets.length)}</div>
     </div>
     ${c2 ? `<p class="ir-chg"><span class="k">What changed${info('i_changes')}</span><span class="ir-hz">${[['2d', I.changes.d2], ['7d', I.changes.d7], ['30d', I.changes.d30]].map(([l, c]) => (c?.domains ? `<span title="${esc(c.text)}"><i>${l}</i>${pill(c.label, c.label === 'Improving' ? 1 : c.label === 'Deteriorating' ? -0.5 : 0)}</span>` : '')).join('')}</span>${esc(c2.text)}</p>` : ''}
     <div class="ir-concl">

@@ -7,9 +7,9 @@
 // shows the same value the dashboard and Intelligence use. Heavy history work is deferred
 // until after the page skeleton is on screen.
 
-import { DOMAIN_META, DOMAIN_SLUG, SLUG_DOMAIN, DEF_BY_ID, indicatorsOf, indSlug, compSlug, indicatorHistory, domHistory, compHistory, regimeTimeline, similarConditions, withArticle, materialForces } from '../engine/intel.js?v=20261003u';
-import { ZONES } from '../engine/cycle.js?v=20261003u';
-import { DOMAIN_DOCS, COMP_DOCS, IND_DOCS } from '../engine/indicator_docs.js?v=20261003u';
+import { DOMAIN_META, DOMAIN_SLUG, SLUG_DOMAIN, DEF_BY_ID, indicatorsOf, indSlug, compSlug, indicatorHistory, domHistory, compHistory, regimeTimeline, similarConditions, withArticle, materialForces } from '../engine/intel.js?v=20261003v';
+import { ZONES } from '../engine/cycle.js?v=20261003v';
+import { DOMAIN_DOCS, COMP_DOCS, IND_DOCS } from '../engine/indicator_docs.js?v=20261003v';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ok = (v) => v !== null && v !== undefined && Number.isFinite(v);
@@ -209,7 +209,7 @@ function landing(I, ctx) {
 
     <div class="atiles">${DOMAIN_META.map(tile).join('')}</div>
 
-    <section class="block"><div class="bh"><h2>Key drivers and offsets</h2><p class="aside">Material forces from the Intelligence force library (filtered). Full set on <a href="#forces">Intelligence →</a></p></div>
+    <span class="anchor" id="ov-forces"></span><section class="block"><div class="bh"><h2>Key drivers and offsets</h2><p class="aside">Material forces from the Intelligence force library (filtered). Full set on <a href="#forces">Intelligence →</a></p></div>
       <div class="ir-cols ovf"><div><h3>Key drivers</h3><ul class="ir-f">${MF.drivers.map((f) => fItem(f, 'up')).join('') || '<li class="muted">No material supportive force.</li>'}</ul></div>
         <div><h3>Key offsets</h3><ul class="ir-f">${MF.offsets.map((f) => fItem(f, 'down')).join('') || '<li class="muted">No material offsetting force.</li>'}</ul></div></div></section>
 
@@ -490,7 +490,7 @@ export function analysisRoute(parts, I, ctx) {
   if (!I) return { html: '<div class="empty-state"><p>The analysis needs the published data files; it will appear once they load.</p></div>', after: () => {} };
   const [, dslug, sub] = parts, dk = SLUG_DOMAIN[dslug];
   let html, scrollTo = null;
-  const ANCHORS = { regime: 'regime', history: 'history', assessment: 'regime', onchain: 'ov-chain', derivatives: 'derivatives', structure: 'ov-tech', technical: 'ov-tech', sentiment: 'ov-sent', macro: 'ov-macro', market: 'ov-mkt' };
+  const ANCHORS = { drivers: 'ov-forces', regime: 'regime', history: 'history', assessment: 'regime', onchain: 'ov-chain', derivatives: 'derivatives', structure: 'ov-tech', technical: 'ov-tech', sentiment: 'ov-sent', macro: 'ov-macro', market: 'ov-mkt' };
   if (dslug === 'liquidity') html = liquidityPage(I, ctx);
   else if (!dk) { html = landing(I, ctx); scrollTo = ANCHORS[dslug] || null; }
   else if (!sub) html = domainPage(I, dk, ctx);
