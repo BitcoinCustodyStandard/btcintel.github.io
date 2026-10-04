@@ -100,9 +100,20 @@ for (const R of [up, dn, hot]) {
   assert.equal(R.forces.length, FORCE_LIBRARY.length, 'all library forces are reported');
   assert.ok(FORCE_LIBRARY.length >= 10 && FORCE_LIBRARY.length <= 12, 'library holds 10-12 forces');
   assert.ok(R.forces.every((f) => f.domainName && f.name && (f.score === null || f.label)), 'every force carries a domain tag; scored forces carry a label');
-  assert.ok([...R.drivers, ...R.offsets].every((f) => R.forces.includes(f) && f.material), 'drivers/offsets are material library forces');
+  assert.ok([...R.drivers, ...R.offsets].every((f) => R.forces.includes(f) && f.active), 'drivers/offsets are active library forces');
   const M = materialForces(R, 3, 3);
   assert.ok(M.drivers.length <= 3 && M.offsets.length <= 3, 'material subset is capped');
   assert.deepEqual(M.drivers.map((f) => f.id), R.drivers.slice(0, 3).map((f) => f.id), 'subset keeps library order');
 }
 console.log('intel.test: ok');
+{ // drivers/offsets are exactly the active forces, split by direction; contrarian sentiment thresholds
+  const R = intelligence(world({ trend: 1 }));
+  assert.deepEqual(R.drivers.map((f) => f.id).sort(), R.forces.filter((f) => f.active && f.dir > 0).map((f) => f.id).sort());
+  assert.deepEqual(R.offsets.map((f) => f.id).sort(), R.forces.filter((f) => f.active && f.dir < 0).map((f) => f.id).sort());
+  assert.ok(R.forces.every((f) => Array.isArray(f.inputs) && f.inputs.length), 'every force lists its inputs');
+  const fear = intelligence(world({ trend: 1, fng: 25 })).forces.find((f) => f.id === 'sentiment');
+  assert.ok(fear.dir > 0 && /fear/i.test(fear.label), 'F&G ≤ 30 reads as contrarian support');
+  const greed = intelligence(world({ trend: 1, fng: 80 })).forces.find((f) => f.id === 'sentiment');
+  assert.ok(greed.dir < 0 && /overheat/i.test(greed.label), 'F&G ≥ 75 reads as overheating');
+  console.log('force library: ok');
+}

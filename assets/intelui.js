@@ -3,7 +3,7 @@
 //   intelligenceHtml — Intelligence tab: what matters now and why, valuation, market regime, risk
 // All text comes from the engine's evidence; nothing here adds figures of its own.
 
-import { DOMAIN_SLUG, DEF_BY_ID, indSlug, materialForces } from '../engine/intel.js?v=20261003s';
+import { DOMAIN_SLUG, DEF_BY_ID, indSlug, materialForces } from '../engine/intel.js?v=20261003t';
 
 const DLINK = (k) => `#analysis/${DOMAIN_SLUG[k]}`;
 const ILINK = (id) => (DEF_BY_ID[id] ? `${DLINK(DEF_BY_ID[id].domain)}/${indSlug(id)}` : '#analysis');
@@ -66,9 +66,11 @@ function forceCard(f, detail = () => '') {
       <span><span class="k">Horizon</span>${esc(f.horizonText)}</span>
       <span><span class="k">Persistence</span>${!f.active ? '—' : f.persistence >= 30 ? '30+ days' : f.persistence ? `${f.persistence} day${f.persistence > 1 ? 's' : ''}` : 'new today'}</span>
       <span><span class="k">Trend</span>${esc(f.trend || '—')}</span>
-      <span><span class="k">Materiality</span>${f.materiality.toFixed(2)}${f.material ? ' · shown as driver/offset' : ''}</span>
+      <span><span class="k">Materiality</span>${f.materiality.toFixed(2)}${f.material ? ` · ${f.dir > 0 ? 'driver' : 'offset'}` : ''}</span>
     </div>
     <p class="xs dim"><b>Rule.</b> ${esc(f.rule)}</p>
+    <p class="xs dim fin"><b>Inputs.</b> ${f.inputs.filter((i) => i.live).map((i) => `${esc(i.name)}${i.context ? ' (context)' : ''}`).join(' · ') || 'none available'}${f.inputs.some((i) => !i.live) ? ` <span class="fmiss">Missing this run: ${f.inputs.filter((i) => !i.live).map((i) => esc(i.name)).join(' · ')}</span>` : ''}</p>
+    ${f.note ? `<p class="xs fnote">${esc(f.note)}</p>` : ''}
     <details><summary>Evidence</summary><ul class="iev">${f.evidence.map((e) => `<li>${pill(e.state, null)} <a href="${ILINK(e.id)}"><b>${esc(e.name)}</b></a> ${esc(e.disp)} <span class="xs dim">${esc(e.src)} · ${esc(ago(e.asOf))}</span></li>`).join('')}</ul></details>
     ${detail(f)}
   </details>`;
@@ -109,7 +111,7 @@ export function intelligenceHtml(I, info = () => '', opts = {}) {
       ${I.forces.filter((f) => f.active).length ? `<div class="iforces lib">${I.forces.filter((f) => f.active).map((f) => forceCard(f, opts.forceDetail)).join('')}</div>` : '<p class="muted">No force is above its activation threshold.</p>'}
       <h3 class="rh3">Inactive forces · below their activation threshold</h3>
       <div class="iforces lib">${I.forces.filter((f) => !f.active).map((f) => forceCard(f, opts.forceDetail)).join('')}</div>
-      <p class="xs dim">${I.forces.length} forces, each in one domain, each built from indicators already on the site. A force is active when its score crosses its threshold; it counts as a driver (supportive) or offset (adverse) when its materiality is at least 0.20. The Dashboard shows up to 3 of each, Analysis up to 5 drivers and 4 offsets — always the same forces, names and order as here.</p></section>
+      <p class="xs dim">${I.forces.length} forces, each in one domain, each built from indicators already on the site. A force is active when its score crosses its threshold: active supportive forces are the drivers, active adverse forces the offsets, ranked by materiality (strength × confidence × horizon). The Dashboard shows up to 3 of each, Analysis up to 5 drivers and 4 offsets — always the same forces, names and order as here. Inputs missing on a given run are listed on the force, never filled in.</p></section>
 
     <section class="block"><div class="bh"><h2>By time horizon</h2><p class="aside">The same signals grouped by the horizon they work on</p></div>
       <div class="ihz">${(I.horizons || []).map((x) => `<div class="ihz-c t-${toneOf(x.state, x.score)}"><span class="k">${esc(x.label)}</span><b>${esc(x.state)}</b>${sbar(x.score)}<span class="xs dim">${x.sup} supportive · ${x.cau} cautionary of ${x.n}</span></div>`).join('')}</div>

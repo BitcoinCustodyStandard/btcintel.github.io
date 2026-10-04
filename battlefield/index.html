@@ -26,7 +26,7 @@
 </main>
 <script type="module">
   // Browser tab: "$123,456 | BTCIntel", same live price feed as the main site.
-  import { startLivePrice } from '../assets/live.js?v=20261003s';
+  import { startLivePrice } from '../assets/live.js?v=20261003t';
   let live = false;
   const set = (p) => { if (Number.isFinite(p) && p > 0) document.title = `$${Math.round(p).toLocaleString('en-US')} | BTCIntel`; };
   fetch('../data/latest.json', { cache: 'no-store' }).then((r) => r.json()).then((a) => { if (!live) set(a?.metrics?.price?.spot); }).catch(() => {});
