@@ -28,6 +28,13 @@ export const FEEDS = [
   { name: 'Bitcoin Magazine', url: 'https://bitcoinmagazine.com/feed', keep: null },
   { name: 'Decrypt', url: 'https://decrypt.co/feed', keep: BTC_RE },
   { name: 'The Block', url: 'https://www.theblock.co/rss.xml', keep: BTC_RE },
+  { name: 'Bitcoinist', url: 'https://bitcoinist.com/feed/', keep: BTC_RE },
+  { name: 'NewsBTC', url: 'https://www.newsbtc.com/feed/', keep: BTC_RE },
+  { name: 'CryptoSlate', url: 'https://cryptoslate.com/feed/', keep: BTC_RE },
+  { name: 'Blockworks', url: 'https://blockworks.co/feed', keep: BTC_RE },
+  { name: 'CryptoPotato', url: 'https://cryptopotato.com/feed/', keep: BTC_RE },
+  { name: 'crypto.news', url: 'https://crypto.news/feed/', keep: BTC_RE },
+  { name: 'U.Today', url: 'https://u.today/rss', keep: BTC_RE },
   { name: 'Federal Reserve', url: 'https://www.federalreserve.gov/feeds/press_all.xml', keep: FED_RE, macro: true },
 ];
 const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', '#039': "'", hellip: '…', ndash: '–', mdash: '—', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“' };
@@ -47,17 +54,30 @@ export function parseRss(xml, feed, now = Date.now()) {
   return out;
 }
 const norm = (s) => s.toLowerCase().replace(/[^a-z0-9 ]/g, '').split(' ').filter((w) => w.length > 3).slice(0, 8).join(' ');
-async function news() {
+// Headlines are carried forward between runs, so the window is a true 7 days even though each RSS
+// file only holds its latest items. A daily tally [date, headlines, positive, negative] (crypto
+// feeds only) is kept for 400 days: it gives news volume and tone their own history.
+const NEWS_DAYS = 7;
+export function tallyDays(items, prevDaily = [], now = Date.now()) {
+  const by = new Map((prevDaily || []).map((r) => [r[0], r]));
+  const fresh = new Map();
+  for (const x of items) { if (x.macro) continue; const d = x.t.slice(0, 10), r = fresh.get(d) || [d, 0, 0, 0]; r[1]++; if (x.tag === 'bullish') r[2]++; if (x.tag === 'bearish') r[3]++; fresh.set(d, r); }
+  // a day still inside the window is recounted; the oldest day may be only partly covered, so never lower a stored count
+  for (const [d, r] of fresh) { const o = by.get(d); by.set(d, o && o[1] > r[1] ? o : r); }
+  const cut = new Date(now - 400 * 864e5).toISOString().slice(0, 10);
+  return [...by.values()].filter((r) => r[0] >= cut).sort((a, b) => a[0].localeCompare(b[0]));
+}
+async function news(prev) {
   const sources = [], all = [];
   await Promise.all(FEEDS.map(async (f) => {
     try { const items = parseRss(await get(f.url, 'text'), f); all.push(...items); sources.push({ name: f.name, url: f.url, ok: true, n: items.length }); }
     catch (e) { sources.push({ name: f.name, url: f.url, ok: false, error: e.message }); }
   }));
-  const cut = Date.now() - 72 * 3600e3, seen = new Set();
-  const items = all.filter((x) => Date.parse(x.t) >= cut).sort((a, b) => b.t.localeCompare(a.t)).filter((x) => { const k = norm(x.title); if (seen.has(k) || seen.has(x.link)) return false; seen.add(k); seen.add(x.link); return true; }).slice(0, 80);
+  const cut = Date.now() - NEWS_DAYS * 864e5, seen = new Set();
+  const items = [...all, ...(prev?.items || [])].filter((x) => Date.parse(x.t) >= cut).sort((a, b) => b.t.localeCompare(a.t)).filter((x) => { const k = norm(x.title); if (seen.has(k) || seen.has(x.link)) return false; seen.add(k); seen.add(x.link); return true; }).slice(0, 500);
   const order = (n) => { const i = FEEDS.findIndex((f) => f.name === n); return i < 0 ? 99 : i; };
   sources.sort((a, b) => order(a.name) - order(b.name));
-  return { method: 'Headlines from public RSS feeds, last 72 hours. Tags are keyword rules (see engine/sentiment.js), not an assessment of the story.', sources, items };
+  return { method: `Headlines from public RSS feeds, last ${NEWS_DAYS} days (carried forward between runs). Tags are keyword rules (see engine/sentiment.js), not an assessment of the story.`, sources, items, daily: tallyDays(items, prev?.daily) };
 }
 
 // ---------- other blocks ----------
@@ -257,7 +277,9 @@ async function attention() {
   const j = await get(url, 'json', 30000);
   const rows = (j.items || []).map((i) => [`${i.timestamp.slice(0, 4)}-${i.timestamp.slice(4, 6)}-${i.timestamp.slice(6, 8)}`, i.views]).filter(([, v]) => Number.isFinite(v));
   if (rows.length < 30) throw new Error('too few pageview rows');
-  return { source: 'Wikimedia pageviews API (English Wikipedia “Bitcoin” article, human traffic)', url: 'https://pageviews.wmcloud.org/?pages=Bitcoin&project=en.wikipedia.org', fetchedAt: new Date().toISOString(), asOf: rows.at(-1)[0], rows };
+  let crypto = null;
+  try { const k = await get(url.replace('/Bitcoin/daily/', '/Cryptocurrency/daily/'), 'json', 30000); crypto = (k.items || []).map((i) => [`${i.timestamp.slice(0, 4)}-${i.timestamp.slice(4, 6)}-${i.timestamp.slice(6, 8)}`, i.views]).filter(([, v]) => Number.isFinite(v)); } catch { crypto = null; }
+  return { source: 'Wikimedia pageviews API (English Wikipedia “Bitcoin” and “Cryptocurrency” articles, human traffic)', url: 'https://pageviews.wmcloud.org/?pages=Bitcoin|Cryptocurrency&project=en.wikipedia.org', fetchedAt: new Date().toISOString(), asOf: rows.at(-1)[0], rows, ...(crypto?.length >= 30 ? { crypto } : {}) };
 }
 
 async function main() {

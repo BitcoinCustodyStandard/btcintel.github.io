@@ -33,3 +33,10 @@ assert.equal(tagHeadline('Long liquidations hit $300M as bitcoin slides').tag, '
 assert.equal(tagHeadline('Live updates: Bitcoin reverses big early gains following soft U.S. jobs data').tag, 'neutral');
 assert.equal(tagHeadline('Bitcoin Heads Higher on Macro Moves').tag, 'bullish');
 console.log('sentiment edge cases passed');
+{ // daily headline tally: crypto feeds only, partly covered days never lose their stored count, 400-day cap
+  const { tallyDays } = await import('../feed.mjs');
+  const t = tallyDays([{ t: '2026-10-03T01:00:00Z', tag: 'bullish' }, { t: '2026-10-03T02:00:00Z', tag: 'bearish' }, { t: '2026-10-02T02:00:00Z', tag: 'neutral' }, { t: '2026-10-02T03:00:00Z', tag: 'neutral', macro: true }], [['2024-01-01', 9, 1, 1], ['2026-10-02', 4, 1, 0]], Date.parse('2026-10-04'));
+  const assert2 = (await import('node:assert/strict')).default;
+  assert2.deepEqual(t, [['2026-10-02', 4, 1, 0], ['2026-10-03', 2, 1, 1]]);
+  console.log('news tally ok');
+}

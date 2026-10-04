@@ -152,3 +152,13 @@ console.log('intel.test: ok');
   assert.equal(h.at(-1)[1], W.grade.value, 'last history point equals the Fair Grade');
   console.log('fair grade history: ok');
 }
+{ // sentiment inputs: 7-day news tone needs a daily tally; VIX and the spike flag are context only
+  const w = world({ trend: 1 });
+  assert.equal(intelligence(w).readings.s_news7, undefined, 'no 7-day tone without a tally');
+  const days = Array.from({ length: 7 }, (_, i) => day(6 - i));
+  w.dash.news = { items: [], daily: days.map((d) => [d, 20, 8, 2]) };
+  const R = intelligence(w).readings;
+  assert.ok(R.s_news7 && R.s_news7.s > 0, '7-day tone from the daily tally');
+  for (const id of ['s_vix', 's_wikispike', 's_newsvol']) if (R[id]) assert.equal(R[id].s, null, `${id} is context (no weight)`);
+  console.log('sentiment inputs: ok');
+}

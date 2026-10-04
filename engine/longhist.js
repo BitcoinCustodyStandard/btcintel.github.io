@@ -77,7 +77,9 @@ async function wiki() {
   const ymd = (t) => isoDate(t).replace(/-/g, '');
   const j = await fetchJSON(`https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/user/Bitcoin/daily/20160101/${ymd(Date.now() - DAY)}`, { headers: UA }, 40000);
   const pts = (j.items || []).map((i) => [`${i.timestamp.slice(0, 4)}-${i.timestamp.slice(4, 6)}-${i.timestamp.slice(6, 8)}`, i.views]).filter(([, v]) => Number.isFinite(v));
-  return { out: { 'wiki.views': pts }, errors: [] };
+  const out = { 'wiki.views': pts }, errors = [];
+  try { const k = await fetchJSON(`https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article/en.wikipedia/all-access/user/Cryptocurrency/daily/20160101/${ymd(Date.now() - DAY)}`, { headers: UA }, 40000); const c = (k.items || []).map((i) => [`${i.timestamp.slice(0, 4)}-${i.timestamp.slice(4, 6)}-${i.timestamp.slice(6, 8)}`, i.views]).filter(([, v]) => Number.isFinite(v)); if (c.length) out['wiki.crypto'] = c; } catch (e) { errors.push(`Cryptocurrency: ${e.message}`.slice(0, 80)); }
+  return { out, errors };
 }
 
 export const LONG_SOURCES = {
@@ -86,7 +88,7 @@ export const LONG_SOURCES = {
   cm: { name: 'Coin Metrics Community API', url: 'https://coinmetrics.io/community-network-data/', fn: coinmetrics },
   llama: { name: 'DefiLlama stablecoins', url: 'https://defillama.com/stablecoins', fn: stables },
   fng: { name: 'alternative.me Fear & Greed Index', url: 'https://alternative.me/crypto/fear-and-greed-index/', fn: fng },
-  wiki: { name: 'Wikimedia pageviews (en.wikipedia “Bitcoin”)', url: 'https://pageviews.wmcloud.org/?pages=Bitcoin&project=en.wikipedia.org', fn: wiki },
+  wiki: { name: 'Wikimedia pageviews (en.wikipedia “Bitcoin”, “Cryptocurrency”)', url: 'https://pageviews.wmcloud.org/?pages=Bitcoin|Cryptocurrency&project=en.wikipedia.org', fn: wiki },
 };
 
 // Collect everything; anything that fails keeps the previous series (marked stale).
