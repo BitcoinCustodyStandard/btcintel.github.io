@@ -364,21 +364,21 @@ export const DASH_EXPLAIN = {
   },
   i_valuation: {
     title: 'Valuation',
-    what: 'A conclusion — Depressed, Attractive, Fair, Elevated or Extreme — drawn from several measures together: MVRV, the Mayer Multiple, price versus its 200-week average, the Puell Multiple, supply in profit and price versus short- and long-term holder cost bases.',
+    what: 'A valuation reading — Depressed, Attractive, Fair, Elevated or Extreme — shown as context under the posture (and in full inside the Valuation & holder profit force), not as a separate conclusion. It draws on several measures together: MVRV, the Mayer Multiple, price versus its 200-week average, the Puell Multiple, supply in profit and price versus short- and long-term holder cost bases.',
     why: 'No single metric decides it. Each is placed on a cheap-to-rich scale against its historical zones and weighted; demand and liquidity conditions are then used to say whether the valuation is likely to matter now.',
-    caveat: () => 'Historical context, not a prediction. NVT and MVRV Z-Score are not available from free sources and are not used.',
+    caveat: () => 'Historical context, not a prediction. NVT is not available from free sources and is not used.',
   },
   i_cycle: {
-    title: 'Market regime',
-    what: 'Which market regime current conditions are consistent with — Bullish, Neutral or Bearish — with a description such as “an early uptrend” or “bear-market conditions”.',
+    title: 'Structure',
+    what: 'A plain description of the market structure current conditions are consistent with — such as “early uptrend”, “correction within an uptrend” or “bear-market conditions”. It is a subtitle to the posture, not a second overall label.',
     why: 'It is built from structural, medium- and long-horizon evidence across all five domains: the trend, price structure, holder positioning, on-chain flows, institutional demand, the liquidity backdrop, leverage and valuation room. The page lists which conditions are consistent with the description and which are not.',
     caveat: () => 'Time since the halving is never used. Regimes describe current conditions; they are not forecasts.',
   },
   i_risk: {
-    title: 'Risk regime',
-    what: 'How fragile conditions are, from Low to High, counted from stress signals: high realised or implied volatility, expensive or fast-growing leverage, rich valuations, equity and credit stress, sentiment extremes and cross-domain divergences.',
+    title: 'Risk context',
+    what: 'How fragile conditions are, from Low to High — context for the posture, not a conclusion of its own — counted from stress signals: high realised or implied volatility, expensive or fast-growing leverage, rich valuations, equity and credit stress, sentiment extremes and cross-domain divergences.',
     why: 'A high risk regime means larger and faster moves are more likely — in either direction.',
-    caveat: () => 'It says nothing about direction.',
+    caveat: () => 'It says nothing about direction. The full list of stress signals is on Intelligence → Risk context.',
   },
   i_confirm: {
     title: 'Cross-market confirmation',

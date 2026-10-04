@@ -6,14 +6,14 @@ import { briefReport } from '../engine/report.js';
 import { brief } from '../engine/brief.js';
 import { ZONES } from '../engine/cycle.js';
 import { explain, EXPLAIN, REMINDER } from '../engine/explain.js';
-import { startLivePrice } from './live.js?v=20261003v';
-import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003v';
-import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261003v';
-import { intelligence } from '../engine/intel.js?v=20261003v';
-import { reportModel } from '../engine/reportmodel.js?v=20261003v';
-import { intelligenceHtml, wireIntel } from './intelui.js?v=20261003v';
-import { analysisRoute, indicatorPanel, idFromHref, ribbonMenu } from './research.js?v=20261003v';
-import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003v';
+import { startLivePrice } from './live.js?v=20261003w';
+import { drawPriceChart, pcState, wirePriceChart } from './pricechart.js?v=20261003w';
+import { dashTab, mountDash, dashLive, refreshDash, setIntel, getDash } from './dash.js?v=20261003w';
+import { intelligence } from '../engine/intel.js?v=20261003w';
+import { reportModel } from '../engine/reportmodel.js?v=20261003w';
+import { intelligenceHtml, crossMarketHtml, riskContextHtml, wireIntel } from './intelui.js?v=20261003w';
+import { analysisRoute, indicatorPanel, idFromHref, ribbonMenu } from './research.js?v=20261003w';
+import { dcaPageHtml, mountDcaPage, dcaLive, redrawDcaChart } from './dcapage.js?v=20261003w';
 import { fmtUsd, fmtUsdSigned, fmtPrice, fmtPct, fmtNum, fmtK, ordinal } from '../engine/util.js';
 
 const state = { a: null, rows: [], runs: [], index: null, snapshot: null, range: 90, pi: null, dash: null, live: null, liveState: 'init' };
@@ -230,6 +230,7 @@ const rangeBar = () => h`<div class="range" role="group" aria-label="Chart range
 // Old section anchors (#forces, #scenarios) still resolve.
 const TABS = ['dashboard', 'analysis', 'overview', 'dca', 'reports'];
 const LEGACY = { forces: 'overview', scenarios: 'overview', liqmap: 'overview', watch: 'overview', top3: 'overview' };
+const LEGACY_ISUB = { scenarios: 'liquidity', liqmap: 'liquidity', watch: 'risk' };
 // retired top-level views now live inside the new structure
 const MOVED = { liquidity: 'analysis/liquidity', 'analysis/market-structure/liquidity': 'analysis/liquidity', report: 'reports', cycle: 'analysis/regime' };
 const tabFromHash = () => { const k = location.hash.slice(1).split('/')[0]; return TABS.includes(k) ? k : LEGACY[k] || (k.startsWith('force-') ? 'overview' : 'dashboard'); };
@@ -238,7 +239,9 @@ function showTab(scroll) {
   const t = tabFromHash(), k = location.hash.slice(1);
   if (t === 'analysis') { renderAnalysis(scroll); }
   // second ribbon with the five domains, shown inside Analysis
-  const sub = $('#subnav'); if (sub) { sub.hidden = t !== 'analysis'; const ds = k.split('/')[1] || ''; const pages = [...sub.querySelectorAll('[data-sub]')].map((a) => a.dataset.sub), cur = pages.includes(ds) ? ds : ''; sub.querySelectorAll('[data-sub]').forEach((a) => a.setAttribute('aria-current', a.dataset.sub === cur ? 'page' : 'false')); }
+  // Intelligence: show the sub-page named in the hash (#overview/<sub>; old anchors map to theirs)
+  if (t === 'overview') { const k1 = k.split('/')[1] || LEGACY_ISUB[k] || '', cur = ISUBS.includes(k1) ? k1 : ''; document.querySelectorAll('[data-isub]').forEach((x) => { x.hidden = x.dataset.isub !== cur; }); document.querySelectorAll('#subnav [data-isub-link]').forEach((a) => a.setAttribute('aria-current', a.dataset.isubLink === cur ? 'page' : 'false')); }
+  const sub = $('#subnav'); if (sub) { sub.hidden = t !== 'analysis' && t !== 'overview'; sub.querySelectorAll('[data-subgroup]').forEach((g) => { g.hidden = g.dataset.subgroup !== t; }); const ds = k.split('/')[1] || ''; const pages = [...sub.querySelectorAll('[data-sub]')].map((a) => a.dataset.sub), cur = pages.includes(ds) ? ds : ''; sub.querySelectorAll('[data-sub]').forEach((a) => a.setAttribute('aria-current', a.dataset.sub === cur ? 'page' : 'false')); }
   document.querySelectorAll('[data-tab]').forEach((s) => { s.hidden = s.dataset.tab !== t; });
   document.querySelectorAll('[data-tab-link]').forEach((x) => x.setAttribute('aria-current', x.dataset.tabLink === t ? 'page' : 'false'));
   drawCharts($(`[data-tab="${t}"]`) || document);
@@ -363,7 +366,7 @@ function execStrip(b) {
   return h`<section class="exec" aria-label="Summary">
     <div class="exec-row">
       <div class="exec-px"><span class="px num" data-live="px">${fmtPrice(state.live?.price ?? P.spot)}</span><span data-live="ch">${ch(P.ch24h, '24h')}${ch(P.ch7d, '7d')}${ch(P.ch30d, '30d')}</span><span class="livebadge snap" data-live="badge"><i></i><span>Server snapshot · ${fmtTime(a.dataThrough)}</span></span></div>
-      <div class="exec-regime"><span class="k">Regime</span><b>${b.regime.label}</b>${info('regime')}<span class="muted"> — ${b.regime.desc}</span>${b.regime.secondary ? h`<span class="muted"> Secondary: ${b.regime.secondary}.</span>` : ''}</div>
+      <div class="exec-regime"><span class="k">Daily analysis character</span><b>${b.regime.label}</b>${info('regime')}<span class="muted"> — ${b.regime.desc}</span>${b.regime.secondary ? h`<span class="muted"> Secondary: ${b.regime.secondary}.</span>` : ''}</div>
       ${b.cycle ? h`<div class="cyrow"><a class="cybadge t-${TONE_CHIP[b.cycle.tone] || 'neu'}" href="#analysis/onchain" title="On-chain valuation — open On-chain positioning on Analysis"><span class="k">On-chain valuation</span>${b.cycle.phase ? h`<b>${b.cycle.phase}</b> · ` : ''}${b.cycle.zone}${b.cycle.momentum ? h` · momentum ${b.cycle.momentum.toLowerCase()}` : ''}${b.cycle.stretched ? ' · stretched' : ''} <span class="arr">→</span></a>${info('cyclebadge')}</div>` : ''}
     </div>
     <div class="exec-moves"><span class="k">What changed${info('changes')}</span>${b.notable.length ? b.notable.map((n) => h`<span class="move" title="${n.horizon === '7d' ? 'vs the observation a week ago' : 'vs the previous daily observation'}; σ = size vs the typical ${n.horizon === '7d' ? '7-day' : 'daily'} change"><span class="hz">${n.horizon}</span>${n.label} ${n.from} → ${n.to} <span class="z">${fmtNum(n.z, 1)}σ</span></span>`) : h`<span class="dim small">No statistically meaningful moves (≥1.5σ) over 24h or 7d.</span>`}</div>
@@ -414,7 +417,7 @@ function lmapTable() {
 function ladderBlock(b) {
   if (!state.a.map) return sec('liqmap', 'Liquidity map', null, h`<p class="muted">Price unavailable.</p>`);
   const spot = state.a.map.spot;
-  return sec('liqmap', 'Liquidity map', 'Key levels where forced or hedging flows sit. A map, not a prediction.', h`
+  return sec('liqmap', 'Key levels', 'Where forced or hedging flows sit, nearest first. A map, not a prediction.', h`
     <ol class="ladder">${b.ladder.map((l) => h`<li class="lad ${l.kind}">
       <div class="lv"><b class="num">${l.label}${info('level', l.level)}</b><span class="num">${l.isSpot ? 'spot ' + fmtPrice(spot) : fmtPct(l.distPct, 1)}</span></div>
       <div class="lw">${l.what}${l.detail.length ? h`<div class="small muted">${cap1(l.detail.join(' · '))}</div>` : ''}</div>
@@ -478,10 +481,23 @@ function dashboard() {
   </div></details>`;
 }
 
+// Intelligence has four sub-pages (ribbon under the tab): Current read (#overview), Liquidity map
+// (#overview/liquidity), Cross-market (#overview/cross) and Risk context (#overview/risk). All four
+// are rendered once and toggled, so live prices and the 10-minute engine refresh reach every one.
+const ISUBS = ['', 'liquidity', 'cross', 'risk'];
+const isubHead = (title, text) => h`<section class="ihead isub-h"><div><h1>${title}</h1><p class="muted">${text}</p></div><div class="ihead-r"><a class="small" href="#overview">← Current read</a></div></section>`;
 function overviewTab(b) {
-  return h`<div id="intel-main">${raw(intelligenceHtml(state.intel, infoS, { forceDetail }))}</div>
-    <section class="block research"><div class="bh"><h2>Research detail: the daily force analysis</h2><p class="aside">The agent’s morning analysis that feeds several of the inputs above</p></div></section>
-    ${execStrip(b)}${ladderBlock(b)}${accelBlock(b)}${watchBlock(b)}${dashboard()}<p class="foot-note">${b.footer}</p>`;
+  return h`<div data-isub="">
+      <div id="intel-main">${raw(intelligenceHtml(state.intel, infoS, { forceDetail }))}</div>
+      <p class="foot-note">${b.footer}</p></div>
+    <div data-isub="liquidity" hidden>${isubHead('Liquidity map', 'Key levels where forced or hedging flows sit, and the conditions under which price could accelerate through them. A map, not a prediction.')}
+      ${ladderBlock(b)}${accelBlock(b)}</div>
+    <div data-isub="cross" hidden>${isubHead('Cross-market', 'Where the independent domains confirm each other and where they diverge, the same signals by time horizon, and the market dashboard behind them.')}
+      <div id="intel-cross">${raw(crossMarketHtml(state.intel, infoS))}</div>${dashboard()}</div>
+    <div data-isub="risk" hidden>${isubHead('Risk context', 'How fragile current conditions are in either direction, where leverage and derivatives stress sits, and what the daily analysis is watching. Context for the posture, not a second conclusion.')}
+      <div id="intel-risk">${raw(riskContextHtml(state.intel, infoS))}</div>
+      <section class="block research"><div class="bh"><h2>Daily analysis</h2><p class="aside">The agent’s morning analysis that feeds several inputs of the force library</p></div></section>
+      ${execStrip(b)}${watchBlock(b)}</div>`;
 }
 
 const TONE_CHIP = { bull: 'bull', neu: 'neu', warn: 'caut', bear: 'bear' };
@@ -622,6 +638,9 @@ function updateIntel() {
   // the Analysis pages re-render only on their landing page, so a reader is never moved mid-page
   analysisKey = null; if (tabFromHash() === 'analysis' && location.hash === '#analysis') renderAnalysis(false);
   if (im) { im.innerHTML = intelligenceHtml(state.intel, infoS, { forceDetail }); drawCharts(im); }
+  const ic = $('#intel-cross'), ir = $('#intel-risk');
+  if (ic) ic.innerHTML = crossMarketHtml(state.intel, infoS);
+  if (ir) ir.innerHTML = riskContextHtml(state.intel, infoS);
   setIntel(state.intel);
 }
 setInterval(() => { if (!document.hidden) updateIntel(); }, 10 * 60e3);

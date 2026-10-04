@@ -3,7 +3,7 @@
 //   intelligenceHtml — Intelligence tab: what matters now and why, valuation, market regime, risk
 // All text comes from the engine's evidence; nothing here adds figures of its own.
 
-import { DOMAIN_SLUG, DEF_BY_ID, indSlug, materialForces } from '../engine/intel.js?v=20261003v';
+import { DOMAIN_SLUG, DEF_BY_ID, indSlug, materialForces } from '../engine/intel.js?v=20261003w';
 
 const DLINK = (k) => `#analysis/${DOMAIN_SLUG[k]}`;
 const ILINK = (id) => (DEF_BY_ID[id] ? `${DLINK(DEF_BY_ID[id].domain)}/${indSlug(id)}` : '#analysis');
@@ -88,37 +88,74 @@ function changeCard(c, title) {
     <p class="xs dim">Like-for-like: compared on the ${c.n} of ${c.of} indicators that have readings on both dates.</p>
   </article>`;
 }
+// Intelligence → Current read: one posture (with Fair Grade and confidence), a structure subtitle,
+// valuation and risk as small metadata (not peer conclusions), the five domains, the active
+// drivers/offsets, the full force library and what changed. Deeper panels live on the
+// Intelligence sub-pages (Liquidity map, Cross-market, Risk context).
 export function intelligenceHtml(I, info = () => '', opts = {}) {
   if (!I) return '<div class="empty-state"><p>The intelligence read needs the published data files; it will appear once they load.</p></div>';
   const V = I.valuation, C = I.cycle, K = I.risk, X = I.confirmation;
   const gp = I.grade.parts;
   const mx = Math.max(...gp.map((p) => Math.abs(p.pts)), 6);
+  const M = materialForces(I, 5, 4);
+  const li = (f) => `<li><span class="fdot t-${dirTone(f.dir)}"></span><span class="fn"><a href="${forceHref(f)}"><b>${esc(f.name)}</b></a> ${forceTag(f)}</span><span class="fmeta">${esc(f.label)} · ${esc(STR[f.strengthWord])} · ${esc(f.horizon)}${f.persistence >= 3 ? ` · ${f.persistence >= 30 ? '30+' : f.persistence} days` : ''}</span></li>`;
+  // the valuation evidence table lives inside the Valuation & holder profit force entry
+  const valuationDetail = () => `<details class="fdet"><summary>Valuation read across the framework · ${V ? esc(V.state) : 'unavailable'}${info('i_valuation')}</summary>
+      ${V ? `<div class="iconc"><div class="iconc-h"><div class="ipill t-${V.state === 'Fair' ? 'neu' : ['Depressed', 'Attractive'].includes(V.state) ? 'up' : 'warn'}">${esc(V.state)}</div>${conf(V.confidence)}<span class="vscale">${['Depressed', 'Attractive', 'Fair', 'Elevated', 'Extreme'].map((s) => `<i class="${s === V.state ? 'on' : ''}">${s}</i>`).join('')}</span></div>
+        <p>${esc(V.context)}</p>
+        <div class="tbl-wrap"><table class="itbl"><thead><tr><th>Evidence</th><th>Reading</th><th>Reads as</th><th>Weight</th></tr></thead><tbody>${V.evidence.map((e) => `<tr><td data-k="Evidence"><b>${esc(e.name)}</b><div class="xs dim">${esc(e.src)} · ${esc(ago(e.asOf))}</div></td><td data-k="Reading" class="num">${esc(e.disp)}</td><td data-k="Reads as">${pill(e.zone, e.score / 2)}</td><td data-k="Weight" class="num">${e.w}</td></tr>`).join('')}</tbody></table></div>
+        <p class="xs dim">Each input is placed on a cheap-to-rich scale against its own historical zones; the weighted reading sets the state (MVRV carries the most weight; NUPL and realised price repeat MVRV and are not counted twice). MVRV Z-Score is shown on the Analysis pages; NVT is not available from free sources.</p></div>` : '<p class="muted">Valuation inputs unavailable.</p>'}</details>`;
+  const detail = (f) => (f.id === 'valuation' ? valuationDetail() : '') + (opts.forceDetail ? opts.forceDetail(f) : '');
+  const RK = { Low: 'up', Moderate: 'neu', Elevated: 'warn', High: 'down' };
   return `<section class="ihero">
       <div class="ihero-l">
         <span class="k">Market intelligence · current read${info('i_read')}</span>
         <div class="ir-state big t-${toneOf(I.state)}">${esc(I.state)}</div>
         <p class="ir-sub">Fair Grade <b class="num">${I.grade.value}</b> / 100 (${gradeWord(I.grade.value)}) · ${I.breadth.n} of ${I.breadth.of} domains Constructive or better · ${conf(I.confidence.level)}</p>
-        <div class="ir-concl">${V ? `<span><span class="k">Valuation</span><b>${esc(V.state)}</b></span>` : ''}${I.regime ? `<span><span class="k">Market regime</span><b>${esc(I.regime.label)}</b></span>` : ''}<span><span class="k">Risk regime</span><b>${esc(K.level)}</b></span></div>
+        ${C ? `<p class="ir-struct">Structure: ${esc(C.phase.toLowerCase())}${C.transitional && C.runnerUp ? `, bordering on ${esc(C.runnerUp.phase.toLowerCase())}` : ''}${info('i_cycle')}</p>` : ''}
+        <p class="ir-meta">${V ? `<a href="#force-valuation"><span class="k">Valuation</span> ${esc(V.state)}</a>` : ''}<a href="#overview/risk"><span class="k">Risk context</span> <span class="t-${RK[K.level] || 'neu'} rk">${esc(K.level)}</span></a></p>
       </div>
       <div class="ihero-r"><p class="xs dim" style="margin:0 0 6px">The five analytical domains — open one for its research page:</p><div class="imatrix sm">${I.domains.map((d) => `<a href="${DLINK(d.key)}" class="imx t-${toneOf(d.state, d.score)}"><span class="n">${esc(d.name)}</span><b>${d.arrow} ${esc(d.state)}</b></a>`).join('')}</div></div>
     </section>
 
-    <section class="block"><div class="bh"><h2>Why</h2><p class="aside">Data as of ${esc(I.asOf)} · plain-English synthesis of the evidence below</p></div>
-      <div class="inarr">${I.narrative.map((p) => `<p>${rich(p)}</p>`).join('')}</div></section>
+    <section class="block" id="ir-forces"><div class="bh"><h2>Drivers and offsets${info('i_forces')}</h2><p class="aside">Active forces from the library below · same names on Analysis and the Dashboard</p></div>
+      <div class="ir-cols ovf">
+        <div><h3>Drivers</h3>${M.drivers.length ? `<ul class="ir-f">${M.drivers.map(li).join('')}</ul>` : '<p class="muted small">No active supportive force.</p>'}</div>
+        <div><h3>Offsets</h3>${M.offsets.length ? `<ul class="ir-f">${M.offsets.map(li).join('')}</ul>` : '<p class="muted small">No active offsetting force.</p>'}</div>
+      </div>
+      <details class="more ir-why"><summary>Explain in plain English <span class="dim">— the reasoning behind the posture, as of ${esc(I.asOf)}</span></summary><div class="more-body">
+        <div class="inarr">${I.narrative.map((p) => `<p>${rich(p)}</p>`).join('')}</div>
+        ${I.regime ? `<h3 class="rh3">What the structure description rests on</h3><div class="ir-sev">${I.regime.evidence.map((e) => `<span class="lchip t-${toneOf(e.word, e.score)}">${esc(e.name)} · ${esc(e.word)}</span>`).join('')}</div>${C ? `<p class="xs dim">Consistent: ${esc(C.met.join('; ') || '—')}. Not consistent: ${esc(C.unmet.join('; ') || '—')}. Classified from structural evidence across the five domains — not from a cycle clock or time since the halving. <a href="#analysis/regime">Historical context on Analysis →</a></p>` : ''}` : ''}
+        <h3 class="rh3">How the Fair Grade is built${info('i_grade')}</h3><p class="xs dim">${I.grade.value} = 50 + the contributions below</p>
+        <div class="igrade">${gp.map((p) => `<div class="igr"><span class="gl">${esc(p.label)}</span><span class="gb"><i class="${p.pts >= 0 ? 'p' : 'n'}" style="${p.pts >= 0 ? 'left:50%' : `left:${50 + (p.pts / mx) * 50}%`};width:${(Math.abs(p.pts) / mx) * 50}%"></i></span><span class="gv num">${p.pts > 0 ? '+' : p.pts < 0 ? '−' : ''}${Math.abs(p.pts).toFixed(1)}</span><span class="gn xs dim">${esc(p.note)}</span></div>`).join('')}</div>
+      <p class="xs dim">The grade weighs breadth, strength, conflicts, risk and valuation; each contribution is scaled by the confidence of the data behind it. It describes today’s configuration and is not a probability or a price forecast.</p>
+      </div></details></section>
 
     <section class="block" id="forces"><div class="bh"><h2>What is moving Bitcoin: the force library${info('i_forces')}</h2><p class="aside">Full force library. Drivers/offsets on Analysis and Dashboard are the material subset.</p></div>
       <div class="lib-sum">${['tech', 'chain', 'mkt', 'sent', 'macro'].map((k) => { const fs = I.forces.filter((f) => f.domain === k); return `<span><b>${esc(fs[0]?.domainName || k)}</b> ${fs.map((f) => `<a href="${forceHref(f)}" class="lchip t-${f.active ? dirTone(f.dir) : 'ctx'}" title="${esc(f.label || f.name)}">${esc(f.name)}</a>`).join('')}</span>`; }).join('')}</div>
       <h3 class="rh3">Active forces · ranked by materiality (strength × confidence × horizon)</h3>
-      ${I.forces.filter((f) => f.active).length ? `<div class="iforces lib">${I.forces.filter((f) => f.active).map((f) => forceCard(f, opts.forceDetail)).join('')}</div>` : '<p class="muted">No force is above its activation threshold.</p>'}
+      ${I.forces.filter((f) => f.active).length ? `<div class="iforces lib">${I.forces.filter((f) => f.active).map((f) => forceCard(f, detail)).join('')}</div>` : '<p class="muted">No force is above its activation threshold.</p>'}
       <h3 class="rh3">Inactive forces · below their activation threshold</h3>
-      <div class="iforces lib">${I.forces.filter((f) => !f.active).map((f) => forceCard(f, opts.forceDetail)).join('')}</div>
+      <div class="iforces lib">${I.forces.filter((f) => !f.active).map((f) => forceCard(f, detail)).join('')}</div>
       <p class="xs dim">${I.forces.length} forces, each in one domain, each built from indicators already on the site. A force is active when its score crosses its threshold: active supportive forces are the drivers, active adverse forces the offsets, ranked by materiality (strength × confidence × horizon). The Dashboard shows up to 3 of each, Analysis up to 5 drivers and 4 offsets — always the same forces, names and order as here. Inputs missing on a given run are listed on the force, never filled in. Volatility squeeze (Bollinger width) is not a force — it has no direction — and stays an indicator under Technical.</p></section>
 
-    <section class="block"><div class="bh"><h2>By time horizon</h2><p class="aside">The same signals grouped by the horizon they work on</p></div>
-      <div class="ihz">${(I.horizons || []).map((x) => `<div class="ihz-c t-${toneOf(x.state, x.score)}"><span class="k">${esc(x.label)}</span><b>${esc(x.state)}</b>${sbar(x.score)}<span class="xs dim">${x.sup} supportive · ${x.cau} cautionary of ${x.n}</span></div>`).join('')}</div>
-      <p class="xs dim">Signals on different horizons can disagree without contradicting each other — stretched short-term momentum can coexist with an intact long-term trend. Force ranking weighs horizon so short-term signals cannot outweigh structural ones on their own.</p></section>
+    <section class="block"><div class="bh"><h2>What changed${info('i_changes')}</h2><p class="aside">Current state versus 2, 7 and 30 days ago, on a like-for-like basis</p></div>
+      <div class="ichgs">${changeCard(I.changes.d2, '2 days')}${changeCard(I.changes.d7, '7 days')}${changeCard(I.changes.d30, '30 days')}</div></section>
 
-    <section class="block"><div class="bh"><h2>Cross-market confirmation${info('i_confirm')}</h2><p class="aside">Where independent domains agree, and where they do not</p></div>
+    <section class="block ir-next"><div class="bh"><h2>Go deeper</h2><p class="aside">The same engine, in more detail</p></div>
+      ${X.diverge.length ? `<p class="small"><span class="k">Divergence</span> ${esc(X.diverge[0].text)}${X.diverge.length > 1 ? ` <span class="dim">(+${X.diverge.length - 1} more)</span>` : ''}</p>` : ''}
+      <div class="ir-links">
+        <a href="#overview/liquidity"><b>Liquidity map</b><span>Key levels, the full band table and the acceleration conditions around them</span></a>
+        <a href="#overview/cross"><b>Cross-market</b><span>Where the domains agree or diverge, signals by time horizon, the market dashboard</span></a>
+        <a href="#overview/risk"><b>Risk context</b><span>Risk regime (${esc(K.level.toLowerCase())}), stress signals, leverage and derivatives, what to watch</span></a>
+      </div></section>`;
+}
+
+// Intelligence → Cross-market: the full confirmation panel and the time-horizon view.
+export function crossMarketHtml(I, info = () => '') {
+  if (!I) return '';
+  const X = I.confirmation;
+  return `<section class="block"><div class="bh"><h2>Cross-market confirmation${info('i_confirm')}</h2><p class="aside">Where independent domains agree, and where they do not</p></div>
       <div class="icross">
         <div class="icm">${I.domains.map((d) => `<div class="icr"><span>${esc(d.name)}</span><b class="t-${toneOf(d.state, d.score)}">${d.arrow}</b><span class="xs dim">${esc(d.state)}</span></div>`).join('')}
           ${X.lens.map((l) => `<div class="icr lens"><span>${esc(l.name)}</span><b class="t-${toneOf(null, l.s)}">${l.arrow}</b><span class="xs dim">${esc(l.note)}</span></div>`).join('')}
@@ -132,27 +169,23 @@ export function intelligenceHtml(I, info = () => '', opts = {}) {
         </div>
       </div></section>
 
-    <section class="block"><div class="bh"><h2>What changed${info('i_changes')}</h2><p class="aside">Current state versus 2, 7 and 30 days ago, on a like-for-like basis</p></div>
-      <div class="ichgs">${changeCard(I.changes.d2, '2 days')}${changeCard(I.changes.d7, '7 days')}${changeCard(I.changes.d30, '30 days')}</div></section>
+    <section class="block"><div class="bh"><h2>By time horizon</h2><p class="aside">The same signals grouped by the horizon they work on</p></div>
+      <div class="ihz">${(I.horizons || []).map((x) => `<div class="ihz-c t-${toneOf(x.state, x.score)}"><span class="k">${esc(x.label)}</span><b>${esc(x.state)}</b>${sbar(x.score)}<span class="xs dim">${x.sup} supportive · ${x.cau} cautionary of ${x.n}</span></div>`).join('')}</div>
+      <p class="xs dim">Signals on different horizons can disagree without contradicting each other — stretched short-term momentum can coexist with an intact long-term trend. Force ranking weighs horizon so short-term signals cannot outweigh structural ones on their own.</p></section>`;
+}
 
-    <section class="block"><div class="bh"><h2>Valuation${info('i_valuation')}</h2><p class="aside">A conclusion from the whole framework — never one metric</p></div>
-      ${V ? `<div class="iconc"><div class="iconc-h"><div class="ir-state t-${V.state === 'Fair' ? 'neu' : ['Depressed', 'Attractive'].includes(V.state) ? 'up' : 'warn'}">${esc(V.state)}</div>${conf(V.confidence)}<span class="vscale">${['Depressed', 'Attractive', 'Fair', 'Elevated', 'Extreme'].map((s) => `<i class="${s === V.state ? 'on' : ''}">${s}</i>`).join('')}</span></div>
-        <p>${esc(V.context)}</p>
-        <div class="tbl-wrap"><table class="itbl"><thead><tr><th>Evidence</th><th>Reading</th><th>Reads as</th><th>Weight</th></tr></thead><tbody>${V.evidence.map((e) => `<tr><td data-k="Evidence"><b>${esc(e.name)}</b><div class="xs dim">${esc(e.src)} · ${esc(ago(e.asOf))}</div></td><td data-k="Reading" class="num">${esc(e.disp)}</td><td data-k="Reads as">${pill(e.zone, e.score / 2)}</td><td data-k="Weight" class="num">${e.w}</td></tr>`).join('')}</tbody></table></div>
-        <p class="xs dim">Each input is placed on a cheap-to-rich scale against its own historical zones; the weighted reading sets the state (MVRV carries the most weight; NUPL and realised price repeat MVRV and are not counted twice). MVRV Z-Score is shown on the Analysis pages; NVT is not available from free sources.</p></div>` : '<p class="muted">Valuation inputs unavailable.</p>'}</section>
-
-    <section class="block"><div class="bh"><h2>Market regime${info('i_cycle')}</h2><p class="aside">What regime current conditions are consistent with · <a href="#analysis/regime">evidence and historical context on Analysis →</a></p></div>
-      ${I.regime ? `<div class="iconc"><div class="iconc-h"><div class="ir-state t-${toneOf(I.regime.label)}">${esc(I.regime.label)}</div>${conf(I.regime.confidence)}${C ? `<span class="small muted">Most consistent with ${esc(C.phase.toLowerCase())}${C.transitional && C.runnerUp ? `, bordering on ${esc(C.runnerUp.phase.toLowerCase())}` : ''}</span>` : ''}</div>
-        <p>${esc(I.regime.why)}</p>
-        <p class="xs dim">Classified from structural evidence across all five domains (trend, price structure, holder positioning, on-chain flows, institutional demand, liquidity, leverage, valuation room) — not from a cycle clock or time since the halving.</p></div>` : '<p class="muted">Not enough data.</p>'}</section>
-
-    <section class="block"><div class="bh"><h2>Risk regime${info('i_risk')}</h2><p class="aside">How fragile current conditions are, in either direction</p></div>
+// Intelligence → Risk context: the risk regime in full, plus the leverage & derivatives stress inputs.
+export function riskContextHtml(I, info = () => '') {
+  if (!I) return '';
+  const K = I.risk, L = I.forces.find((f) => f.id === 'leverage');
+  return `<section class="block"><div class="bh"><h2>Risk regime${info('i_risk')}</h2><p class="aside">How fragile current conditions are, in either direction</p></div>
       <div class="iconc"><div class="iconc-h"><div class="ir-state t-${{ Low: 'up', Moderate: 'neu', Elevated: 'warn', High: 'down' }[K.level]}">${esc(K.level)}</div><span class="small muted">${K.points} stress point${K.points === 1 ? '' : 's'}</span></div>
         <p>${esc(K.desc)}</p>${K.evidence.length ? `<ul class="ichk">${K.evidence.map((e) => `<li class="n">${esc(e.why)} <span class="xs dim">+${e.n}</span></li>`).join('')}</ul>` : '<p class="small muted">No stress signals active.</p>'}</div></section>
 
-    <section class="block"><div class="bh"><h2>Inside the Fair Grade${info('i_grade')}</h2><p class="aside">${I.grade.value} = 50 + the contributions below</p></div>
-      <div class="igrade">${gp.map((p) => `<div class="igr"><span class="gl">${esc(p.label)}</span><span class="gb"><i class="${p.pts >= 0 ? 'p' : 'n'}" style="${p.pts >= 0 ? 'left:50%' : `left:${50 + (p.pts / mx) * 50}%`};width:${(Math.abs(p.pts) / mx) * 50}%"></i></span><span class="gv num">${p.pts > 0 ? '+' : p.pts < 0 ? '−' : ''}${Math.abs(p.pts).toFixed(1)}</span><span class="gn xs dim">${esc(p.note)}</span></div>`).join('')}</div>
-      <p class="xs dim">The grade weighs breadth, strength, conflicts, risk and valuation; each contribution is scaled by the confidence of the data behind it. It describes today’s configuration and is not a probability or a price forecast.</p></section>`;
+    ${L ? `<section class="block"><div class="bh"><h2>Leverage and derivatives stress</h2><p class="aside">Inputs of the <a href="#force-leverage">Leverage &amp; derivatives</a> force · ${esc(L.active ? L.label : 'below threshold')}</p></div>
+      <div class="tbl-wrap"><table class="itbl"><thead><tr><th>Input</th><th>Reading</th><th>Reads as</th></tr></thead><tbody>${L.evidence.map((e) => `<tr><td data-k="Input"><a href="${ILINK(e.id)}"><b>${esc(e.name)}</b></a><div class="xs dim">${esc(e.src)} · ${esc(ago(e.asOf))}</div></td><td data-k="Reading" class="num">${esc(e.disp)}</td><td data-k="Reads as">${pill(e.state, null)}</td></tr>`).join('')}</tbody></table></div>
+      ${L.inputs.some((i) => !i.live) ? `<p class="xs fnote">Missing this run: ${L.inputs.filter((i) => !i.live).map((i) => esc(i.name)).join(' · ')}</p>` : ''}
+      <p class="xs dim">${esc(L.rule)}</p></section>` : ''}`;
 }
 
 // domain chips are plain links to the Analysis routes; kept for callers
