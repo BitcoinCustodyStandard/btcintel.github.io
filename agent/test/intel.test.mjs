@@ -117,3 +117,16 @@ console.log('intel.test: ok');
   assert.ok(greed.dir < 0 && /overheat/i.test(greed.label), 'F&G ≥ 75 reads as overheating');
   console.log('force library: ok');
 }
+{ // finalization: 12 forces, no squeeze, HY in Risk appetite, consistent momentum copy
+  const R = intelligence(world({ trend: 1 }));
+  assert.equal(FORCE_LIBRARY.length, 12);
+  assert.ok(!FORCE_LIBRARY.some((F) => /squeeze|bbw/i.test(F.id + F.name + F.ev.join())), 'volatility squeeze is not a force');
+  assert.ok(FORCE_LIBRARY.find((F) => F.id === 'risk').ev.includes('x_hy'), 'high-yield spreads stay in Risk appetite');
+  assert.ok(!FORCE_LIBRARY.some((F) => F.ev.some((i) => ['x_m2', 'x_nfci', 'x_acwi', 'c_whales'].includes(i))), 'dropped inputs are not used');
+  for (const W of [R, intelligence(world({ trend: 2.5 })), intelligence(world({ trend: -1 }))]) {
+    const m = W.forces.find((f) => f.id === 'momentum');
+    if (m.label === 'Price stretched') assert.ok(/set aside/.test(m.text), 'stretched card explains the override');
+    if (/Momentum (building|fading)/.test(m.label || '')) assert.ok(/not stretched/.test(m.text), 'momentum card says extension is not stretched');
+  }
+  console.log('force finalization: ok');
+}
